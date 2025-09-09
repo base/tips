@@ -1,6 +1,9 @@
 # Run all CI checks locally
 ci: check test fmt clippy build
 
+create-migration name:
+    touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
+
 # Check code compilation
 check:
     cargo check
