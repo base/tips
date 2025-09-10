@@ -1,12 +1,18 @@
 -- Create bundles table
 CREATE TABLE IF NOT EXISTS bundles (
     id UUID PRIMARY KEY,
+
+    senders CHAR(42)[],
+    minimum_base_fee BIGINT, -- todo validate it's large enough
+    txn_hashes CHAR(66)[],
+
     txs TEXT[] NOT NULL,
-    block_number BIGINT NOT NULL,
+    reverting_tx_hashes CHAR(66)[],
+    dropping_tx_hashes CHAR(66)[],
+
+    block_number BIGINT,
     min_timestamp BIGINT,
     max_timestamp BIGINT,
-    reverting_tx_hashes TEXT[],
-    replacement_uuid TEXT,
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
 );

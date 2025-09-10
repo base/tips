@@ -1,6 +1,19 @@
 # Run all CI checks locally
 ci: check test fmt clippy build
 
+db:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    docker container stop tips-db
+    docker container rm tips-db
+    docker run -d --name tips-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres
+    sleep 2
+    for file in ./crates/datastore/migrations/*.sql; do
+      echo $file
+      psql -d postgres://postgres:postgres@localhost:5432/postgres -f $file
+    done
+
+
 create-migration name:
     touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
 
