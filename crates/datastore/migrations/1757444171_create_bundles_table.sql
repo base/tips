@@ -3,7 +3,7 @@ CREATE TABLE IF NOT EXISTS bundles (
     id UUID PRIMARY KEY,
 
     senders CHAR(42)[],
-    minimum_base_fee BIGINT, -- todo validate it's large enough
+    minimum_base_fee BIGINT, -- todo find a larger type
     txn_hashes CHAR(66)[],
 
     txs TEXT[] NOT NULL,

@@ -1,3 +1,4 @@
+use crate::postgres::BundleWithMetadata;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
 use uuid::Uuid;
@@ -8,8 +9,8 @@ pub trait BundleDatastore: Send + Sync {
     /// Insert a new bundle into the datastore
     async fn insert_bundle(&self, bundle: EthSendBundle) -> Result<Uuid>;
 
-    /// Fetch a bundle by its ID
-    async fn get_bundle(&self, id: Uuid) -> Result<Option<EthSendBundle>>;
+    /// Fetch a bundle with metadata by its ID
+    async fn get_bundle(&self, id: Uuid) -> Result<Option<BundleWithMetadata>>;
 
     /// Cancel a bundle by UUID
     async fn cancel_bundle(&self, id: Uuid) -> Result<()>;

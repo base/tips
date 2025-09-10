@@ -4,19 +4,18 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sqlx = { workspace = true }
-uuid = { workspace = true }
-serde = { workspace = true }
-chrono = { workspace = true }
-tokio = { workspace = true }
-anyhow = { workspace = true }
-async-trait = { workspace = true }
-alloy-rpc-types-mev = { workspace = true }
-alloy-primitives = { workspace = true }
-serde_json = { workspace = true }
-eyre = { workspace = true }
-tracing = { workspace = true }
+sqlx.workspace = true
+uuid.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+async-trait.workspace = true
+alloy-rpc-types-mev.workspace = true
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+op-alloy-consensus.workspace = true
+eyre.workspace = true
+tracing.workspace = true
 
 [dev-dependencies]
-testcontainers = { workspace = true }
-testcontainers-modules = { workspace = true }
+testcontainers.workspace = true
+testcontainers-modules.workspace = true

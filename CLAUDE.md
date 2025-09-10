@@ -1,11 +1,12 @@
 # Project: Tips - Transaction Inclusion Pipeline Services
 
 ## Notes
+- DO NOT ADD COMMENTS UNLESS INSTRUCTED
+- Put imports at the top of the file, never in functions
 - Always run `just ci` before claiming a task is complete and fix any issues
 - Use `just fix` to fix formatting and warnings
-- Only add comments when the implementation logic is unclear, i.e. do not comment insert item into database when the code is db.insert(item)
 - Always add dependencies to the cargo.toml in the root and reference them in the crate cargo files
-- Use https://crates.io/ to find dependency versions when adding new deps
+- Always use the latest dependency versions. Use https://crates.io/ to find dependency versions when adding new deps
 
 ## Project Structure
 ```
