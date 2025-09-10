@@ -11,6 +11,48 @@ use sqlx::PgPool;
 use tracing::info;
 use uuid::Uuid;
 
+#[derive(sqlx::FromRow, Debug)]
+struct BundleRow {
+    senders: Option<Vec<String>>,
+    minimum_base_fee: Option<i64>,
+    txn_hashes: Option<Vec<String>>,
+    txs: Vec<String>,
+    reverting_tx_hashes: Option<Vec<String>>,
+    dropping_tx_hashes: Option<Vec<String>>,
+    block_number: Option<i64>,
+    min_timestamp: Option<i64>,
+    max_timestamp: Option<i64>,
+}
+
+/// Filter criteria for selecting bundles
+#[derive(Debug, Clone, Default)]
+pub struct BundleFilter {
+    pub base_fee: Option<i64>,
+    pub block_number: Option<u64>,
+    pub timestamp: Option<u64>,
+}
+
+impl BundleFilter {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_base_fee(mut self, base_fee: i64) -> Self {
+        self.base_fee = Some(base_fee);
+        self
+    }
+
+    pub fn valid_for_block(mut self, block_number: u64) -> Self {
+        self.block_number = Some(block_number);
+        self
+    }
+
+    pub fn valid_for_timestamp(mut self, timestamp: u64) -> Self {
+        self.timestamp = Some(timestamp);
+        self
+    }
+}
+
 /// Extended bundle data that includes the original bundle plus extracted metadata
 #[derive(Debug, Clone)]
 pub struct BundleWithMetadata {
@@ -42,6 +84,60 @@ impl PostgresDatastore {
 }
 
 impl PostgresDatastore {
+    fn row_to_bundle_with_metadata(&self, row: BundleRow) -> Result<BundleWithMetadata> {
+        let parsed_txs: Result<Vec<alloy_primitives::Bytes>, _> =
+            row.txs.into_iter().map(|tx_hex| tx_hex.parse()).collect();
+
+        let parsed_reverting_tx_hashes: Result<Vec<TxHash>, _> = row
+            .reverting_tx_hashes
+            .unwrap_or_default()
+            .into_iter()
+            .map(TxHash::from_hex)
+            .collect();
+
+        let parsed_dropping_tx_hashes: Result<Vec<TxHash>, _> = row
+            .dropping_tx_hashes
+            .unwrap_or_default()
+            .into_iter()
+            .map(TxHash::from_hex)
+            .collect();
+
+        let bundle = EthSendBundle {
+            txs: parsed_txs?,
+            block_number: row.block_number.unwrap_or(0) as u64,
+            min_timestamp: row.min_timestamp.map(|t| t as u64),
+            max_timestamp: row.max_timestamp.map(|t| t as u64),
+            reverting_tx_hashes: parsed_reverting_tx_hashes?,
+            replacement_uuid: None,
+            dropping_tx_hashes: parsed_dropping_tx_hashes?,
+            refund_percent: None,
+            refund_recipient: None,
+            refund_tx_hashes: Vec::new(),
+            extra_fields: Default::default(),
+        };
+
+        let parsed_txn_hashes: Result<Vec<TxHash>, _> = row
+            .txn_hashes
+            .unwrap_or_default()
+            .into_iter()
+            .map(TxHash::from_hex)
+            .collect();
+
+        let parsed_senders: Result<Vec<Address>, _> = row
+            .senders
+            .unwrap_or_default()
+            .into_iter()
+            .map(Address::from_hex)
+            .collect();
+
+        Ok(BundleWithMetadata {
+            bundle,
+            txn_hashes: parsed_txn_hashes?,
+            senders: parsed_senders?,
+            min_base_fee: row.minimum_base_fee.unwrap_or(0),
+        })
+    }
+
     fn extract_bundle_metadata(
         &self,
         bundle: &EthSendBundle,
@@ -125,71 +221,22 @@ impl BundleDatastore for PostgresDatastore {
     }
 
     async fn get_bundle(&self, id: Uuid) -> Result<Option<BundleWithMetadata>> {
-        let result = sqlx::query!(
+        let result = sqlx::query_as::<_, BundleRow>(
             r#"
             SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
                    dropping_tx_hashes, block_number, min_timestamp, max_timestamp
             FROM bundles 
             WHERE id = $1
             "#,
-            id
         )
+        .bind(id)
         .fetch_optional(&self.pool)
         .await?;
 
         match result {
             Some(row) => {
-                let txs: Result<Vec<alloy_primitives::Bytes>, _> =
-                    row.txs.into_iter().map(|tx_hex| tx_hex.parse()).collect();
-
-                let reverting_tx_hashes: Result<Vec<TxHash>, _> = row
-                    .reverting_tx_hashes
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(TxHash::from_hex)
-                    .collect();
-
-                let dropping_tx_hashes: Result<Vec<TxHash>, _> = row
-                    .dropping_tx_hashes
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(TxHash::from_hex)
-                    .collect();
-
-                let bundle = EthSendBundle {
-                    txs: txs?,
-                    block_number: row.block_number.unwrap_or(0) as u64,
-                    min_timestamp: row.min_timestamp.map(|t| t as u64),
-                    max_timestamp: row.max_timestamp.map(|t| t as u64),
-                    reverting_tx_hashes: reverting_tx_hashes?,
-                    replacement_uuid: None,
-                    dropping_tx_hashes: dropping_tx_hashes?,
-                    refund_percent: None,
-                    refund_recipient: None,
-                    refund_tx_hashes: Vec::new(),
-                    extra_fields: Default::default(),
-                };
-
-                let txn_hashes: Result<Vec<TxHash>, _> = row
-                    .txn_hashes
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(TxHash::from_hex)
-                    .collect();
-
-                let senders: Result<Vec<Address>, _> = row
-                    .senders
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(Address::from_hex)
-                    .collect();
-
-                Ok(Some(BundleWithMetadata {
-                    bundle,
-                    txn_hashes: txn_hashes?,
-                    senders: senders?,
-                    min_base_fee: row.minimum_base_fee.unwrap_or(0),
-                }))
+                let bundle_with_metadata = self.row_to_bundle_with_metadata(row)?;
+                Ok(Some(bundle_with_metadata))
             }
             None => Ok(None),
         }
@@ -199,7 +246,42 @@ impl BundleDatastore for PostgresDatastore {
         todo!()
     }
 
-    async fn select_bundles(&self) -> Result<Vec<EthSendBundle>> {
-        todo!()
+    async fn select_bundles(&self, filter: BundleFilter) -> Result<Vec<BundleWithMetadata>> {
+        let base_fee = filter.base_fee.unwrap_or(0);
+        let block_number = filter.block_number.unwrap_or(0) as i64;
+
+        let (min_ts, max_ts) = if let Some(timestamp) = filter.timestamp {
+            (timestamp as i64, timestamp as i64)
+        } else {
+            // If not specified, set the parameters to be the whole range
+            (i64::MAX, 0i64)
+        };
+
+        let rows = sqlx::query_as::<_, BundleRow>(
+            r#"
+            SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
+                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp
+            FROM bundles 
+            WHERE minimum_base_fee >= $1
+              AND (block_number = $2 OR block_number IS NULL OR block_number = 0 OR $2 = 0)
+              AND (min_timestamp <= $3 OR min_timestamp IS NULL)
+              AND (max_timestamp >= $4 OR max_timestamp IS NULL)
+            ORDER BY minimum_base_fee DESC
+            "#,
+        )
+        .bind(base_fee)
+        .bind(block_number)
+        .bind(min_ts)
+        .bind(max_ts)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut bundles = Vec::new();
+        for row in rows {
+            let bundle_with_metadata = self.row_to_bundle_with_metadata(row)?;
+            bundles.push(bundle_with_metadata);
+        }
+
+        Ok(bundles)
     }
 }

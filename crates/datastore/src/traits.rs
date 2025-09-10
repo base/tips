@@ -1,4 +1,4 @@
-use crate::postgres::BundleWithMetadata;
+use crate::postgres::{BundleFilter, BundleWithMetadata};
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
 use uuid::Uuid;
@@ -16,5 +16,5 @@ pub trait BundleDatastore: Send + Sync {
     async fn cancel_bundle(&self, id: Uuid) -> Result<()>;
 
     /// Select the candidate bundles to include in the next Flashblock
-    async fn select_bundles(&self) -> Result<Vec<EthSendBundle>>;
+    async fn select_bundles(&self, filter: BundleFilter) -> Result<Vec<BundleWithMetadata>>;
 }
