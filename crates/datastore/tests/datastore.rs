@@ -30,18 +30,19 @@ async fn setup_datastore() -> eyre::Result<TestHarness> {
     })
 }
 
-#[tokio::test]
-async fn insert_and_get() -> eyre::Result<()> {
-    let harness = setup_datastore().await?;
-    let test_bundle = EthSendBundle {
-        txs: vec![
-            "0x02f8bf8221058304f8c782038c83d2a76b833d0900942e85c218afcdeb3d3b3f0f72941b4861f915bbcf80b85102000e0000000bb800001010c78c430a094eb7ae67d41a7cca25cdb9315e63baceb03bf4529e57a6b1b900010001f4000a101010110111101111011011faa7efc8e6aa13b029547eecbf5d370b4e1e52eec080a009fc02a6612877cec7e1223f0a14f9a9507b82ef03af41fcf14bf5018ccf2242a0338b46da29a62d28745c828077327588dc82c03a4b0210e3ee1fd62c608f8fcd".parse::<Bytes>()?,
-        ],
+fn get_test_tx() -> eyre::Result<Bytes> {
+    "0x02f8bf8221058304f8c782038c83d2a76b833d0900942e85c218afcdeb3d3b3f0f72941b4861f915bbcf80b85102000e0000000bb800001010c78c430a094eb7ae67d41a7cca25cdb9315e63baceb03bf4529e57a6b1b900010001f4000a101010110111101111011011faa7efc8e6aa13b029547eecbf5d370b4e1e52eec080a009fc02a6612877cec7e1223f0a14f9a9507b82ef03af41fcf14bf5018ccf2242a0338b46da29a62d28745c828077327588dc82c03a4b0210e3ee1fd62c608f8fcd".parse::<Bytes>().map_err(|e| e.into())
+}
+
+fn create_test_bundle_with_reverting_tx() -> eyre::Result<EthSendBundle> {
+    Ok(EthSendBundle {
+        txs: vec![get_test_tx()?],
         block_number: 12345,
         min_timestamp: Some(1640995200),
         max_timestamp: Some(1640995260),
         reverting_tx_hashes: vec![
-            "0x3ea7e1482485387e61150ee8e5c8cad48a14591789ac02cc2504046d96d0a5f4".parse::<TxHash>()?,
+            "0x3ea7e1482485387e61150ee8e5c8cad48a14591789ac02cc2504046d96d0a5f4"
+                .parse::<TxHash>()?,
         ],
         replacement_uuid: None,
         dropping_tx_hashes: vec![],
@@ -49,7 +50,33 @@ async fn insert_and_get() -> eyre::Result<()> {
         refund_recipient: None,
         refund_tx_hashes: vec![],
         extra_fields: Default::default(),
-    };
+    })
+}
+
+fn create_test_bundle(
+    block_number: u64,
+    min_timestamp: Option<u64>,
+    max_timestamp: Option<u64>,
+) -> eyre::Result<EthSendBundle> {
+    Ok(EthSendBundle {
+        txs: vec![get_test_tx()?],
+        block_number,
+        min_timestamp,
+        max_timestamp,
+        reverting_tx_hashes: vec![],
+        replacement_uuid: None,
+        dropping_tx_hashes: vec![],
+        refund_percent: None,
+        refund_recipient: None,
+        refund_tx_hashes: vec![],
+        extra_fields: Default::default(),
+    })
+}
+
+#[tokio::test]
+async fn insert_and_get() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    let test_bundle = create_test_bundle_with_reverting_tx()?;
 
     let insert_result = harness.data_store.insert_bundle(test_bundle.clone()).await;
     if let Err(ref err) = insert_result {
@@ -115,63 +142,10 @@ async fn insert_and_get() -> eyre::Result<()> {
 async fn select_bundles_comprehensive() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let test_tx = "0x02f8bf8221058304f8c782038c83d2a76b833d0900942e85c218afcdeb3d3b3f0f72941b4861f915bbcf80b85102000e0000000bb800001010c78c430a094eb7ae67d41a7cca25cdb9315e63baceb03bf4529e57a6b1b900010001f4000a101010110111101111011011faa7efc8e6aa13b029547eecbf5d370b4e1e52eec080a009fc02a6612877cec7e1223f0a14f9a9507b82ef03af41fcf14bf5018ccf2242a0338b46da29a62d28745c828077327588dc82c03a4b0210e3ee1fd62c608f8fcd".parse::<Bytes>()?;
-
-    let bundle1 = EthSendBundle {
-        txs: vec![test_tx.clone()],
-        block_number: 100,
-        min_timestamp: Some(1000),
-        max_timestamp: Some(2000),
-        reverting_tx_hashes: vec![],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
-        refund_percent: None,
-        refund_recipient: None,
-        refund_tx_hashes: vec![],
-        extra_fields: Default::default(),
-    };
-
-    let bundle2 = EthSendBundle {
-        txs: vec![test_tx.clone()],
-        block_number: 200,
-        min_timestamp: Some(1500),
-        max_timestamp: Some(2500),
-        reverting_tx_hashes: vec![],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
-        refund_percent: None,
-        refund_recipient: None,
-        refund_tx_hashes: vec![],
-        extra_fields: Default::default(),
-    };
-
-    let bundle3 = EthSendBundle {
-        txs: vec![test_tx.clone()],
-        block_number: 300,
-        min_timestamp: None, // valid for all times
-        max_timestamp: None,
-        reverting_tx_hashes: vec![],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
-        refund_percent: None,
-        refund_recipient: None,
-        refund_tx_hashes: vec![],
-        extra_fields: Default::default(),
-    };
-
-    let bundle4 = EthSendBundle {
-        txs: vec![test_tx.clone()],
-        block_number: 0, // valid for all blocks
-        min_timestamp: Some(500),
-        max_timestamp: Some(3000),
-        reverting_tx_hashes: vec![],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
-        refund_percent: None,
-        refund_recipient: None,
-        refund_tx_hashes: vec![],
-        extra_fields: Default::default(),
-    };
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
+    let bundle3 = create_test_bundle(300, None, None)?; // valid for all times
+    let bundle4 = create_test_bundle(0, Some(500), Some(3000))?; // valid for all blocks
 
     harness
         .data_store
@@ -256,6 +230,73 @@ async fn select_bundles_comprehensive() -> eyre::Result<()> {
         no_matches.len(),
         1,
         "Should return 1 bundle for non-existent block (bundle4 with block 0 is valid for all blocks)"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn cancel_bundle_workflow() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
+
+    let bundle1_id = harness
+        .data_store
+        .insert_bundle(bundle1)
+        .await
+        .expect("Failed to insert bundle1");
+    let bundle2_id = harness
+        .data_store
+        .insert_bundle(bundle2)
+        .await
+        .expect("Failed to insert bundle2");
+
+    let retrieved_bundle1 = harness
+        .data_store
+        .get_bundle(bundle1_id)
+        .await
+        .expect("Failed to get bundle1");
+    assert!(
+        retrieved_bundle1.is_some(),
+        "Bundle1 should exist before cancellation"
+    );
+
+    let retrieved_bundle2 = harness
+        .data_store
+        .get_bundle(bundle2_id)
+        .await
+        .expect("Failed to get bundle2");
+    assert!(
+        retrieved_bundle2.is_some(),
+        "Bundle2 should exist before cancellation"
+    );
+
+    harness
+        .data_store
+        .cancel_bundle(bundle1_id)
+        .await
+        .expect("Failed to cancel bundle1");
+
+    let cancelled_bundle1 = harness
+        .data_store
+        .get_bundle(bundle1_id)
+        .await
+        .expect("Failed to get bundle1 after cancellation");
+    assert!(
+        cancelled_bundle1.is_none(),
+        "Bundle1 should not exist after cancellation"
+    );
+
+    let still_exists_bundle2 = harness
+        .data_store
+        .get_bundle(bundle2_id)
+        .await
+        .expect("Failed to get bundle2 after bundle1 cancellation");
+    assert!(
+        still_exists_bundle2.is_some(),
+        "Bundle2 should still exist after bundle1 cancellation"
     );
 
     Ok(())

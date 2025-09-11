@@ -242,8 +242,12 @@ impl BundleDatastore for PostgresDatastore {
         }
     }
 
-    async fn cancel_bundle(&self, _id: Uuid) -> Result<()> {
-        todo!()
+    async fn cancel_bundle(&self, id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM bundles WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 
     async fn select_bundles(&self, filter: BundleFilter) -> Result<Vec<BundleWithMetadata>> {
