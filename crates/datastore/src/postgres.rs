@@ -63,6 +63,7 @@ pub struct BundleWithMetadata {
 }
 
 /// PostgreSQL implementation of the BundleDatastore trait
+#[derive(Debug, Clone)]
 pub struct PostgresDatastore {
     pool: PgPool,
 }
@@ -74,16 +75,17 @@ impl PostgresDatastore {
         info!(message = "migrations complete");
         Ok(())
     }
-}
 
-impl PostgresDatastore {
+    pub async fn connect(url: String) -> Result<Self> {
+        let pool = PgPool::connect(&url).await?;
+        Ok(Self::new(pool))
+    }
+
     /// Create a new PostgreSQL datastore instance
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-}
 
-impl PostgresDatastore {
     fn row_to_bundle_with_metadata(&self, row: BundleRow) -> Result<BundleWithMetadata> {
         let parsed_txs: Result<Vec<alloy_primitives::Bytes>, _> =
             row.txs.into_iter().map(|tx_hex| tx_hex.parse()).collect();

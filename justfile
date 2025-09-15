@@ -39,7 +39,7 @@ build:
 
 # Run the ingress service with default mempool URL
 run:
-    cargo run -- --mempool-url http://localhost:2222
+    cargo run
 
 # Run autofixes everything
 fix: fmt-fix clippy-fix

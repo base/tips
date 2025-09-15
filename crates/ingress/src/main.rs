@@ -7,6 +7,7 @@ use url::Url;
 
 mod service;
 use service::{IngressApiServer, IngressService};
+use tips_datastore::PostgresDatastore;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -22,11 +23,16 @@ struct Config {
     /// URL of the mempool service to proxy transactions to
     #[arg(long, env = "MEMPOOL_URL")]
     mempool_url: Url,
+
+    /// URL of the Postgres DB to store bundles in
+    #[arg(long, env = "DATABASE_URL")]
+    database_url: String,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt::init();
+    dotenvy::dotenv().ok();
 
     let config = Config::parse();
     info!(
@@ -40,7 +46,10 @@ async fn main() -> anyhow::Result<()> {
         .disable_recommended_fillers()
         .connect_http(config.mempool_url);
 
-    let service = IngressService::new(provider);
+    let bundle_store = PostgresDatastore::connect(config.database_url).await?;
+    bundle_store.run_migrations().await?;
+
+    let service = IngressService::new(provider, bundle_store);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

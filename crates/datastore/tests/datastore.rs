@@ -1,11 +1,12 @@
 use alloy_primitives::{Address, Bytes, TxHash};
 use alloy_rpc_types_mev::EthSendBundle;
-use datastore::{PostgresDatastore, postgres::BundleFilter, traits::BundleDatastore};
 use sqlx::PgPool;
 use testcontainers_modules::{
     postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner},
 };
+use tips_datastore::postgres::BundleFilter;
+use tips_datastore::{BundleDatastore, PostgresDatastore};
 
 struct TestHarness {
     _postgres_instance: ContainerAsync<postgres::Postgres>,

@@ -1,19 +1,21 @@
 [package]
-name = "ingress"
+name = "tips-ingress"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-jsonrpsee = { workspace = true }
-alloy-rpc-types-mev = { workspace = true }
-alloy-rpc-types = { workspace = true }
-alloy-primitives = { workspace = true }
-alloy-provider = { workspace = true }
-alloy-transport-http = { workspace = true }
-alloy-rpc-client = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-clap = { workspace = true }
-url = { workspace = true }
+tips-datastore.workspace = true
+jsonrpsee.workspace = true
+alloy-rpc-types-mev.workspace = true
+alloy-primitives.workspace = true
+alloy-provider.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+url.workspace = true
+alloy-consensus.workspace = true
+op-alloy-consensus.workspace = true
+eyre.workspace = true
+dotenvy.workspace = true
