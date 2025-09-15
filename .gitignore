@@ -22,3 +22,12 @@ Thumbs.db
 # Backup files
 *~
 *.bak
+
+# Next.js (ui/)
+ui/.next/
+ui/out/
+ui/node_modules/
+ui/.env*.local
+ui/.vercel
+ui/*.tsbuildinfo
+ui/next-env.d.ts
