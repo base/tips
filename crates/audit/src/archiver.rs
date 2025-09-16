@@ -1,16 +1,15 @@
-use std::time::Duration;
-use crate::reader::{KafkaMempoolReader, MempoolEventReader, TimestampedEvent};
+use crate::reader::{KafkaMempoolReader, MempoolEventReader};
 use crate::storage::{MempoolEventWriter, S3MempoolEventWriter};
 use anyhow::Result;
+use aws_sdk_s3::Client as S3Client;
+use std::time::Duration;
 use tokio::time::sleep;
 use tracing::{error, info};
-
 
 pub struct KafkaMempoolArchiver {
     reader: KafkaMempoolReader,
     writer: S3MempoolEventWriter,
 }
-
 
 impl KafkaMempoolArchiver {
     pub async fn new(
@@ -20,7 +19,10 @@ impl KafkaMempoolArchiver {
         bucket: String,
     ) -> Result<Self> {
         let reader = KafkaMempoolReader::new(kafka_brokers, topic, group_id).await?;
-        let writer = S3MempoolEventWriter::new(bucket).await?;
+
+        let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+        let s3_client = S3Client::new(&config);
+        let writer = S3MempoolEventWriter::new(s3_client, bucket);
 
         Ok(Self { reader, writer })
     }

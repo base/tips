@@ -3,7 +3,8 @@
 ## Notes
 - DO NOT ADD COMMENTS UNLESS INSTRUCTED
 - Put imports at the top of the file, never in functions
-- Always run `just ci` before claiming a task is complete and fix any issues
+- For rust tasks always run `just rust-ci` before claiming a task is complete and fix any issues
+- For typescript tasks always run `just ui-ci` before claiming a task is complete and fix any issues
 - Use `just fix` to fix formatting and warnings
 - Always add dependencies to the cargo.toml in the root and reference them in the crate cargo files
 - Always use the latest dependency versions. Use https://crates.io/ to find dependency versions when adding new deps

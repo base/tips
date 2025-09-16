@@ -1,9 +1,8 @@
 use crate::types::{BundleId, MempoolEvent, TransactionId};
 use anyhow::Result;
 use async_trait::async_trait;
-use aws_config::BehaviorVersion;
-use aws_sdk_s3::{primitives::ByteStream, Client as S3Client};
-use base64;
+use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::Client as S3Client;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt;
@@ -51,14 +50,7 @@ pub struct S3MempoolEventWriter {
 }
 
 impl S3MempoolEventWriter {
-    pub async fn new(bucket: String) -> Result<Self> {
-        let config = aws_config::defaults(BehaviorVersion::latest()).load().await;
-        let s3_client = S3Client::new(&config);
-
-        Ok(Self { s3_client, bucket })
-    }
-
-    pub fn with_client(s3_client: S3Client, bucket: String) -> Self {
+    pub fn new(s3_client: S3Client, bucket: String) -> Self {
         Self { s3_client, bucket }
     }
 
@@ -197,7 +189,6 @@ impl S3MempoolEventWriter {
     async fn put_object_idempotent(&self, key: &str, data: Vec<u8>) -> Result<()> {
         let md5_digest = md5::compute(&data);
         let content_hash_hex = format!("{:x}", md5_digest);
-        let content_hash_base64 = base64::encode(&md5_digest[..]);
 
         if let Ok(existing) = self.get_object_etag(key).await {
             if existing.trim_matches('"') == content_hash_hex {
@@ -211,14 +202,13 @@ impl S3MempoolEventWriter {
         }
 
         let data_size = data.len();
-        let stream = ByteStream::from(data);
+        let body = ByteStream::from(data);
 
         self.s3_client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
-            .body(stream)
-            .content_md5(&content_hash_base64)
+            .body(body)
             .send()
             .await?;
 
@@ -240,7 +230,7 @@ impl S3MempoolEventWriter {
             .send()
             .await?;
 
-        Ok(response.e_tag().unwrap_or_default().to_string())
+        Ok(response.e_tag().unwrap_or("").to_string())
     }
 
     async fn get_bundle_transaction_hashes(&self, bundle_id: BundleId) -> Result<Vec<String>> {
@@ -292,7 +282,7 @@ impl S3MempoolEventWriter {
             .await?;
 
         let body = response.body.collect().await?;
-        Ok(String::from_utf8(body.to_vec())?)
+        Ok(String::from_utf8(body.into_bytes().to_vec())?)
     }
 }
 
