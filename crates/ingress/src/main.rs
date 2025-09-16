@@ -27,6 +27,10 @@ struct Config {
     /// URL of the Postgres DB to store bundles in
     #[arg(long, env = "DATABASE_URL")]
     database_url: String,
+
+    /// Enable dual writing raw transactions to the mempool
+    #[arg(long, env = "DUAL_WRITE_MEMPOOL", default_value = "false")]
+    dual_write_mempool: bool,
 }
 
 #[tokio::main]
@@ -49,7 +53,7 @@ async fn main() -> anyhow::Result<()> {
     let bundle_store = PostgresDatastore::connect(config.database_url).await?;
     bundle_store.run_migrations().await?;
 
-    let service = IngressService::new(provider, bundle_store);
+    let service = IngressService::new(provider, bundle_store, config.dual_write_mempool);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

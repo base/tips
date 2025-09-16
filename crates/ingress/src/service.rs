@@ -6,7 +6,6 @@ use jsonrpsee::types::ErrorObject;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
-    types::ErrorObjectOwned,
 };
 use op_alloy_consensus::OpTxEnvelope;
 use tips_datastore::BundleDatastore;
@@ -30,13 +29,15 @@ pub trait IngressApi {
 pub struct IngressService<Store> {
     provider: RootProvider,
     datastore: Store,
+    dual_write_mempool: bool,
 }
 
 impl<Store> IngressService<Store> {
-    pub fn new(provider: RootProvider, datastore: Store) -> Self {
+    pub fn new(provider: RootProvider, datastore: Store, dual_write_mempool: bool) -> Self {
         Self {
             provider,
             datastore,
+            dual_write_mempool,
         }
     }
 }
@@ -66,9 +67,9 @@ where
         let envelope = OpTxEnvelope::decode_2718_exact(tx.iter().as_slice())
             .map_err(|_e| ErrorObject::owned(10, "todo", Some(1)))?;
 
-        // TODO: Validation and simulation...
-        // TODO: Maybe parallelize
+        // TODO: Validation and simulation
 
+        // TODO: parallelize DB and mempool setup
         let bundle = EthSendBundle {
             txs: vec![tx.clone()],
             block_number: 0,
@@ -86,28 +87,26 @@ where
 
         info!(message="inserted singleton bundle", uuid=%result, txn_hash=%envelope.tx_hash());
 
-        Ok(envelope.tx_hash())
+        if self.dual_write_mempool {
+            // If we also want to dual write to the mempool
+            let response = self
+                .provider
+                .send_raw_transaction(tx.iter().as_slice())
+                .await;
 
-        // If we also want to dual write to the mempool
-        // let response = self
-        //     .provider
-        //     .send_raw_transaction(tx.iter().as_slice())
-        //     .await;
-        //
-        // match response {
-        //     Ok(r) => Ok(*r.tx_hash()),
-        //     Err(e) => {
-        //         warn!(
-        //             message = "Failed to send raw transaction to mempool",
-        //             method = "send_raw_transaction",
-        //             error = %e
-        //         );
-        //         Err(ErrorObjectOwned::owned(
-        //             -32000,
-        //             format!("Failed to send transaction: {}", e),
-        //             None::<()>,
-        //         ))
-        //     }
-        // }
+            match response {
+                Ok(_) => {
+                    info!(message = "sent transaction to the mempool", hash=%envelope.tx_hash());
+                }
+                Err(e) => {
+                    warn!(
+                        message = "Failed to send raw transaction to mempool",
+                        error = %e
+                    );
+                }
+            }
+        }
+
+        Ok(envelope.tx_hash())
     }
 }

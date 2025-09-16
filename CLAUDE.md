@@ -8,6 +8,11 @@
 - Always add dependencies to the cargo.toml in the root and reference them in the crate cargo files
 - Always use the latest dependency versions. Use https://crates.io/ to find dependency versions when adding new deps
 
+## Available CI Commands
+- `just ci` - Run all CI checks (both Rust and UI)
+- `just rust-ci` - Run Rust-specific CI checks (check, test, fmt, clippy, build)
+- `just ui-ci` - Run UI-specific CI checks
+
 ## Project Structure
 ```
 ├── Cargo.toml          # Workspace configuration

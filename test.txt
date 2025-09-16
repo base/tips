@@ -1,0 +1,50 @@
+create a new crate called audit, this crate is going to do two things:
+
+- be able to be used as a library by other processes to publish audit events from accross the system
+- have a process that reads audit events from kafka and writes them to S3 
+
+The types should be:
+
+struct TransactionId
+  sender address, nonce u256, hash: TxHash
+
+type BundleId = UUID
+
+type Bundle == BundleWithMetadata
+
+type Transaction = TransactionId + Bytes
+
+enum MempoolEvent
+  ReceivedBundle(bundleId, []Transaction),
+  CancelledBundle(bundleId, []TransactionId),
+  BuilderMined(bundleId, []TransactionId, blockNumber, flashblockIndex), 
+  FlashblockInclusion(bundleId, []TransactionId, blockNumber, flashblockIndex)
+  BlockInclusion(bundleId, []TransactionId, blockHash, blockNumber, flashblockIndex)
+
+trait MempoolEventPublisher
+  async publish(event)
+  async publish_all(events: []MempoolEvent)
+
+struct KafkaMempoolEventPublisher
+  // implements traint
+
+struct InMemoryMempoolEventPublisher
+  // implements methods, stores data in memory used mostly for testing
+
+struct KafkaMempoolArchiver
+     new(kafka)
+  fn run() 
+     // polls for new records
+     // archives to s3
+     // moves index when persisted
+
+S3 layout:
+
+/bundles/<UUID> => [ ...transactionHashes ]
+/transactions/by_hash/<hash> => { []BundleId, sender, nonce }
+/transactions/canonical/<sender>/<nonce> => { eventLog: [...persistendMempoolEvents]  }
+
+Considerations:
+
+- Make this as efficient as possible (i.e. what format to write to kafka)
+- Consuming from kafka and writing to S3 should be idempotant, can assume AWS S3 will be used (etags etc)

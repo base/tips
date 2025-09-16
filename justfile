@@ -1,5 +1,31 @@
 # Run all CI checks locally
-ci: check test fmt clippy build
+ci: rust-ci ui-ci
+
+# Run Rust CI checks
+rust-ci: check test fmt clippy build
+
+# Run UI CI checks
+ui-ci: ui-format ui-lint-check ui-typecheck ui-build
+
+# Run UI formatting
+ui-format:
+    cd ui && npm run format
+
+# Run UI linting with fixes
+ui-lint:
+    cd ui && npx biome check --write
+
+# Run UI linting (check only)
+ui-lint-check:
+    cd ui && npm run lint
+
+# Run UI TypeScript type checking
+ui-typecheck:
+    cd ui && npx tsc --noEmit
+
+# Build UI for production
+ui-build:
+    cd ui && npm run build
 
 db:
     #!/usr/bin/env bash
@@ -16,6 +42,13 @@ db:
 
 create-migration name:
     touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
+
+# Pull database schema using drizzle-kit
+ui-db-schema:
+    cd ui && npx drizzle-kit pull --dialect=postgresql --url=postgresql://postgres:postgres@localhost:5432/postgres
+    cd ui && mv ./drizzle/relations.ts ./src/db/
+    cd ui && mv ./drizzle/schema.ts ./src/db/
+    cd ui && rm -rf ./drizzle
 
 # Check code compilation
 check:
@@ -38,8 +71,11 @@ build:
     cargo build
 
 # Run the ingress service with default mempool URL
-run:
-    cargo run
+ingress:
+    cargo run --bin tips-ingress
+
+ui:
+    cd ui && yarn dev
 
 # Run autofixes everything
 fix: fmt-fix clippy-fix
