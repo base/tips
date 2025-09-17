@@ -1,8 +1,12 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
+use rdkafka::ClientConfig;
+use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
-use tracing::info;
+use tips_audit::KafkaMempoolEventPublisher;
+use tracing::{info, warn};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 mod service;
@@ -13,32 +17,69 @@ use tips_datastore::PostgresDatastore;
 #[command(author, version, about, long_about = None)]
 struct Config {
     /// Address to bind the RPC server to
-    #[arg(long, env = "INGRESS_ADDRESS", default_value = "127.0.0.1")]
+    #[arg(long, env = "TIPS_INGRESS_ADDRESS", default_value = "127.0.0.1")]
     address: IpAddr,
 
     /// Port to bind the RPC server to
-    #[arg(long, env = "INGRESS_PORT", default_value = "8080")]
+    #[arg(long, env = "TIPS_INGRESS_PORT", default_value = "8080")]
     port: u16,
 
     /// URL of the mempool service to proxy transactions to
-    #[arg(long, env = "MEMPOOL_URL")]
+    #[arg(long, env = "TIPS_INGRESS_RPC_MEMPOOL")]
     mempool_url: Url,
 
     /// URL of the Postgres DB to store bundles in
-    #[arg(long, env = "DATABASE_URL")]
+    #[arg(long, env = "TIPS_INGRESS_DATABASE_URL")]
     database_url: String,
 
     /// Enable dual writing raw transactions to the mempool
-    #[arg(long, env = "DUAL_WRITE_MEMPOOL", default_value = "false")]
+    #[arg(long, env = "TIPS_INGRESS_DUAL_WRITE_MEMPOOL", default_value = "false")]
     dual_write_mempool: bool,
+
+    /// Kafka brokers for publishing mempool events
+    #[arg(long, env = "TIPS_INGRESS_KAFKA_BROKERS")]
+    kafka_brokers: String,
+
+    /// Kafka topic for publishing mempool events
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_TOPIC",
+        default_value = "mempool-events"
+    )]
+    kafka_topic: String,
+
+    #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
+    log_level: String,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
     dotenvy::dotenv().ok();
 
     let config = Config::parse();
+
+    let log_level = match config.log_level.to_lowercase().as_str() {
+        "trace" => tracing::Level::TRACE,
+        "debug" => tracing::Level::DEBUG,
+        "info" => tracing::Level::INFO,
+        "warn" => tracing::Level::WARN,
+        "error" => tracing::Level::ERROR,
+        _ => {
+            warn!(
+                "Invalid log level '{}', defaulting to 'info'",
+                config.log_level
+            );
+            tracing::Level::INFO
+        }
+    };
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
     info!(
         message = "Starting ingress service",
         address = %config.address,
@@ -53,7 +94,14 @@ async fn main() -> anyhow::Result<()> {
     let bundle_store = PostgresDatastore::connect(config.database_url).await?;
     bundle_store.run_migrations().await?;
 
-    let service = IngressService::new(provider, bundle_store, config.dual_write_mempool);
+    let kafka_producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", &config.kafka_brokers)
+        .set("message.timeout.ms", "5000")
+        .create()?;
+
+    let publisher = KafkaMempoolEventPublisher::new(kafka_producer, config.kafka_topic);
+
+    let service = IngressService::new(provider, bundle_store, config.dual_write_mempool, publisher);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

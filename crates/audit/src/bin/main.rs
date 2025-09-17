@@ -9,27 +9,28 @@ use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser, Debug)]
-#[command(name = "audit-archiver")]
-#[command(about = "Audit archiver that reads from Kafka and writes to S3")]
+#[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, env = "KAFKA_BROKERS", default_value = "localhost:9092")]
+    #[arg(long, env = "TIPS_AUDIT_KAFKA_BROKERS")]
     kafka_brokers: String,
 
-    #[arg(long, env = "KAFKA_TOPIC", default_value = "mempool-events")]
+    #[arg(long, env = "TIPS_AUDIT_KAFKA_TOPIC")]
     kafka_topic: String,
 
-    #[arg(long, env = "KAFKA_GROUP_ID", default_value = "audit-archiver")]
+    #[arg(long, env = "TIPS_AUDIT_KAFKA_GROUP_ID")]
     kafka_group_id: String,
 
-    #[arg(long, env = "S3_BUCKET")]
+    #[arg(long, env = "TIPS_AUDIT_S3_BUCKET")]
     s3_bucket: String,
 
-    #[arg(long, env = "LOG_LEVEL", default_value = "info")]
+    #[arg(long, env = "TIPS_AUDIT_LOG_LEVEL", default_value = "info")]
     log_level: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
+
     let args = Args::parse();
 
     let log_level = match args.log_level.to_lowercase().as_str() {

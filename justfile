@@ -27,24 +27,14 @@ ui-typecheck:
 ui-build:
     cd ui && npm run build
 
-db:
-    #!/usr/bin/env bash
-    set -euxo pipefail
-    docker container stop tips-db
-    docker container rm tips-db
-    docker run -d --name tips-db -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres
-    sleep 2
-    for file in ./crates/datastore/migrations/*.sql; do
-      echo $file
-      psql -d postgres://postgres:postgres@localhost:5432/postgres -f $file
-    done
-
-
 create-migration name:
     touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
 
 # Pull database schema using drizzle-kit
-ui-db-schema:
+sync-db-schema:
+    # Rust
+    cargo sqlx prepare -D postgresql://postgres:postgres@localhost:5432/postgres --workspace --all --no-dotenv
+    # NextJS
     cd ui && npx drizzle-kit pull --dialect=postgresql --url=postgresql://postgres:postgres@localhost:5432/postgres
     cd ui && mv ./drizzle/relations.ts ./src/db/
     cd ui && mv ./drizzle/schema.ts ./src/db/
@@ -70,9 +60,20 @@ clippy:
 build:
     cargo build
 
+deps:
+    docker compose down && docker compose rm && docker compose up -d
+
 # Run the ingress service with default mempool URL
 ingress:
     cargo run --bin tips-ingress
+
+# Run the archiver service
+audit:
+    cargo run --bin tips-audit
+
+# Run the maintenance service
+maintenance:
+    cargo run --bin tips-maintenance
 
 ui:
     cd ui && yarn dev

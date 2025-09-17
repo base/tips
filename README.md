@@ -61,11 +61,21 @@ just send-txn
 just ui
 ```
 
-Debugging notes:
+## Dev Notes
+
+### Services Access
+- **MinIO UI**: http://localhost:9001 (minioadmin/minioadmin)
+- **PostgreSQL**: localhost:5432 (postgres/postgres)
+- **Kafka**: localhost:9092
+
+### Debugging
 ```sh
 # Connect to the database
 psql -d postgres://postgres:postgres@localhost:5432/postgres
 
 # Update the UI's schema
 just ui-db-schema
+
+# Start all services with Docker Compose
+docker-compose up -d
 ```

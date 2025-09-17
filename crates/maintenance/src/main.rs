@@ -9,35 +9,64 @@ use std::time::Duration;
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
 use tips_datastore::{BundleDatastore, PostgresDatastore};
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{error, info, warn};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, env = "ETH_NODE_URL")]
+    #[arg(long, env = "TIPS_MAINTENANCE_RPC_NODE")]
     node_url: Url,
 
-    #[arg(long, env = "KAFKA_BROKERS")]
+    #[arg(long, env = "TIPS_MAINTENANCE_KAFKA_BROKERS")]
     kafka_brokers: String,
 
-    #[arg(long, env = "KAFKA_TOPIC", default_value = "mempool-events")]
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_KAFKA_TOPIC",
+        default_value = "mempool-events"
+    )]
     kafka_topic: String,
 
-    #[arg(long, env = "DATABASE_URL")]
+    #[arg(long, env = "TIPS_MAINTENANCE_DATABASE_URL")]
     database_url: String,
 
-    #[arg(long, env = "POLL_INTERVAL_MS", default_value = "250")]
+    #[arg(long, env = "TIPS_MAINTENANCE_POLL_INTERVAL_MS", default_value = "250")]
     poll_interval: u64,
+
+    #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
+    log_level: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
 
-    tracing_subscriber::fmt::init();
-
     let args = Args::parse();
+
+    let log_level = match args.log_level.to_lowercase().as_str() {
+        "trace" => tracing::Level::TRACE,
+        "debug" => tracing::Level::DEBUG,
+        "info" => tracing::Level::INFO,
+        "warn" => tracing::Level::WARN,
+        "error" => tracing::Level::ERROR,
+        _ => {
+            warn!(
+                "Invalid log level '{}', defaulting to 'info'",
+                args.log_level
+            );
+            tracing::Level::INFO
+        }
+    };
+
+    tracing_subscriber::registry()
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
+        )
+        .with(tracing_subscriber::fmt::layer())
+        .init();
 
     info!("Starting maintenance service");
 

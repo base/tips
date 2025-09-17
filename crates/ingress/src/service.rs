@@ -8,6 +8,7 @@ use jsonrpsee::{
     proc_macros::rpc,
 };
 use op_alloy_consensus::OpTxEnvelope;
+use tips_audit::{MempoolEvent, MempoolEventPublisher};
 use tips_datastore::BundleDatastore;
 use tracing::{info, warn};
 
@@ -26,26 +27,34 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Store> {
+pub struct IngressService<Store, Publisher> {
     provider: RootProvider,
     datastore: Store,
     dual_write_mempool: bool,
+    publisher: Publisher,
 }
 
-impl<Store> IngressService<Store> {
-    pub fn new(provider: RootProvider, datastore: Store, dual_write_mempool: bool) -> Self {
+impl<Store, Publisher> IngressService<Store, Publisher> {
+    pub fn new(
+        provider: RootProvider,
+        datastore: Store,
+        dual_write_mempool: bool,
+        publisher: Publisher,
+    ) -> Self {
         Self {
             provider,
             datastore,
             dual_write_mempool,
+            publisher,
         }
     }
 }
 
 #[async_trait]
-impl<Store> IngressApiServer for IngressService<Store>
+impl<Store, Publisher> IngressApiServer for IngressService<Store, Publisher>
 where
     Store: BundleDatastore + Sync + Send + 'static,
+    Publisher: MempoolEventPublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
         warn!(
@@ -81,11 +90,22 @@ where
 
         let result = self
             .datastore
-            .insert_bundle(bundle)
+            .insert_bundle(bundle.clone())
             .await
             .map_err(|_e| ErrorObject::owned(11, "todo", Some(2)))?;
 
         info!(message="inserted singleton bundle", uuid=%result, txn_hash=%envelope.tx_hash());
+
+        if let Err(e) = self
+            .publisher
+            .publish(MempoolEvent::Created {
+                bundle_id: result,
+                bundle,
+            })
+            .await
+        {
+            warn!(message = "Failed to publish MempoolEvent::Created", error = %e);
+        }
 
         if self.dual_write_mempool {
             // If we also want to dual write to the mempool
