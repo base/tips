@@ -1,4 +1,5 @@
 use crate::postgres::{BundleFilter, BundleWithMetadata};
+use alloy_primitives::TxHash;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
 use uuid::Uuid;
@@ -17,4 +18,10 @@ pub trait BundleDatastore: Send + Sync {
 
     /// Select the candidate bundles to include in the next Flashblock
     async fn select_bundles(&self, filter: BundleFilter) -> Result<Vec<BundleWithMetadata>>;
+
+    /// Find bundle ID by transaction hash
+    async fn find_bundle_by_transaction_hash(&self, tx_hash: TxHash) -> Result<Option<Uuid>>;
+
+    /// Remove a bundle by ID
+    async fn remove_bundle(&self, id: Uuid) -> Result<()>;
 }

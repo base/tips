@@ -290,4 +290,30 @@ impl BundleDatastore for PostgresDatastore {
 
         Ok(bundles)
     }
+
+    async fn find_bundle_by_transaction_hash(&self, tx_hash: TxHash) -> Result<Option<Uuid>> {
+        let tx_hash_str = tx_hash.encode_hex_with_prefix();
+
+        let result = sqlx::query_scalar::<_, Uuid>(
+            r#"
+            SELECT id 
+            FROM bundles 
+            WHERE $1 = ANY(txn_hashes)
+            LIMIT 1
+            "#,
+        )
+        .bind(&tx_hash_str)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(result)
+    }
+
+    async fn remove_bundle(&self, id: Uuid) -> Result<()> {
+        sqlx::query("DELETE FROM bundles WHERE id = $1")
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
 }

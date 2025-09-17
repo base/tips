@@ -78,7 +78,14 @@ ui:
     cd ui && yarn dev
 
 # Run autofixes everything
-fix: fmt-fix clippy-fix
+fix: fix-rust fix-ui
+
+# Fix Rust code issues
+fix-rust: fmt-fix clippy-fix
+
+# Fix UI code issues
+fix-ui:
+    cd ui && npx biome check --fix
 
 # Format code (fix)
 fmt-fix:
