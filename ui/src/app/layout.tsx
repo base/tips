@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Base Transactions",
-  description: "A debug UI for viewing bundles and transaction history",
+  title: "TIPS",
+  description: "A beautiful UI for interacting with TIPS",
 };
 
 export default function RootLayout({
