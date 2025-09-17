@@ -26,6 +26,7 @@ alloy-rlp = "0.3.12"
 # op-alloy
 op-alloy-rpc-types = { version = "0.20.0" }
 op-alloy-consensus = { version = "0.20.0", features = ["k256"] }
+op-alloy-network = {version = "0.20.0"}
 
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
@@ -55,6 +56,7 @@ futures-util = "0.3.32"
 rdkafka = { version = "0.37.0", features = ["libz-static"] }
 aws-config = "1.1.7"
 aws-sdk-s3 = "1.106.0"
+aws-credential-types = "1.1.7"
 bytes = { version = "1.8.0", features = ["serde"] }
 md5 = "0.7.0"
 base64 = "0.22.1"

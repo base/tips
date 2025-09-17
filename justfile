@@ -40,6 +40,10 @@ sync-db-schema:
     cd ui && mv ./drizzle/schema.ts ./src/db/
     cd ui && rm -rf ./drizzle
 
+sync-env:
+    cp .env.example .env
+    cp .env.example ./ui/.env
+
 # Check code compilation
 check:
     cargo check
@@ -59,6 +63,9 @@ clippy:
 # Build release binary
 build:
     cargo build
+
+deps-reset:
+    docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
 
 deps:
     docker compose down && docker compose rm && docker compose up -d

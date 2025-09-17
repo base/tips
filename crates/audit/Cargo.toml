@@ -29,6 +29,7 @@ dotenvy = { workspace = true }
 rdkafka = { workspace = true }
 aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
+aws-credential-types = { workspace = true }
 bytes = { workspace = true }
 md5 = { workspace = true }
 futures = "0.3.31"

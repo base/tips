@@ -1,5 +1,5 @@
 # tips
-A prototype of a Transaction Inclusion Pipeline Service for private sequencers that does not use the P2P mempool. The project
+A prototype of a Transaction Inclusion & Prioritization Stack for private sequencers that does not use the P2P mempool. The project
 aims to increase throughput, improve transaction tracking, reduce latency and add support for bundles.
 
 This project is currently at:
@@ -64,7 +64,7 @@ just ui
 ## Dev Notes
 
 ### Services Access
-- **MinIO UI**: http://localhost:9001 (minioadmin/minioadmin)
+- **MinIO UI**: http://localhost:7001 (minioadmin/minioadmin)
 - **PostgreSQL**: localhost:5432 (postgres/postgres)
 - **Kafka**: localhost:9092
 

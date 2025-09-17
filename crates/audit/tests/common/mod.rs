@@ -7,7 +7,9 @@ use uuid::Uuid;
 pub struct TestHarness {
     pub s3_client: aws_sdk_s3::Client,
     pub bucket_name: String,
+    #[allow(dead_code)] // TODO is read
     pub kafka_producer: FutureProducer,
+    #[allow(dead_code)] // TODO is read
     pub kafka_consumer: StreamConsumer,
     _minio_container: testcontainers::ContainerAsync<MinIO>,
     _kafka_container: testcontainers::ContainerAsync<Kafka>,

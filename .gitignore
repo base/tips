@@ -31,3 +31,6 @@ ui/.env*.local
 ui/.vercel
 ui/*.tsbuildinfo
 ui/next-env.d.ts
+
+# Local data directories
+data/

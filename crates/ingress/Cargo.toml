@@ -13,6 +13,7 @@ tips-audit.workspace = true
 jsonrpsee.workspace = true
 alloy-rpc-types-mev.workspace = true
 alloy-primitives.workspace = true
+op-alloy-network.workspace = true
 alloy-provider.workspace = true
 tokio.workspace = true
 tracing.workspace = true

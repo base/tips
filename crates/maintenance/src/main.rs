@@ -6,6 +6,7 @@ use clap::Parser;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::time::Duration;
+use op_alloy_network::Optimism;
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
 use tips_datastore::{BundleDatastore, PostgresDatastore};
 use tokio::time::sleep;
@@ -70,8 +71,9 @@ async fn main() -> Result<()> {
 
     info!("Starting maintenance service");
 
-    let provider: RootProvider = ProviderBuilder::new()
+    let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
+        .network::<Optimism>()
         .connect_http(args.node_url);
 
     let datastore = PostgresDatastore::connect(args.database_url).await?;
@@ -99,7 +101,7 @@ async fn main() -> Result<()> {
 }
 
 async fn process_new_blocks(
-    provider: &impl Provider,
+    provider: &impl Provider<Optimism>,
     datastore: &PostgresDatastore,
     publisher: &KafkaMempoolEventPublisher,
     last_processed_block: &mut Option<u64>,
@@ -132,13 +134,14 @@ async fn process_new_blocks(
 }
 
 async fn process_block(
-    provider: &impl Provider,
+    provider: &impl Provider<Optimism>,
     datastore: &PostgresDatastore,
     publisher: &KafkaMempoolEventPublisher,
     block_number: u64,
 ) -> Result<()> {
     let block = provider
         .get_block_by_number(block_number.into())
+        .full()
         .await?
         .ok_or_else(|| anyhow::anyhow!("Block {} not found", block_number))?;
 
@@ -158,6 +161,7 @@ async fn process_block(
 
     for tx in transactions {
         let tx_hash = tx.tx_hash();
+        info!(message = "Processing transaction", tx_hash=%tx_hash);
 
         match datastore.find_bundle_by_transaction_hash(tx_hash).await? {
             Some(bundle_id) => {

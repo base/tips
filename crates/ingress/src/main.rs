@@ -4,6 +4,7 @@ use jsonrpsee::server::Server;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
+use op_alloy_network::Optimism;
 use tips_audit::KafkaMempoolEventPublisher;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -87,8 +88,9 @@ async fn main() -> anyhow::Result<()> {
         mempool_url = %config.mempool_url
     );
 
-    let provider: RootProvider = ProviderBuilder::new()
+    let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
+        .network::<Optimism>()
         .connect_http(config.mempool_url);
 
     let bundle_store = PostgresDatastore::connect(config.database_url).await?;

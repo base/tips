@@ -8,6 +8,7 @@ use jsonrpsee::{
     proc_macros::rpc,
 };
 use op_alloy_consensus::OpTxEnvelope;
+use op_alloy_network::Optimism;
 use tips_audit::{MempoolEvent, MempoolEventPublisher};
 use tips_datastore::BundleDatastore;
 use tracing::{info, warn};
@@ -28,7 +29,7 @@ pub trait IngressApi {
 }
 
 pub struct IngressService<Store, Publisher> {
-    provider: RootProvider,
+    provider: RootProvider<Optimism>,
     datastore: Store,
     dual_write_mempool: bool,
     publisher: Publisher,
@@ -36,7 +37,7 @@ pub struct IngressService<Store, Publisher> {
 
 impl<Store, Publisher> IngressService<Store, Publisher> {
     pub fn new(
-        provider: RootProvider,
+        provider: RootProvider<Optimism>,
         datastore: Store,
         dual_write_mempool: bool,
         publisher: Publisher,

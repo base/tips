@@ -1,42 +1,54 @@
-import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  GetObjectCommand,
+  S3Client,
+  type S3ClientConfig,
+} from "@aws-sdk/client-s3";
 
-const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
-});
+function createS3Client(): S3Client {
+  const configType = process.env.TIPS_UI_S3_CONFIG_TYPE || "aws";
+  const region = process.env.TIPS_UI_AWS_REGION || "us-east-1";
 
-const BUCKET_NAME = process.env.S3_BUCKET_NAME || "tips-audit-data";
+  if (configType === "manual") {
+    console.log("Using Manual S3 configuration");
+    const config: S3ClientConfig = {
+      region,
+      forcePathStyle: true,
+    };
+
+    if (process.env.TIPS_UI_S3_ENDPOINT) {
+      config.endpoint = process.env.TIPS_UI_S3_ENDPOINT;
+    }
+
+    if (
+      process.env.TIPS_UI_S3_ACCESS_KEY_ID &&
+      process.env.TIPS_UI_S3_SECRET_ACCESS_KEY
+    ) {
+      config.credentials = {
+        accessKeyId: process.env.TIPS_UI_S3_ACCESS_KEY_ID,
+        secretAccessKey: process.env.TIPS_UI_S3_SECRET_ACCESS_KEY,
+      };
+    }
+
+    return new S3Client(config);
+  }
+
+  console.log("Using AWS S3 configuration");
+  return new S3Client({
+    region,
+  });
+}
+
+const s3Client = createS3Client();
+
+const BUCKET_NAME = process.env.TIPS_UI_S3_BUCKET_NAME;
+if (process.env.TIPS_UI_S3_BUCKET_NAME === undefined) {
+  throw new Error("You must specify a valid bucket");
+}
 
 export interface TransactionMetadata {
   bundle_ids: string[];
   sender: string;
   nonce: string;
-}
-
-export interface MempoolEvent {
-  type: string;
-  data: {
-    bundle_id?: string;
-    transactions?: Array<{
-      id: {
-        sender: string;
-        nonce: string;
-        hash: string;
-      };
-      data: string;
-    }>;
-    transaction_ids?: Array<{
-      sender: string;
-      nonce: string;
-      hash: string;
-    }>;
-    block_number?: number;
-    flashblock_index?: number;
-    block_hash?: string;
-  };
-}
-
-export interface CanonicalTransactionEvent {
-  event_log: MempoolEvent[];
 }
 
 async function getObjectContent(key: string): Promise<string | null> {
@@ -76,31 +88,24 @@ export async function getTransactionMetadataByHash(
   }
 }
 
-export async function getCanonicalTransactionLog(
-  sender: string,
-  nonce: string,
-): Promise<CanonicalTransactionEvent | null> {
-  const key = `transactions/canonical/${sender}/${nonce}`;
-  const content = await getObjectContent(key);
-
-  if (!content) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(content) as CanonicalTransactionEvent;
-  } catch (error) {
-    console.error(
-      `Failed to parse canonical transaction log for ${sender}/${nonce}:`,
-      error,
-    );
-    return null;
+export interface BundleEvent {
+  event: string;
+  data?: {
+    bundle?: {
+      revertingTxHashes: Array<string>;
+    };
+    key: string;
+    timestamp: number;
   }
 }
 
-export async function getBundleTransactionHashes(
+export interface BundleHistory {
+  history: BundleEvent[];
+}
+
+export async function getBundleHistory(
   bundleId: string,
-): Promise<string[] | null> {
+): Promise<BundleHistory | null> {
   const key = `bundles/${bundleId}`;
   const content = await getObjectContent(key);
 
@@ -109,10 +114,10 @@ export async function getBundleTransactionHashes(
   }
 
   try {
-    return JSON.parse(content) as string[];
+    return JSON.parse(content) as BundleHistory;
   } catch (error) {
     console.error(
-      `Failed to parse bundle transaction hashes for bundle ${bundleId}:`,
+      `Failed to parse bundle history for bundle ${bundleId}:`,
       error,
     );
     return null;

@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
-  getCanonicalTransactionLog,
+  type BundleEvent,
+  getBundleHistory,
   getTransactionMetadataByHash,
-} from "../../../../lib/s3";
+} from "@/lib/s3";
 
 export interface TransactionEvent {
   type: string;
@@ -29,12 +30,8 @@ export interface TransactionEvent {
 
 export interface TransactionHistoryResponse {
   hash: string;
-  events: TransactionEvent[];
-  metadata?: {
-    bundle_ids: string[];
-    sender: string;
-    nonce: string;
-  };
+  bundle_ids: string[];
+  history: BundleEvent[];
 }
 
 export async function GET(
@@ -53,15 +50,16 @@ export async function GET(
       );
     }
 
-    const canonicalLog = await getCanonicalTransactionLog(
-      metadata.sender,
-      metadata.nonce,
-    );
+    // TODO: Can be in multiple bundles
+    const bundle = await getBundleHistory(metadata.bundle_ids[0]);
+    if (!bundle) {
+      return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+    }
 
     const response: TransactionHistoryResponse = {
       hash,
-      events: canonicalLog?.event_log || [],
-      metadata,
+      bundle_ids: metadata.bundle_ids,
+      history: bundle.history,
     };
 
     return NextResponse.json(response);
