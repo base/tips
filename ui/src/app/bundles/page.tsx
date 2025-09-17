@@ -5,33 +5,53 @@ import { useEffect, useState } from "react";
 import type { Bundle } from "@/app/api/bundles/route";
 
 export default function BundlesPage() {
-  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [liveBundles, setLiveBundles] = useState<Bundle[]>([]);
+  const [allBundles, setAllBundles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchBundles = async () => {
+    const fetchLiveBundles = async () => {
       try {
         const response = await fetch("/api/bundles");
         if (!response.ok) {
-          setError("Failed to fetch bundles");
-          setBundles([]);
+          setError("Failed to fetch live bundles");
+          setLiveBundles([]);
           return;
         }
         const result = await response.json();
-        setBundles(result);
+        setLiveBundles(result);
         setError(null);
       } catch (_err) {
-        setError("Failed to fetch bundles");
-        setBundles([]);
-      } finally {
-        setLoading(false);
+        setError("Failed to fetch live bundles");
+        setLiveBundles([]);
       }
     };
 
-    fetchBundles();
+    const fetchAllBundles = async () => {
+      try {
+        const response = await fetch("/api/bundles/all");
+        if (!response.ok) {
+          console.error("Failed to fetch all bundles from S3");
+          setAllBundles([]);
+          return;
+        }
+        const result = await response.json();
+        setAllBundles(result);
+      } catch (_err) {
+        console.error("Failed to fetch all bundles from S3");
+        setAllBundles([]);
+      }
+    };
 
-    const interval = setInterval(fetchBundles, 400);
+    const fetchData = async () => {
+      await Promise.all([fetchLiveBundles(), fetchAllBundles()]);
+      setLoading(false);
+    };
+
+    fetchData();
+
+    const interval = setInterval(fetchLiveBundles, 400);
 
     return () => clearInterval(interval);
   }, []);
@@ -39,44 +59,71 @@ export default function BundlesPage() {
   if (loading) {
     return (
       <div className="flex flex-col gap-4 p-8">
-        <h1 className="text-2xl font-bold">Bundles</h1>
+        <h1 className="text-2xl font-bold">BundleStore (fka Mempool)</h1>
         <div className="animate-pulse">Loading bundles...</div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6 p-8">
+    <div className="flex flex-col gap-8 p-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold">Bundles</h1>
+        <h1 className="text-2xl font-bold">BundleStore (fka Mempool)</h1>
         {error && (
           <div className="text-sm text-red-600 dark:text-red-400">{error}</div>
         )}
       </div>
 
-      {bundles.length > 0 ? (
-        <ul className="space-y-2">
-          {bundles.map((bundle) => (
-            <li key={bundle.id}>
-              <Link
-                href={`/bundle/${bundle.id}`}
-                className="block p-3 border rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-              >
-                <span className="font-mono text-sm">
-                  {bundle.id}
-                  {" ("}
-                  {bundle.txnHashes?.join(", ") || "No transactions"}
-                  {")"}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-gray-600 dark:text-gray-400">
-          {loading ? "Loading bundles..." : "No bundles found."}
-        </p>
-      )}
+      <div className="flex flex-col gap-6">
+        <section>
+          <h2 className="text-xl font-semibold mb-4">Live Bundles</h2>
+          {liveBundles.length > 0 ? (
+            <ul className="space-y-2">
+              {liveBundles.map((bundle) => (
+                <li key={bundle.id}>
+                  <Link
+                    href={`/bundles/${bundle.id}`}
+                    className="block p-3 border rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    <span className="font-mono text-sm">
+                      {bundle.id}
+                      {" ("}
+                      {bundle.txnHashes?.join(", ") || "No transactions"}
+                      {")"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-600 dark:text-gray-400">
+              No live bundles found.
+            </p>
+          )}
+        </section>
+
+        <section>
+          <h2 className="text-xl font-semibold mb-4">All Bundles</h2>
+          {allBundles.length > 0 ? (
+            <ul className="space-y-2">
+              {allBundles.map((bundleId) => (
+                <li key={bundleId}>
+                  <Link
+                    href={`/bundles/${bundleId}`}
+                    className="block p-3 border rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                  >
+                    <span className="font-mono text-sm">{bundleId}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-gray-600 dark:text-gray-400">
+              No bundles found in S3.
+            </p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

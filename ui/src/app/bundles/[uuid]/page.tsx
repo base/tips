@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { BundleHistoryResponse } from "@/app/api/bundle/[uuid]/route";
 
@@ -126,14 +125,10 @@ export default function BundlePage({ params }: PageProps) {
 
             return uniqueTransactions.length > 0 ? (
               <div className="border rounded-lg p-4 bg-white/5">
-                <h2 className="text-xl font-semibold mb-3">
-                  Transactions
-                </h2>
+                <h2 className="text-xl font-semibold mb-3">Transactions</h2>
                 <ul className="space-y-2">
                   {uniqueTransactions.map((tx) => (
-                    <li key={tx}>
-                        {tx}
-                    </li>
+                    <li key={tx}>{tx}</li>
                   ))}
                 </ul>
               </div>
@@ -168,72 +163,6 @@ export default function BundlePage({ params }: PageProps) {
                         <span className="text-xs text-gray-500">
                           Event #{index + 1}
                         </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                        {event.builder && (
-                          <div>
-                            <span className="font-medium">Builder:</span>{" "}
-                            {event.builder}
-                          </div>
-                        )}
-                        {event.blockNumber && (
-                          <div>
-                            <span className="font-medium">Block Number:</span>{" "}
-                            {event.blockNumber}
-                          </div>
-                        )}
-                        {event.flashblockIndex && (
-                          <div>
-                            <span className="font-medium">
-                              Flashblock Index:
-                            </span>{" "}
-                            {event.flashblockIndex}
-                          </div>
-                        )}
-                        {event.blockHash && (
-                          <div>
-                            <span className="font-medium">Block Hash:</span>{" "}
-                            <span className="font-mono text-xs">
-                              {event.blockHash}
-                            </span>
-                          </div>
-                        )}
-                        {event.reason && (
-                          <div>
-                            <span className="font-medium">Reason:</span>{" "}
-                            {event.reason}
-                          </div>
-                        )}
-                        {event.bundle?.transactions && (
-                          <div className="md:col-span-2">
-                            <span className="font-medium">Transactions:</span>{" "}
-                            {event.bundle.transactions.length}
-                            <div className="mt-2 space-y-1">
-                              {event.bundle.transactions
-                                .slice(0, 3)
-                                .map((tx, _txIndex) => (
-                                  <div
-                                    key={tx.hash}
-                                    className="flex items-center gap-2"
-                                  >
-                                    <Link
-                                      href={`/txn/${tx.hash}`}
-                                      className="font-mono text-xs text-blue-600 hover:text-blue-800 underline"
-                                    >
-                                      {tx.hash}
-                                    </Link>
-                                  </div>
-                                ))}
-                              {event.bundle.transactions.length > 3 && (
-                                <div className="text-xs text-gray-500">
-                                  ... and {event.bundle.transactions.length - 3}{" "}
-                                  more
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
                   );

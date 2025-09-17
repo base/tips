@@ -1,10 +1,10 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
+use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
-use op_alloy_network::Optimism;
 use tips_audit::KafkaMempoolEventPublisher;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};

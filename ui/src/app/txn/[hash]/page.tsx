@@ -39,7 +39,7 @@ export default function TransactionRedirectPage({ params }: PageProps) {
         const result: TransactionHistoryResponse = await response.json();
 
         if (result.bundle_ids && result.bundle_ids.length > 0) {
-          router.push(`/bundle/${result.bundle_ids[0]}`);
+          router.push(`/bundles/${result.bundle_ids[0]}`);
         } else {
           setError("No bundle found for this transaction");
         }

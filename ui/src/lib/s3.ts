@@ -1,5 +1,6 @@
 import {
   GetObjectCommand,
+  ListObjectsV2Command,
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
@@ -96,7 +97,7 @@ export interface BundleEvent {
     };
     key: string;
     timestamp: number;
-  }
+  };
 }
 
 export interface BundleHistory {
@@ -121,5 +122,33 @@ export async function getBundleHistory(
       error,
     );
     return null;
+  }
+}
+
+export async function listAllBundleKeys(): Promise<string[]> {
+  try {
+    const command = new ListObjectsV2Command({
+      Bucket: BUCKET_NAME,
+      Prefix: "bundles/",
+    });
+
+    const response = await s3Client.send(command);
+    const bundleKeys: string[] = [];
+
+    if (response.Contents) {
+      for (const object of response.Contents) {
+        if (object.Key?.startsWith("bundles/")) {
+          const bundleId = object.Key.replace("bundles/", "");
+          if (bundleId) {
+            bundleKeys.push(bundleId);
+          }
+        }
+      }
+    }
+
+    return bundleKeys;
+  } catch (error) {
+    console.error("Failed to list S3 bundle keys:", error);
+    return [];
   }
 }
