@@ -1,6 +1,10 @@
 use anyhow::Result;
+use aws_sdk_s3::Client as S3Client;
 use clap::Parser;
-use tips_audit::KafkaMempoolArchiver;
+use rdkafka::consumer::Consumer;
+use tips_audit::{
+    create_kafka_consumer, KafkaMempoolArchiver, KafkaMempoolReader, S3MempoolEventReaderWriter,
+};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -59,13 +63,16 @@ async fn main() -> Result<()> {
         "Starting audit archiver"
     );
 
-    let mut archiver = KafkaMempoolArchiver::new(
-        &args.kafka_brokers,
-        args.kafka_topic,
-        args.kafka_group_id,
-        args.s3_bucket,
-    )
-    .await?;
+    let consumer = create_kafka_consumer(&args.kafka_brokers, &args.kafka_group_id)?;
+    consumer.subscribe(&[&args.kafka_topic])?;
+
+    let reader = KafkaMempoolReader::new(consumer, args.kafka_topic)?;
+
+    let config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
+    let s3_client = S3Client::new(&config);
+    let writer = S3MempoolEventReaderWriter::new(s3_client, args.s3_bucket);
+
+    let mut archiver = KafkaMempoolArchiver::new(reader, writer);
 
     info!("Audit archiver initialized, starting main loop");
 

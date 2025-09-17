@@ -8,6 +8,31 @@ https://github.com/flashbots/builder-playground
 https://github.com/base/tips/pull/new/prototype
 https://github.com/base/op-rbuilder/pull/new/tips-prototype
 
+## Architecture Overview
+
+The project consists of three main crates:
+
+### 🔌 Ingress (`crates/ingress`)
+The main entry point that provides a JSON-RPC API for receiving transactions and bundles. It handles:
+- Transaction validation and processing
+- Bundle creation and management
+- Dual-write capability to legacy mempool
+- PostgreSQL persistence via the datastore layer
+
+### 🗄️ Datastore (`crates/datastore`)
+PostgreSQL-based storage layer that provides:
+- Bundle persistence and retrieval
+- Transaction tracking and indexing
+- Database schema management via migrations
+- See [Database Schema](crates/datastore/migrations/1757444171_create_bundles_table.sql) for table structure
+
+### 📊 Audit (`crates/audit`)
+Event streaming and archival system that:
+- Publishes bundle lifecycle events to Kafka
+- Archives bundle history to S3 for long-term storage
+- Provides transaction lookup capabilities
+- See [S3 Storage Format](crates/audit/S3_FORMAT.md) for data structure details
+
 
 ### Local Development
 You can run the whole system locally with:

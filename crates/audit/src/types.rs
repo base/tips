@@ -1,5 +1,9 @@
+use alloy_consensus::transaction::{SignerRecoverable, Transaction as ConsensusTransaction};
 use alloy_primitives::{Address, TxHash, U256};
+use alloy_provider::network::eip2718::Decodable2718;
+use alloy_rpc_types_mev::EthSendBundle;
 use bytes::Bytes;
+use op_alloy_consensus::OpTxEnvelope;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -13,13 +17,16 @@ pub struct TransactionId {
 pub type BundleId = Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct BundleWithMetadata {
+pub enum DropReason {
+    TimedOut,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Bundle {
     pub id: BundleId,
     pub transactions: Vec<Transaction>,
     pub metadata: serde_json::Value,
 }
-
-pub type Bundle = BundleWithMetadata;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Transaction {
@@ -28,65 +35,82 @@ pub struct Transaction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", content = "data")]
+#[serde(tag = "event", content = "data")]
 pub enum MempoolEvent {
-    ReceivedBundle {
+    Created {
         bundle_id: BundleId,
-        transactions: Vec<Transaction>,
+        bundle: EthSendBundle,
     },
-    CancelledBundle {
+    Updated {
         bundle_id: BundleId,
-        transaction_ids: Vec<TransactionId>,
+        bundle: EthSendBundle,
     },
-    BuilderMined {
+    Cancelled {
         bundle_id: BundleId,
-        transaction_ids: Vec<TransactionId>,
+    },
+    BuilderIncluded {
+        bundle_id: BundleId,
+        builder: String,
         block_number: u64,
         flashblock_index: u64,
     },
-    FlashblockInclusion {
+    FlashblockIncluded {
         bundle_id: BundleId,
-        transaction_ids: Vec<TransactionId>,
         block_number: u64,
         flashblock_index: u64,
     },
-    BlockInclusion {
+    BlockIncluded {
         bundle_id: BundleId,
-        transaction_ids: Vec<TransactionId>,
+        block_number: u64,
         block_hash: TxHash,
-        block_number: u64,
-        flashblock_index: u64,
+    },
+    Dropped {
+        bundle_id: BundleId,
+        reason: DropReason,
     },
 }
 
 impl MempoolEvent {
     pub fn bundle_id(&self) -> BundleId {
         match self {
-            MempoolEvent::ReceivedBundle { bundle_id, .. } => *bundle_id,
-            MempoolEvent::CancelledBundle { bundle_id, .. } => *bundle_id,
-            MempoolEvent::BuilderMined { bundle_id, .. } => *bundle_id,
-            MempoolEvent::FlashblockInclusion { bundle_id, .. } => *bundle_id,
-            MempoolEvent::BlockInclusion { bundle_id, .. } => *bundle_id,
+            MempoolEvent::Created { bundle_id, .. } => *bundle_id,
+            MempoolEvent::Updated { bundle_id, .. } => *bundle_id,
+            MempoolEvent::Cancelled { bundle_id, .. } => *bundle_id,
+            MempoolEvent::BuilderIncluded { bundle_id, .. } => *bundle_id,
+            MempoolEvent::FlashblockIncluded { bundle_id, .. } => *bundle_id,
+            MempoolEvent::BlockIncluded { bundle_id, .. } => *bundle_id,
+            MempoolEvent::Dropped { bundle_id, .. } => *bundle_id,
         }
     }
 
     pub fn transaction_ids(&self) -> Vec<TransactionId> {
         match self {
-            MempoolEvent::ReceivedBundle { transactions, .. } => {
-                transactions.iter().map(|t| t.id.clone()).collect()
+            MempoolEvent::Created { bundle, .. } | MempoolEvent::Updated { bundle, .. } => {
+                bundle
+                    .txs
+                    .iter()
+                    .filter_map(|tx_bytes| {
+                        match OpTxEnvelope::decode_2718_exact(tx_bytes.iter().as_slice()) {
+                            Ok(envelope) => {
+                                match envelope.recover_signer() {
+                                    Ok(sender) => Some(TransactionId {
+                                        sender,
+                                        nonce: U256::from(envelope.nonce()),
+                                        hash: *envelope.hash(),
+                                    }),
+                                    Err(_) => None, // Skip invalid transactions
+                                }
+                            }
+                            Err(_) => None, // Skip malformed transactions
+                        }
+                    })
+                    .collect()
             }
-            MempoolEvent::CancelledBundle {
-                transaction_ids, ..
-            } => transaction_ids.clone(),
-            MempoolEvent::BuilderMined {
-                transaction_ids, ..
-            } => transaction_ids.clone(),
-            MempoolEvent::FlashblockInclusion {
-                transaction_ids, ..
-            } => transaction_ids.clone(),
-            MempoolEvent::BlockInclusion {
-                transaction_ids, ..
-            } => transaction_ids.clone(),
+            MempoolEvent::Cancelled { .. } => vec![],
+            MempoolEvent::BuilderIncluded { .. } => vec![],
+            MempoolEvent::FlashblockIncluded { .. } => vec![],
+            MempoolEvent::BlockIncluded { .. } => vec![],
+            MempoolEvent::Dropped { .. } => vec![],
         }
     }
 }

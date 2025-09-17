@@ -5,7 +5,7 @@ edition = "2021"
 
 [[bin]]
 name = "tips-archiver"
-path = "src/bin/archiver.rs"
+path = "src/bin/main.rs"
 
 [dependencies]
 # Workspace dependencies
@@ -18,6 +18,10 @@ serde_json = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 alloy-primitives = { workspace = true }
+alloy-consensus = { workspace = true }
+alloy-provider = { workspace = true }
+alloy-rpc-types-mev = { workspace = true }
+op-alloy-consensus = { workspace = true }
 clap = { workspace = true }
 
 # Additional dependencies for Kafka and S3
