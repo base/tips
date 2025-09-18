@@ -1,9 +1,10 @@
 [workspace]
-members = ["crates/datastore"]
+members = ["crates/datastore", "crates/audit"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-datastore = { path = "crates/datastore" }
+tips-audit = { path = "crates/audit" }
 
 jsonrpsee = { version = "0.26.0", features = ["server", "macros"] }
 
@@ -47,7 +48,7 @@ serde_json = "1.0.143"
 dotenvy = "0.15.7"
 testcontainers = { version = "0.23.1", features = ["blocking"] }
 testcontainers-modules = { version = "0.11.2", features = ["postgres", "kafka", "minio"] }
-futures-util = "0.3.32"
+futures-util = "0.3.31"
 
 # Kafka and S3 dependencies
 rdkafka = { version = "0.37.0", features = ["libz-static"] }

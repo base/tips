@@ -1,3 +1,4 @@
+### DEVELOPMENT COMMANDS ###
 ci:
     cargo fmt --all -- --check
     cargo clippy -- -D warnings
@@ -14,3 +15,15 @@ create-migration name:
 sync:
     ### DATABASE ###
     cargo sqlx prepare -D postgresql://postgres:postgres@localhost:5432/postgres --workspace --all --no-dotenv
+    ###   ENV    ###
+    cp .env.example .env
+
+### RUN SERVICES ###
+deps-reset:
+    docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
+
+deps:
+    docker compose down && docker compose rm && docker compose up -d
+
+audit:
+    cargo run --bin tips-audit

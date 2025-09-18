@@ -1,6 +1,9 @@
 # Rust
 /target/
 
+# Local Dev
+/data/
+
 # IDE & OS
 .idea/
 .vscode/
