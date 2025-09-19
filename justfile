@@ -27,3 +27,6 @@ deps:
 
 audit:
     cargo run --bin tips-audit
+
+ingress:
+    cargo run --bin tips-ingress

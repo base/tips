@@ -18,3 +18,6 @@ Event streaming and archival system that:
 - Provides an API to publish bundle events to Kafka
 - Archives bundle history to S3 for long-term storage
 - See [S3 Storage Format](docs/AUDIT_S3_FORMAT.md) for data structure details
+
+### 🔌 Ingress (`crates/ingress`)
+The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
