@@ -19,3 +19,7 @@ Thumbs.db
 # Environment variables
 .env
 /ui/.env
+
+# Claude
+/.claude
+/ui/.claude

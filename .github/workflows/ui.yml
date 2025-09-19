@@ -19,11 +19,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ui/package-lock.json
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
       - run: cp .env.example ui/.env
-      - run: cd ui && npm ci
-      - run: cd ui && npm run lint
+      - run: cd ui && yarn install
+      - run: cd ui && yarn lint
 
   type-check:
     name: Type Check
@@ -33,10 +33,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ui/package-lock.json
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
       - run: cp .env.example ui/.env
-      - run: cd ui && npm ci
+      - run: cd ui && yarn install
       - run: cd ui && npx tsc --noEmit
 
   build:
@@ -47,8 +47,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: ui/package-lock.json
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
       - run: cp .env.example ui/.env
-      - run: cd ui && npm ci
-      - run: cd ui && npm run build
+      - run: cd ui && yarn install
+      - run: cd ui && yarn build
