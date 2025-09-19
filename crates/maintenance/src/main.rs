@@ -176,7 +176,7 @@ async fn process_block(
                 publisher.publish(event).await?;
                 datastore.remove_bundle(bundle_id).await?;
 
-                info!(message = "Found bundle for transaction", bundle_id=%bundle_id, tx_hash=%tx_hash);
+                info!(message = "Removed bundle for transaction", bundle_id=%bundle_id, tx_hash=%tx_hash);
             }
             None => {
                 error!(message = "Transaction not part of tracked bundle", tx_hash=%tx_hash);

@@ -5,7 +5,7 @@ resolver = "2"
 [workspace.dependencies]
 tips-datastore = { path = "crates/datastore" }
 tips-audit = { path = "crates/audit" }
-tips-maintenance = { path = "crates/audit" }
+tips-maintenance = { path = "crates/maintenance" }
 
 
 # Reth
