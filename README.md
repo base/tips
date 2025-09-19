@@ -23,4 +23,4 @@ Event streaming and archival system that:
 The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
 
 ### 🔨 Maintenance (`crates/maintenance`)
-TODO
+A service that maintains the health of the TIPS DataStore, by removing stale or included bundles.
