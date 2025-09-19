@@ -24,3 +24,6 @@ The main entry point that provides a JSON-RPC API for receiving transactions and
 
 ### 🔨 Maintenance (`crates/maintenance`)
 A service that maintains the health of the TIPS DataStore, by removing stale or included bundles.
+
+### 🖥️ UI (`ui`)
+A debug UI for viewing the state of the bundle store and S3.

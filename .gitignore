@@ -1,6 +1,10 @@
 # Rust
 /target/
 
+# NextJS
+/ui/.next
+/ui/node_modules
+
 # Local Dev
 /data/
 
@@ -14,4 +18,8 @@ Thumbs.db
 
 # Environment variables
 .env
-.env.local
+/ui/.env
+
+# Claude
+/.claude
+/ui/.claude

@@ -1,0 +1,54 @@
+name: UI
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [ master ]
+    paths: ['ui/**']
+  pull_request:
+    branches: [ master ]
+    paths: ['ui/**']
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
+      - run: cp .env.example ui/.env
+      - run: cd ui && yarn install
+      - run: cd ui && yarn lint
+
+  type-check:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
+      - run: cp .env.example ui/.env
+      - run: cd ui && yarn install
+      - run: cd ui && npx tsc --noEmit
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'yarn'
+          cache-dependency-path: ui/yarn.lock
+      - run: cp .env.example ui/.env
+      - run: cd ui && yarn install
+      - run: cd ui && yarn build
