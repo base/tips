@@ -1,4 +1,6 @@
 name: UI
+permissions:
+  contents: read
 
 on:
   push:
