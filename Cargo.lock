@@ -382,6 +382,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "alloy-rpc-types"
+version = "1.0.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c079797bbda28d6a5a2e89bcbf788bf85b4ae2a4f0e57eed9e2d66637fe78c58"
+dependencies = [
+ "alloy-primitives",
+ "alloy-serde",
+ "serde",
+]
+
+[[package]]
 name = "alloy-rpc-types-admin"
 version = "1.0.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7066,6 +7077,27 @@ dependencies = [
  "op-alloy-network",
  "rdkafka",
  "reth-rpc-eth-types",
+ "tips-audit",
+ "tips-datastore",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+ "url",
+]
+
+[[package]]
+name = "tips-maintenance"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-rpc-types",
+ "anyhow",
+ "clap",
+ "dotenvy",
+ "op-alloy-network",
+ "rdkafka",
+ "serde_json",
  "tips-audit",
  "tips-datastore",
  "tokio",

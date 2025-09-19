@@ -30,3 +30,6 @@ audit:
 
 ingress:
     cargo run --bin tips-ingress
+
+maintenance:
+    cargo run --bin tips-maintenance

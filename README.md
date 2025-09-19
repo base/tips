@@ -21,3 +21,6 @@ Event streaming and archival system that:
 
 ### 🔌 Ingress (`crates/ingress`)
 The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
+
+### 🔨 Maintenance (`crates/maintenance`)
+TODO
