@@ -21,3 +21,6 @@ Event streaming and archival system that:
 
 ### 🔌 Ingress (`crates/ingress`)
 The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
+
+### 🔨 Maintenance (`crates/maintenance`)
+A service that maintains the health of the TIPS DataStore, by removing stale or included bundles.
