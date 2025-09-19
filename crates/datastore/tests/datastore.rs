@@ -1,12 +1,16 @@
-use alloy_primitives::{Address, Bytes, TxHash, address, b256, bytes};
+use alloy_primitives::{
+    Address, Bytes, StorageKey, StorageValue, TxHash, U256, address, b256, bytes,
+};
 use alloy_rpc_types_mev::EthSendBundle;
 use sqlx::PgPool;
+use std::collections::HashMap;
 use testcontainers_modules::{
     postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner},
 };
-use tips_datastore::postgres::{BundleFilter, BundleState};
+use tips_datastore::postgres::{BundleFilter, BundleState, StateDiff};
 use tips_datastore::{BundleDatastore, PostgresDatastore};
+use uuid::Uuid;
 
 struct TestHarness {
     _postgres_instance: ContainerAsync<postgres::Postgres>,
@@ -71,6 +75,41 @@ fn create_test_bundle(
         refund_tx_hashes: vec![],
         extra_fields: Default::default(),
     })
+}
+
+fn create_test_state_diff() -> StateDiff {
+    let mut state_diff = HashMap::new();
+    
+    // Create test account address
+    let account1: Address = "0x742d35cc6635c0532925a3b8d40b33dd33ad7309".parse().unwrap();
+    let account2: Address = "0x24ae36512421f1d9f6e074f00ff5b8393f5dd925".parse().unwrap();
+    
+    // Create storage mappings for account1
+    let mut account1_storage = HashMap::new();
+    account1_storage.insert(
+        StorageKey::ZERO,
+        StorageValue::from(U256::from(1)),
+    );
+    account1_storage.insert(
+        StorageKey::from(U256::from(1)),
+        StorageValue::from(U256::from(2)),
+    );
+    
+    // Create storage mappings for account2
+    let mut account2_storage = HashMap::new();
+    account2_storage.insert(
+        StorageKey::from(U256::from(3)),
+        StorageValue::from(U256::from(4)),
+    );
+    
+    state_diff.insert(account1, account1_storage);
+    state_diff.insert(account2, account2_storage);
+    
+    state_diff
+}
+
+fn create_empty_state_diff() -> StateDiff {
+    HashMap::new()
 }
 
 #[tokio::test]
@@ -299,5 +338,302 @@ async fn cancel_bundle_workflow() -> eyre::Result<()> {
         "Bundle2 should still exist after bundle1 cancellation"
     );
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn insert_and_get_simulation() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // First create a bundle to link the simulation to
+    let test_bundle = create_test_bundle(12345, Some(1640995200), Some(1640995260))?;
+    let bundle_id = harness.data_store.insert_bundle(test_bundle).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    // Create simulation data
+    let block_number = 18500000u64;
+    let block_hash = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef".to_string();
+    let execution_time_us = 250000u64;
+    let gas_used = 21000u64;
+    let state_diff = create_test_state_diff();
+    
+    // Insert simulation
+    let simulation_id = harness.data_store.insert_simulation(
+        bundle_id,
+        block_number,
+        block_hash.clone(),
+        execution_time_us,
+        gas_used,
+        state_diff.clone(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Retrieve simulation
+    let retrieved_simulation = harness.data_store.get_simulation(simulation_id).await
+        .map_err(|e| eyre::eyre!(e))?;
+    assert!(retrieved_simulation.is_some(), "Simulation should be found");
+    
+    let simulation = retrieved_simulation.unwrap();
+    assert_eq!(simulation.id, simulation_id);
+    assert_eq!(simulation.bundle_id, bundle_id);
+    assert_eq!(simulation.block_number, block_number);
+    assert_eq!(simulation.block_hash, block_hash);
+    assert_eq!(simulation.execution_time_us, execution_time_us);
+    assert_eq!(simulation.gas_used, gas_used);
+    assert_eq!(simulation.state_diff.len(), state_diff.len());
+    
+    // Verify state diff content
+    for (account, expected_storage) in &state_diff {
+        let actual_storage = simulation.state_diff.get(account)
+            .expect("Account should exist in state diff");
+        assert_eq!(actual_storage.len(), expected_storage.len());
+        for (slot, expected_value) in expected_storage {
+            let actual_value = actual_storage.get(slot)
+                .expect("Storage slot should exist");
+            assert_eq!(actual_value, expected_value);
+        }
+    }
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn simulation_with_empty_state_diff() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // Create a bundle
+    let test_bundle = create_test_bundle(12345, None, None)?;
+    let bundle_id = harness.data_store.insert_bundle(test_bundle).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    // Create simulation with empty state diff
+    let simulation_id = harness.data_store.insert_simulation(
+        bundle_id,
+        18500000,
+        "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890".to_string(),
+        100000,
+        15000,
+        create_empty_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Retrieve and verify
+    let simulation = harness.data_store.get_simulation(simulation_id).await
+        .map_err(|e| eyre::eyre!(e))?
+        .expect("Simulation should exist");
+    
+    assert!(simulation.state_diff.is_empty(), "State diff should be empty");
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn multiple_simulations_latest_selection() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // Create a single bundle
+    let test_bundle = create_test_bundle(12345, Some(1000), Some(2000))?;
+    let bundle_id = harness.data_store.insert_bundle(test_bundle).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    // Insert multiple simulations with sequential block numbers
+    let base_block = 18500000u64;
+    let mut simulation_ids = Vec::new();
+    
+    for i in 0..5 {
+        let block_number = base_block + i;
+        let block_hash = format!("0x{:064x}", block_number); // Create unique block hash
+        let execution_time = 100000 + (i * 10000); // Varying execution times
+        let gas_used = 21000 + (i * 1000); // Varying gas usage
+        
+        let simulation_id = harness.data_store.insert_simulation(
+            bundle_id,
+            block_number,
+            block_hash,
+            execution_time,
+            gas_used,
+            if i % 2 == 0 { create_test_state_diff() } else { create_empty_state_diff() },
+        ).await.map_err(|e| eyre::eyre!(e))?;
+        
+        simulation_ids.push((simulation_id, block_number, execution_time, gas_used));
+    }
+    
+    // Query for bundles with latest simulation
+    let results = harness.data_store.select_bundles_with_latest_simulation(
+        BundleFilter::new()
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Should return exactly one bundle
+    assert_eq!(results.len(), 1, "Should return exactly one bundle");
+    
+    let bundle_with_sim = &results[0];
+    let latest_sim = &bundle_with_sim.latest_simulation;
+    
+    // Verify it's the latest simulation (highest block number)
+    let expected_latest_block = base_block + 4; // Last iteration was i=4
+    assert_eq!(latest_sim.block_number, expected_latest_block, "Should return simulation with highest block number");
+    assert_eq!(latest_sim.bundle_id, bundle_id, "Should reference correct bundle");
+    
+    // Verify the execution time and gas used match the latest simulation
+    let expected_execution_time = 100000 + (4 * 10000); // i=4
+    let expected_gas_used = 21000 + (4 * 1000); // i=4
+    assert_eq!(latest_sim.execution_time_us, expected_execution_time, "Execution time should match latest simulation");
+    assert_eq!(latest_sim.gas_used, expected_gas_used, "Gas used should match latest simulation");
+    
+    // Verify the latest simulation has the expected state diff (should be non-empty since i=4 is even)
+    assert!(!latest_sim.state_diff.is_empty(), "Latest simulation should have non-empty state diff");
+    
+    // Verify that we can still retrieve all individual simulations
+    for (sim_id, block_num, exec_time, gas) in &simulation_ids {
+        let individual_sim = harness.data_store.get_simulation(*sim_id).await
+            .map_err(|e| eyre::eyre!(e))?
+            .expect("Individual simulation should exist");
+        
+        assert_eq!(individual_sim.block_number, *block_num);
+        assert_eq!(individual_sim.execution_time_us, *exec_time);
+        assert_eq!(individual_sim.gas_used, *gas);
+    }
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn select_bundles_with_latest_simulation() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // Create three bundles
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
+    let bundle3 = create_test_bundle(300, None, None)?;
+    
+    let bundle1_id = harness.data_store.insert_bundle(bundle1).await
+        .map_err(|e| eyre::eyre!(e))?;
+    let bundle2_id = harness.data_store.insert_bundle(bundle2).await
+        .map_err(|e| eyre::eyre!(e))?;
+    let _bundle3_id = harness.data_store.insert_bundle(bundle3).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    // Add multiple simulations for bundle1 (to test "latest" logic)
+    harness.data_store.insert_simulation(
+        bundle1_id,
+        18500000,
+        "0x1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+        100000,
+        21000,
+        create_test_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    let latest_sim1_id = harness.data_store.insert_simulation(
+        bundle1_id,
+        18500001, // Higher block number = later
+        "0x2222222222222222222222222222222222222222222222222222222222222222".to_string(),
+        120000,
+        22000,
+        create_empty_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Add one simulation for bundle2
+    let sim2_id = harness.data_store.insert_simulation(
+        bundle2_id,
+        18500002,
+        "0x3333333333333333333333333333333333333333333333333333333333333333".to_string(),
+        90000,
+        19000,
+        create_test_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Bundle3 has no simulations
+    
+    // Query bundles with latest simulation (no filter)
+    let results = harness.data_store.select_bundles_with_latest_simulation(
+        BundleFilter::new()
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Should return 2 bundles (bundle1 and bundle2), sorted by minimum_base_fee DESC
+    assert_eq!(results.len(), 2, "Should return 2 bundles that have simulations");
+    
+    // Verify the results contain the correct bundles and latest simulations
+    let bundle1_result = results.iter().find(|r| r.bundle_with_metadata.bundle.block_number == 100);
+    let bundle2_result = results.iter().find(|r| r.bundle_with_metadata.bundle.block_number == 200);
+    
+    assert!(bundle1_result.is_some(), "Bundle1 should be in results");
+    assert!(bundle2_result.is_some(), "Bundle2 should be in results");
+    
+    let bundle1_result = bundle1_result.unwrap();
+    let bundle2_result = bundle2_result.unwrap();
+    
+    // Check that bundle1 has the latest simulation (block 18500001)
+    assert_eq!(bundle1_result.latest_simulation.id, latest_sim1_id);
+    assert_eq!(bundle1_result.latest_simulation.block_number, 18500001);
+    assert_eq!(bundle1_result.latest_simulation.gas_used, 22000);
+    
+    // Check that bundle2 has its simulation
+    assert_eq!(bundle2_result.latest_simulation.id, sim2_id);
+    assert_eq!(bundle2_result.latest_simulation.block_number, 18500002);
+    assert_eq!(bundle2_result.latest_simulation.gas_used, 19000);
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn select_bundles_with_latest_simulation_filtered() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // Create bundles with different criteria
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?; // Valid for block 100, timestamp 1000-2000
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?; // Valid for block 200, timestamp 1500-2500
+    
+    let bundle1_id = harness.data_store.insert_bundle(bundle1).await
+        .map_err(|e| eyre::eyre!(e))?;
+    let bundle2_id = harness.data_store.insert_bundle(bundle2).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    // Add simulations to both bundles
+    harness.data_store.insert_simulation(
+        bundle1_id,
+        18500000,
+        "0x1111111111111111111111111111111111111111111111111111111111111111".to_string(),
+        100000,
+        21000,
+        create_test_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    harness.data_store.insert_simulation(
+        bundle2_id,
+        18500001,
+        "0x2222222222222222222222222222222222222222222222222222222222222222".to_string(),
+        120000,
+        22000,
+        create_empty_state_diff(),
+    ).await.map_err(|e| eyre::eyre!(e))?;
+    
+    // Test filtering by block number
+    let block_filter = BundleFilter::new().valid_for_block(200);
+    let filtered_results = harness.data_store.select_bundles_with_latest_simulation(block_filter).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    assert_eq!(filtered_results.len(), 1, "Should return 1 bundle valid for block 200");
+    assert_eq!(filtered_results[0].bundle_with_metadata.bundle.block_number, 200);
+    
+    // Test filtering by timestamp
+    let timestamp_filter = BundleFilter::new().valid_for_timestamp(1200);
+    let timestamp_results = harness.data_store.select_bundles_with_latest_simulation(timestamp_filter).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    assert_eq!(timestamp_results.len(), 1, "Should return 1 bundle valid for timestamp 1200");
+    assert_eq!(timestamp_results[0].bundle_with_metadata.bundle.block_number, 100);
+    
+    Ok(())
+}
+
+#[tokio::test]
+async fn get_nonexistent_simulation() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+    
+    // Try to get simulation that doesn't exist
+    let fake_id = Uuid::new_v4();
+    let result = harness.data_store.get_simulation(fake_id).await
+        .map_err(|e| eyre::eyre!(e))?;
+    
+    assert!(result.is_none(), "Should return None for non-existent simulation");
+    
     Ok(())
 }

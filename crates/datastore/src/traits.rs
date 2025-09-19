@@ -1,4 +1,4 @@
-use crate::postgres::{BundleFilter, BundleWithMetadata};
+use crate::postgres::{BundleFilter, BundleWithMetadata, BundleWithLatestSimulation, Simulation, StateDiff};
 use alloy_primitives::TxHash;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
@@ -24,4 +24,22 @@ pub trait BundleDatastore: Send + Sync {
 
     /// Remove a bundle by ID
     async fn remove_bundle(&self, id: Uuid) -> Result<()>;
+
+    /// Insert a new simulation result
+    async fn insert_simulation(
+        &self,
+        bundle_id: Uuid,
+        block_number: u64,
+        block_hash: String,
+        execution_time_us: u64,
+        gas_used: u64,
+        state_diff: StateDiff,
+    ) -> Result<Uuid>;
+
+    /// Get a simulation by its ID
+    async fn get_simulation(&self, id: Uuid) -> Result<Option<Simulation>>;
+
+    /// Select bundles with their latest simulation
+    /// Only bundles that have at least one simulation are returned
+    async fn select_bundles_with_latest_simulation(&self, filter: BundleFilter) -> Result<Vec<BundleWithLatestSimulation>>;
 }
