@@ -1,32 +1,11 @@
-use tips_simulator::types::{SimulationConfig, SimulationRequest};
-use tips_simulator::service::SimulatorService;
+use tips_simulator::types::SimulationRequest;
+use tips_simulator::MempoolSimulatorConfig;
 use alloy_primitives::{Address, Bytes, B256};
 use alloy_rpc_types_mev::EthSendBundle;
 use uuid::Uuid;
 
-// Basic smoke test to ensure the simulator compiles and can be instantiated
-#[tokio::test]
-async fn test_simulator_service_creation() {
-    let config = SimulationConfig {
-        kafka_brokers: vec!["localhost:9092".to_string()],
-        kafka_topic: "test-topic".to_string(),
-        kafka_group_id: "test-group".to_string(),
-        reth_http_url: "http://localhost:8545".to_string(),
-        reth_ws_url: "ws://localhost:8546".to_string(),
-        database_url: "postgresql://user:pass@localhost:5432/test".to_string(),
-        max_concurrent_simulations: 5,
-        simulation_timeout_ms: 1000,
-        publish_results: false,
-        results_topic: None,
-    };
-
-    // This test will fail to connect to real services, but it tests compilation
-    // and basic service construction
-    let result = SimulatorService::new(config).await;
-    
-    // We expect this to fail due to connection issues in test environment
-    assert!(result.is_err());
-}
+// Basic smoke test to ensure the core simulation types work correctly
+// Tests both mempool event simulation and ExEx event simulation architectures
 
 #[test]
 fn test_simulation_request_creation() {
@@ -59,26 +38,24 @@ fn test_simulation_request_creation() {
     assert_eq!(request.block_number, 18_000_000);
 }
 
-#[cfg(feature = "integration-tests")]
-mod integration_tests {
-    use super::*;
-    use testcontainers::core::{ContainerPort, WaitFor};
-    use testcontainers::{Container, GenericImage};
-    use testcontainers_modules::{kafka::Kafka, postgres::Postgres};
-    
-    // This would be a full integration test with real containers
-    // Disabled by default since it requires Docker
-    #[tokio::test]
-    async fn test_full_simulation_flow() {
-        // Start test containers
-        let postgres = Postgres::default();
-        let kafka = Kafka::default();
-        
-        // This would test the full flow:
-        // 1. Start simulator service
-        // 2. Send test bundle via Kafka
-        // 3. Verify simulation result in database
-        
-        todo!("Implement full integration test");
-    }
+// Test mempool simulator configuration creation
+#[test]
+fn test_mempool_simulator_config() {
+    let config = MempoolSimulatorConfig {
+        kafka_brokers: vec!["localhost:9092".to_string()],
+        kafka_topic: "mempool-events".to_string(),
+        kafka_group_id: "tips-simulator".to_string(),
+        reth_http_url: "http://localhost:8545".to_string(),
+        database_url: "postgresql://user:pass@localhost:5432/tips".to_string(),
+        max_concurrent_simulations: 10,
+        simulation_timeout_ms: 5000,
+    };
+
+    assert_eq!(config.kafka_brokers, vec!["localhost:9092"]);
+    assert_eq!(config.kafka_topic, "mempool-events");
+    assert_eq!(config.max_concurrent_simulations, 10);
 }
+
+// Future integration tests would test both:
+// 1. Mempool event simulation (Kafka-based)
+// 2. ExEx event simulation

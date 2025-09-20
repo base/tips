@@ -31,31 +31,6 @@ pub struct SimulationResult {
     pub created_at: DateTime<Utc>,
 }
 
-/// Configuration for the simulation service (legacy)
-#[derive(Debug, Clone)]
-pub struct SimulationConfig {
-    /// Kafka brokers for consuming mempool events
-    pub kafka_brokers: Vec<String>,
-    /// Kafka topic to consume mempool events from
-    pub kafka_topic: String,
-    /// Kafka consumer group ID
-    pub kafka_group_id: String,
-    /// URL for Reth HTTP RPC endpoint
-    pub reth_http_url: String,
-    /// URL for Reth WebSocket endpoint
-    pub reth_ws_url: String,
-    /// PostgreSQL database connection URL
-    pub database_url: String,
-    /// Maximum number of concurrent simulations
-    pub max_concurrent_simulations: usize,
-    /// Timeout for individual simulations in milliseconds
-    pub simulation_timeout_ms: u64,
-    /// Whether to publish simulation results back to Kafka
-    pub publish_results: bool,
-    /// Topic to publish results to (if publishing enabled)
-    pub results_topic: Option<String>,
-}
-
 /// Configuration for ExEx-based simulation
 #[derive(Debug, Clone)]
 pub struct ExExSimulationConfig {
@@ -107,7 +82,7 @@ impl std::fmt::Display for SimulationError {
 impl std::error::Error for SimulationError {}
 
 /// A request to simulate a bundle
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimulationRequest {
     pub bundle_id: Uuid,
     pub bundle: EthSendBundle,

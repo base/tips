@@ -1,108 +1,261 @@
-use crate::engine::SimulationEngine;
-use crate::publisher::SimulationResultPublisher;
-use crate::types::{SimulationError, SimulationRequest, SimulationResult};
+use crate::core::BundleSimulator;
+use crate::types::SimulationRequest;
 
-use alloy_primitives::{B256, U256};
+use alloy_consensus::BlockHeader;
+use alloy_primitives::B256;
+use alloy_rpc_types::BlockNumHash;
 use alloy_rpc_types_mev::EthSendBundle;
-use anyhow::Result;
+use eyre::Result;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
-use reth_node_api::{FullNodeComponents, NodeAddOns};
-use reth_primitives::{BlockNumber, TransactionSignedEcRecovered};
-use reth_provider::{CanonicalInMemoryState, Chain, StateProviderFactory};
+use reth_node_api::FullNodeComponents;
+use futures_util::StreamExt;
+use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
+use tokio::task::JoinSet;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-/// ExEx that simulates bundles when new blocks are committed
-pub struct SimulatorExEx<Node: FullNodeComponents, AddOns: NodeAddOns<Node>> {
+/// Datastore-based mempool bundle provider
+pub struct DatastoreBundleProvider<D> 
+where
+    D: tips_datastore::BundleDatastore,
+{
+    datastore: Arc<D>,
+}
+
+impl<D> DatastoreBundleProvider<D> 
+where
+    D: tips_datastore::BundleDatastore,
+{
+    pub fn new(datastore: Arc<D>) -> Self {
+        Self { datastore }
+    }
+    
+    /// Get all bundles valid for a specific block
+    pub async fn get_bundles_for_block(&self, block_number: u64) -> Result<Vec<(Uuid, EthSendBundle)>> {
+        use tips_datastore::postgres::BundleFilter;
+        
+        // Create filter for bundles valid at this block
+        let filter = BundleFilter::new()
+            .valid_for_block(block_number);
+        
+        // Fetch bundles from datastore
+        let bundles_with_metadata = self.datastore.select_bundles(filter).await
+            .map_err(|e| eyre::eyre!("Failed to select bundles: {}", e))?;
+        
+        // Convert to (Uuid, EthSendBundle) pairs
+        // TODO: The bundle ID should be returned from the datastore query
+        // For now, we generate new IDs for each bundle
+        let result = bundles_with_metadata
+            .into_iter()
+            .map(|bwm| (Uuid::new_v4(), bwm.bundle.clone()))
+            .collect();
+        
+        Ok(result)
+    }
+}
+
+/// Simulation task with cancellation token
+struct SimulationTask {
+    request: SimulationRequest,
+    block_number: u64,
+    cancel_tx: mpsc::Sender<()>,
+}
+
+/// ExEx event simulator that simulates bundles from committed blocks
+/// Processes chain events (commits, reorgs, reverts) and simulates potential bundles
+pub struct ExExEventSimulator<Node, E, P, D> 
+where
+    Node: FullNodeComponents,
+    E: crate::engine::SimulationEngine,
+    P: crate::publisher::SimulationResultPublisher,
+    D: tips_datastore::BundleDatastore,
+{
     /// The execution extension context
-    ctx: ExExContext<Node, AddOns>,
-    /// Simulation engine for processing bundles
-    engine: Box<dyn SimulationEngine>,
-    /// Publisher for simulation results
-    publisher: Box<dyn SimulationResultPublisher>,
-    /// Channel for receiving simulation requests
-    simulation_rx: mpsc::UnboundedReceiver<SimulationRequest>,
-    /// Sender for simulation requests
-    simulation_tx: mpsc::UnboundedSender<SimulationRequest>,
+    ctx: ExExContext<Node>,
+    /// Core bundle simulator for shared simulation logic
+    core_simulator: Arc<BundleSimulator<E, P>>,
+    /// State provider factory for creating state providers
+    state_provider_factory: Arc<Node::Provider>,
+    /// Datastore for fetching bundles from mempool
+    datastore: Arc<D>,
+    /// Channel for sending simulation requests to workers
+    simulation_tx: mpsc::Sender<SimulationTask>,
+    /// Channel for receiving simulation requests in workers
+    simulation_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<SimulationTask>>>,
+    /// Map of block number to cancellation channels for pending simulations
+    pending_simulations: Arc<RwLock<HashMap<u64, Vec<mpsc::Sender<()>>>>>,
+    /// Worker task handles
+    worker_handles: JoinSet<()>,
     /// Maximum number of concurrent simulations
     max_concurrent: usize,
 }
 
-impl<Node, AddOns> SimulatorExEx<Node, AddOns>
+impl<Node, E, P, D> ExExEventSimulator<Node, E, P, D>
 where
     Node: FullNodeComponents,
-    AddOns: NodeAddOns<Node>,
+    E: crate::engine::SimulationEngine + Clone + 'static,
+    P: crate::publisher::SimulationResultPublisher + Clone + 'static,
+    D: tips_datastore::BundleDatastore + 'static,
 {
-    /// Create a new simulator ExEx
+    /// Create a new ExEx event simulator
     pub fn new(
-        ctx: ExExContext<Node, AddOns>,
-        engine: Box<dyn SimulationEngine>,
-        publisher: Box<dyn SimulationResultPublisher>,
-        max_concurrent: usize,
+        ctx: ExExContext<Node>,
+        core_simulator: BundleSimulator<E, P>,
+        state_provider_factory: Arc<Node::Provider>,
+        datastore: Arc<D>,
+        max_concurrent_simulations: usize,
     ) -> Self {
-        let (simulation_tx, simulation_rx) = mpsc::unbounded_channel();
+        let (simulation_tx, simulation_rx) = mpsc::channel(1000);
         
         Self {
             ctx,
-            engine,
-            publisher,
-            simulation_rx,
+            core_simulator: Arc::new(core_simulator),
+            state_provider_factory,
+            datastore,
             simulation_tx,
-            max_concurrent,
+            simulation_rx: Arc::new(tokio::sync::Mutex::new(simulation_rx)),
+            pending_simulations: Arc::new(RwLock::new(HashMap::new())),
+            worker_handles: JoinSet::new(),
+            max_concurrent: max_concurrent_simulations,
         }
     }
 
-    /// Main execution loop for the ExEx
+    /// Main execution loop for the ExEx event simulator
     pub async fn run(mut self) -> Result<()> {
-        info!("Starting Tips Simulator ExEx");
+        info!("Starting ExEx event simulator");
 
-        // Spawn the simulation worker
-        let simulation_handle = {
-            let engine = std::mem::replace(&mut self.engine, Box::new(NoOpEngine));
-            let publisher = std::mem::replace(&mut self.publisher, Box::new(NoOpPublisher));
-            let mut rx = std::mem::replace(&mut self.simulation_rx, mpsc::unbounded_channel().1);
-            let max_concurrent = self.max_concurrent;
-            
-            tokio::spawn(async move {
-                Self::simulation_worker(&mut rx, engine.as_ref(), publisher.as_ref(), max_concurrent).await
-            })
-        };
+        // Initialize simulation workers
+        self.start_simulation_workers();
 
         loop {
-            tokio::select! {
-                notification = self.ctx.notifications.recv() => {
-                    match notification {
-                        Some(notification) => {
-                            if let Err(e) = self.handle_notification(notification).await {
-                                error!(error = %e, "Failed to handle ExEx notification");
-                            }
-                        }
-                        None => {
-                            info!("ExEx notification channel closed, shutting down");
-                            break;
-                        }
+            match self.ctx.notifications.next().await {
+                Some(Ok(notification)) => {
+                    if let Err(e) = self.handle_notification(notification).await {
+                        error!(error = %e, "Failed to handle ExEx notification");
                     }
                 }
-                result = &mut simulation_handle => {
-                    match result {
-                        Ok(_) => info!("Simulation worker completed"),
-                        Err(e) => error!(error = %e, "Simulation worker failed"),
-                    }
+                Some(Err(e)) => {
+                    error!(error = %e, "Failed to receive ExEx notification");
+                    break;
+                }
+                None => {
+                    info!("ExEx notification channel closed, shutting down");
                     break;
                 }
             }
         }
 
-        // Clean shutdown
-        simulation_handle.abort();
-        info!("Tips Simulator ExEx shutting down");
+        info!("ExEx event simulator shutting down");
+        
+        // Cancel all pending simulations
+        self.cancel_all_simulations().await;
+        
+        // Wait for workers to complete
+        while let Some(result) = self.worker_handles.join_next().await {
+            if let Err(e) = result {
+                error!(error = %e, "Worker task failed");
+            }
+        }
+        
         Ok(())
+    }
+    
+    /// Start simulation worker tasks
+    fn start_simulation_workers(&mut self) {
+        info!(num_workers = self.max_concurrent, "Starting simulation workers");
+        
+        for worker_id in 0..self.max_concurrent {
+            let core_simulator = self.core_simulator.clone();
+            let state_provider_factory = self.state_provider_factory.clone();
+            let simulation_rx = self.simulation_rx.clone();
+            let pending_simulations = self.pending_simulations.clone();
+            
+            self.worker_handles.spawn(async move {
+                Self::simulation_worker(
+                    worker_id,
+                    core_simulator,
+                    state_provider_factory,
+                    simulation_rx,
+                    pending_simulations,
+                ).await
+            });
+        }
+    }
+    
+    /// Worker task that processes simulation requests
+    async fn simulation_worker(
+        worker_id: usize,
+        core_simulator: Arc<BundleSimulator<E, P>>,
+        state_provider_factory: Arc<Node::Provider>,
+        simulation_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<SimulationTask>>>,
+        pending_simulations: Arc<RwLock<HashMap<u64, Vec<mpsc::Sender<()>>>>>,
+    ) {
+        debug!(worker_id, "Simulation worker started");
+        
+        loop {
+            // Get the next simulation task
+            let task = {
+                let mut rx = simulation_rx.lock().await;
+                rx.recv().await
+            };
+            
+            let Some(task) = task else {
+                debug!(worker_id, "Simulation channel closed, worker shutting down");
+                break;
+            };
+            
+            // Create a cancellation receiver
+            let (cancel_tx, mut cancel_rx) = mpsc::channel(1);
+            
+            // Check if simulation should be cancelled
+            tokio::select! {
+                _ = cancel_rx.recv() => {
+                    debug!(
+                        worker_id,
+                        bundle_id = %task.request.bundle_id,
+                        block_number = task.block_number,
+                        "Simulation cancelled before starting"
+                    );
+                    continue;
+                }
+                result = core_simulator.simulate(task.request.clone(), &state_provider_factory) => {
+                    match result {
+                        Ok(_) => {
+                            debug!(
+                                worker_id,
+                                bundle_id = %task.request.bundle_id,
+                                "Simulation completed successfully"
+                            );
+                        }
+                        Err(e) => {
+                            error!(
+                                worker_id,
+                                bundle_id = %task.request.bundle_id,
+                                error = %e,
+                                "Simulation failed"
+                            );
+                        }
+                    }
+                }
+            }
+            
+            // Remove cancellation channel from pending simulations
+            let mut pending = pending_simulations.write().await;
+            if let Some(channels) = pending.get_mut(&task.block_number) {
+                channels.retain(|tx| !tx.same_channel(&cancel_tx));
+                if channels.is_empty() {
+                    pending.remove(&task.block_number);
+                }
+            }
+        }
+        
+        debug!(worker_id, "Simulation worker stopped");
     }
 
     /// Handle ExEx notifications
-    async fn handle_notification(&mut self, notification: ExExNotification) -> Result<()> {
+    async fn handle_notification(&mut self, notification: ExExNotification<<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives>) -> Result<()> {
         match notification {
             ExExNotification::ChainCommitted { new } => {
                 info!(
@@ -112,14 +265,15 @@ where
                 );
                 
                 // Process each block in the committed chain
-                for block in new.blocks() {
-                    self.process_block(block).await?;
+                for (_block_num, block) in new.blocks() {
+                    let block_hash = block.hash();
+                    self.process_block((&block_hash, block)).await?;
                 }
 
                 // Notify that we've processed this notification
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(new.tip().number))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(new.tip().number(), new.tip().hash())))?;
             }
             ExExNotification::ChainReorged { old: _, new } => {
                 warn!(
@@ -128,13 +282,14 @@ where
                 );
                 
                 // Process the new canonical chain
-                for block in new.blocks() {
-                    self.process_block(block).await?;
+                for (_block_num, block) in new.blocks() {
+                    let block_hash = block.hash();
+                    self.process_block((&block_hash, block)).await?;
                 }
 
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(new.tip().number))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(new.tip().number(), new.tip().hash())))?;
             }
             ExExNotification::ChainReverted { old } => {
                 warn!(
@@ -144,7 +299,7 @@ where
 
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(old.tip().number))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(old.tip().number(), old.tip().hash())))?;
             }
         }
 
@@ -152,155 +307,150 @@ where
     }
 
     /// Process a single block for potential bundle simulations
-    async fn process_block(&mut self, execution_outcome: &reth_execution_types::ExecutionOutcome) -> Result<()> {
+    async fn process_block<B>(&mut self, block: (&B256, &reth_primitives::RecoveredBlock<B>)) -> Result<()> 
+    where
+        B: reth_node_api::Block,
+    {
+        let (block_hash, sealed_block) = block;
+        let block_number = sealed_block.number();
+        
         debug!(
-            block_number = execution_outcome.block_number(),
+            block_number = block_number,
+            block_hash = ?block_hash,
             "Processing block for bundle simulation"
         );
 
-        // TODO: Extract potential bundles from the block's transactions
-        // For now, this is a placeholder that would need to implement logic to:
-        // 1. Group transactions that could be bundles
-        // 2. Identify MEV opportunities
-        // 3. Create simulation requests for those bundles
+        // Cancel simulations for older blocks
+        self.cancel_simulations_before_block(block_number).await;
 
-        // This would be where we analyze transactions in the block
-        // and create simulation requests for potential bundles
-        let _block_number = execution_outcome.block_number();
-        let _block_hash = execution_outcome.block_hash();
-
-        // Placeholder: Create a mock bundle simulation request
-        // In a real implementation, this would extract actual bundles from transactions
-        self.create_mock_simulation_request().await?;
-
-        Ok(())
-    }
-
-    /// Create a mock simulation request (placeholder)
-    async fn create_mock_simulation_request(&self) -> Result<()> {
-        // This is a placeholder for bundle extraction logic
-        let bundle_id = Uuid::new_v4();
-        let mock_bundle = EthSendBundle {
-            txs: vec![], // Would contain actual transaction data
-            block_number: None,
-            min_timestamp: None,
-            max_timestamp: None,
-            reverting_tx_hashes: vec![],
-            replacement_uuid: None,
-        };
-
-        let request = SimulationRequest {
-            bundle_id,
-            bundle: mock_bundle,
-            block_number: 0, // Would be actual block number
-            block_hash: B256::ZERO, // Would be actual block hash
-        };
-
-        if let Err(e) = self.simulation_tx.send(request) {
-            warn!(error = %e, "Failed to queue simulation request");
-        }
-
-        Ok(())
-    }
-
-    /// Simulation worker that processes simulation requests
-    async fn simulation_worker(
-        queue: &mut mpsc::UnboundedReceiver<SimulationRequest>,
-        engine: &dyn SimulationEngine,
-        publisher: &dyn SimulationResultPublisher,
-        max_concurrent: usize,
-    ) -> Result<()> {
-        info!(max_concurrent = max_concurrent, "Starting ExEx simulation worker");
-
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrent));
-
-        while let Some(request) = queue.recv().await {
-            let semaphore_clone = semaphore.clone();
-            let request_clone = request.clone();
-
-            tokio::spawn(async move {
-                let _permit = match semaphore_clone.acquire().await {
-                    Ok(permit) => permit,
-                    Err(_) => {
-                        error!("Failed to acquire semaphore permit");
-                        return;
-                    }
-                };
-
-                info!(
-                    bundle_id = %request_clone.bundle_id,
-                    block_number = request_clone.block_number,
-                    "Processing ExEx simulation request"
+        // Fetch all bundles valid for this block from datastore
+        use tips_datastore::postgres::BundleFilter;
+        let filter = BundleFilter::new()
+            .valid_for_block(block_number);
+        
+        let bundles_with_metadata = match self.datastore.select_bundles(filter).await {
+            Ok(bundles) => bundles,
+            Err(e) => {
+                error!(
+                    error = %e,
+                    block_number,
+                    "Failed to fetch bundles from datastore"
                 );
+                return Ok(());
+            }
+        };
+        
+        info!(
+            block_number,
+            num_bundles = bundles_with_metadata.len(),
+            "Queuing bundle simulations for new block"
+        );
 
-                match engine.simulate_bundle(request_clone.clone()).await {
-                    Ok(result) => {
-                        info!(
-                            bundle_id = %request_clone.bundle_id,
-                            simulation_id = %result.id,
-                            success = result.success,
-                            "ExEx simulation completed"
-                        );
+        // Create a list to track cancellation channels for this block
+        let mut cancellation_channels = Vec::new();
 
-                        if let Err(e) = publisher.publish_result(result).await {
-                            error!(
-                                error = %e,
-                                bundle_id = %request_clone.bundle_id,
-                                "Failed to publish ExEx simulation result"
-                            );
-                        }
-                    }
-                    Err(e) => {
-                        error!(
-                            error = %e,
-                            bundle_id = %request_clone.bundle_id,
-                            "ExEx simulation failed"
-                        );
-                    }
-                }
-            });
+        // Queue simulations for each bundle
+        for (index, bundle_metadata) in bundles_with_metadata.into_iter().enumerate() {
+            // TODO: The bundle ID should be returned from the datastore query
+            // For now, we generate new IDs for each bundle
+            let bundle_id = Uuid::new_v4();
+            
+            // Create simulation request
+            let request = SimulationRequest {
+                bundle_id,
+                bundle: bundle_metadata.bundle,
+                block_number,
+                block_hash: *block_hash,
+            };
+            
+            // Create cancellation channel
+            let (cancel_tx, _cancel_rx) = mpsc::channel(1);
+            cancellation_channels.push(cancel_tx.clone());
+            
+            // Create simulation task
+            let task = SimulationTask {
+                request,
+                block_number,
+                cancel_tx,
+            };
+            
+            // Send to worker queue
+            if let Err(e) = self.simulation_tx.send(task).await {
+                error!(
+                    error = %e,
+                    bundle_index = index,
+                    "Failed to queue simulation task"
+                );
+                break;
+            }
+        }
+        
+        // Store cancellation channels for this block
+        if !cancellation_channels.is_empty() {
+            let mut pending = self.pending_simulations.write().await;
+            pending.insert(block_number, cancellation_channels);
         }
 
-        info!("ExEx simulation worker shutting down");
         Ok(())
     }
-}
-
-/// No-op engine for move semantics
-struct NoOpEngine;
-
-#[async_trait::async_trait]
-impl SimulationEngine for NoOpEngine {
-    async fn simulate_bundle(&self, _request: SimulationRequest) -> Result<SimulationResult> {
-        Err(anyhow::anyhow!("NoOpEngine should never be called"))
-    }
-}
-
-/// No-op publisher for move semantics  
-struct NoOpPublisher;
-
-#[async_trait::async_trait]
-impl SimulationResultPublisher for NoOpPublisher {
-    async fn publish_result(&self, _result: SimulationResult) -> Result<()> {
-        Err(anyhow::anyhow!("NoOpPublisher should never be called"))
+    
+    /// Cancel all simulations for blocks before the given block number
+    async fn cancel_simulations_before_block(&self, block_number: u64) {
+        let mut pending = self.pending_simulations.write().await;
+        
+        // Find all blocks to cancel
+        let blocks_to_cancel: Vec<u64> = pending.keys()
+            .filter(|&&block| block < block_number)
+            .copied()
+            .collect();
+        
+        if blocks_to_cancel.is_empty() {
+            return;
+        }
+        
+        info!(
+            current_block = block_number,
+            num_blocks = blocks_to_cancel.len(),
+            "Cancelling simulations for older blocks"
+        );
+        
+        // Cancel simulations for each old block
+        for old_block in blocks_to_cancel {
+            if let Some(channels) = pending.remove(&old_block) {
+                debug!(
+                    old_block,
+                    num_simulations = channels.len(),
+                    "Cancelling simulations for block"
+                );
+                
+                // Send cancellation signal to all tasks for this block
+                for cancel_tx in channels {
+                    let _ = cancel_tx.send(()).await;
+                }
+            }
+        }
     }
     
-    async fn get_results_for_bundle(&self, _bundle_id: Uuid) -> Result<Vec<SimulationResult>> {
-        Err(anyhow::anyhow!("NoOpPublisher should never be called"))
-    }
-    
-    async fn get_result_by_id(&self, _result_id: Uuid) -> Result<Option<SimulationResult>> {
-        Err(anyhow::anyhow!("NoOpPublisher should never be called"))
-    }
-}
-
-impl Clone for SimulationRequest {
-    fn clone(&self) -> Self {
-        Self {
-            bundle_id: self.bundle_id,
-            bundle: self.bundle.clone(),
-            block_number: self.block_number,
-            block_hash: self.block_hash,
+    /// Cancel all pending simulations
+    async fn cancel_all_simulations(&self) {
+        let mut pending = self.pending_simulations.write().await;
+        
+        info!(
+            num_blocks = pending.len(),
+            "Cancelling all pending simulations"
+        );
+        
+        // Cancel all simulations
+        for (block_number, channels) in pending.drain() {
+            debug!(
+                block_number,
+                num_simulations = channels.len(),
+                "Cancelling simulations for block"
+            );
+            
+            for cancel_tx in channels {
+                let _ = cancel_tx.send(()).await;
+            }
         }
     }
 }

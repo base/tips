@@ -1,5 +1,5 @@
 use crate::types::SimulationResult;
-use anyhow::Result;
+use eyre::Result;
 use async_trait::async_trait;
 use rdkafka::producer::FutureProducer;
 use serde_json;
@@ -202,7 +202,7 @@ struct DatabaseSimulation {
 /// Create a result publisher with database storage
 pub fn create_database_publisher(
     datastore: Arc<PostgresDatastore>,
-) -> impl SimulationResultPublisher {
+) -> DatabaseResultPublisher {
     DatabaseResultPublisher::new(datastore, None)
 }
 

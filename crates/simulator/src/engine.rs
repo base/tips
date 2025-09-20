@@ -1,26 +1,104 @@
-use crate::state::StateProvider;
 use crate::types::{SimulationError, SimulationRequest, SimulationResult};
 use alloy_consensus::transaction::{SignerRecoverable, Transaction};
-use alloy_primitives::{Address, U256};
-use alloy_provider::network::eip2718::Decodable2718;
-use anyhow::Result;
+use alloy_primitives::{Address, B256, U256};
+use alloy_eips::eip2718::Decodable2718;
+use alloy_rpc_types::BlockNumberOrTag;
+use eyre::Result;
 use async_trait::async_trait;
 use op_alloy_consensus::OpTxEnvelope;
+use reth_provider::{StateProvider, StateProviderFactory};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Create state provider from ExEx context
+///
+/// This function prepares the necessary components for EVM simulation:
+/// 1. Creates a StateProvider at a specific block using the Provider from ExEx context
+/// 2. Validates that the block exists and retrieves its hash
+/// 3. Returns the state provider that can be used for EVM database initialization
+///
+/// # Arguments
+/// * `provider` - The state provider factory from the ExEx context (e.g., ctx.provider)
+/// * `block_number` - The block number to create the state at
+///
+/// # Returns
+/// A tuple of (StateProvider, block_hash) ready for EVM initialization
+///
+/// # Usage in ExEx
+/// When implementing an ExEx that needs to simulate transactions, you can use this
+/// function to get a state provider that implements the Client interface. This state
+/// provider can then be used with reth's EvmConfig to create an EVM instance.
+///
+/// The typical flow is:
+/// 1. Get the provider from ExExContext: `ctx.provider`
+/// 2. Call this function to get a state provider at a specific block
+/// 3. Use the state provider with reth_revm::database::StateProviderDatabase
+/// 4. Configure the EVM with the appropriate EvmConfig from your node
+pub fn prepare_evm_state<P>(
+    provider: Arc<P>,
+    block_number: u64,
+) -> Result<(Box<dyn StateProvider>, B256)>
+where
+    P: StateProviderFactory,
+{
+    // Get the state provider at the specified block
+    let state_provider = provider
+        .state_by_block_number_or_tag(BlockNumberOrTag::Number(block_number))
+        .map_err(|e| eyre::eyre!("Failed to get state provider at block {}: {}", block_number, e))?;
+    
+    // Get the block hash
+    let block_hash = state_provider
+        .block_hash(block_number)
+        .map_err(|e| eyre::eyre!("Failed to get block hash: {}", e))?
+        .ok_or_else(|| eyre::eyre!("Block {} not found", block_number))?;
+    
+    Ok((state_provider, block_hash))
+}
+
+/// Example usage within an ExEx:
+/// ```ignore
+/// // In your ExEx implementation
+/// use reth_exex::ExExContext;
+/// use reth_revm::database::StateProviderDatabase;
+/// use revm::Evm;
+/// 
+/// // Get provider from ExEx context
+/// let provider = ctx.provider.clone();
+/// 
+/// // Prepare EVM state
+/// let (state_provider, block_hash) = prepare_evm_state::<Node>(
+///     provider.clone(),
+///     block_number,
+/// )?;
+/// 
+/// // Create state database
+/// let db = StateProviderDatabase::new(state_provider);
+/// 
+/// // Build EVM with the database
+/// // Note: You would configure the EVM with proper environment settings
+/// // based on your chain's requirements (gas limits, fork settings, etc.)
+/// let evm = Evm::builder()
+///     .with_db(db)
+///     .build();
+/// ```
 
 #[async_trait]
 pub trait SimulationEngine: Send + Sync {
     /// Simulate a bundle execution
-    async fn simulate_bundle(&self, request: SimulationRequest) -> Result<SimulationResult>;
+    async fn simulate_bundle<S>(
+        &self,
+        request: SimulationRequest,
+        state_provider: &S,
+    ) -> Result<SimulationResult>
+    where
+        S: StateProvider + Send + Sync;
 }
 
-pub struct BundleSimulationEngine {
-    state_provider: Arc<dyn StateProvider>,
+pub struct RethSimulationEngine {
     timeout: Duration,
 }
 
@@ -39,10 +117,9 @@ struct ExecutionContext {
     gas_used: u64,
 }
 
-impl BundleSimulationEngine {
-    pub fn new(state_provider: Arc<dyn StateProvider>, timeout_ms: u64) -> Self {
+impl RethSimulationEngine {
+    pub fn new(timeout_ms: u64) -> Self {
         Self {
-            state_provider,
             timeout: Duration::from_millis(timeout_ms),
         }
     }
@@ -50,11 +127,11 @@ impl BundleSimulationEngine {
     /// Extract transaction details from raw transaction bytes
     fn decode_transaction(&self, tx_bytes: &[u8]) -> Result<OpTxEnvelope> {
         OpTxEnvelope::decode_2718_exact(tx_bytes)
-            .map_err(|e| anyhow::anyhow!("Failed to decode transaction: {}", e))
+            .map_err(|e| eyre::eyre!("Failed to decode transaction: {}", e))
     }
 
     /// Validate that a transaction can be executed in the current context
-    async fn validate_transaction(
+    fn validate_transaction(
         &self,
         tx: &OpTxEnvelope,
         context: &ExecutionContext,
@@ -96,7 +173,7 @@ impl BundleSimulationEngine {
     }
 
     /// Simulate a single transaction execution
-    async fn simulate_transaction(
+    fn simulate_transaction(
         &self,
         tx: &OpTxEnvelope,
         context: &mut ExecutionContext,
@@ -117,7 +194,7 @@ impl BundleSimulationEngine {
         );
 
         // Validate the transaction first
-        self.validate_transaction(tx, context).await?;
+        self.validate_transaction(tx, context)?;
 
         // Simulate gas usage (placeholder logic)
         let estimated_gas = std::cmp::min(tx.gas_limit(), 100_000); // Simple estimation
@@ -155,10 +232,14 @@ impl BundleSimulationEngine {
     }
 
     /// Initialize execution context by fetching initial state
-    async fn initialize_context(
+    fn initialize_context<S>(
         &self,
         request: &SimulationRequest,
-    ) -> Result<ExecutionContext> {
+        state_provider: &S,
+    ) -> Result<ExecutionContext>
+    where
+        S: StateProvider,
+    {
         let mut initial_balances = HashMap::new();
         let mut initial_nonces = HashMap::new();
         
@@ -183,9 +264,12 @@ impl BundleSimulationEngine {
 
         // Fetch initial state for all addresses
         for address in addresses {
-            match self.state_provider.get_balance(address, request.block_number).await {
-                Ok(balance) => {
+            match state_provider.account_balance(&address) {
+                Ok(Some(balance)) => {
                     initial_balances.insert(address, balance);
+                }
+                Ok(None) => {
+                    initial_balances.insert(address, U256::ZERO);
                 }
                 Err(e) => {
                     error!(
@@ -196,9 +280,12 @@ impl BundleSimulationEngine {
                 }
             }
 
-            match self.state_provider.get_nonce(address, request.block_number).await {
-                Ok(nonce) => {
+            match state_provider.account_nonce(&address) {
+                Ok(Some(nonce)) => {
                     initial_nonces.insert(address, nonce);
+                }
+                Ok(None) => {
+                    initial_nonces.insert(address, 0);
                 }
                 Err(e) => {
                     error!(
@@ -218,12 +305,18 @@ impl BundleSimulationEngine {
             gas_used: 0,
         })
     }
+}
 
-    /// Perform the actual bundle simulation
-    async fn execute_bundle_simulation(
+#[async_trait]
+impl SimulationEngine for RethSimulationEngine {
+    async fn simulate_bundle<S>(
         &self,
         request: SimulationRequest,
-    ) -> Result<SimulationResult> {
+        state_provider: &S,
+    ) -> Result<SimulationResult>
+    where
+        S: StateProvider + Send + Sync,
+    {
         let start_time = Instant::now();
         let simulation_id = Uuid::new_v4();
 
@@ -236,8 +329,8 @@ impl BundleSimulationEngine {
         );
 
         // Initialize execution context
-        let mut context = self.initialize_context(&request).await
-            .map_err(|e| anyhow::anyhow!("Failed to initialize context: {}", e))?;
+        let mut context = self.initialize_context(&request, state_provider)
+            .map_err(|e| eyre::eyre!("Failed to initialize context: {}", e))?;
 
         // Simulate each transaction in the bundle
         for (tx_index, tx_bytes) in request.bundle.txs.iter().enumerate() {
@@ -246,7 +339,7 @@ impl BundleSimulationEngine {
                     message: format!("Failed to decode transaction {}: {}", tx_index, e) 
                 })?;
 
-            if let Err(sim_error) = self.simulate_transaction(&tx, &mut context, tx_index).await {
+            if let Err(sim_error) = self.simulate_transaction(&tx, &mut context, tx_index) {
                 let execution_time = start_time.elapsed().as_micros();
                 
                 error!(
@@ -291,35 +384,7 @@ impl BundleSimulationEngine {
     }
 }
 
-#[async_trait]
-impl SimulationEngine for BundleSimulationEngine {
-    async fn simulate_bundle(&self, request: SimulationRequest) -> Result<SimulationResult> {
-        match timeout(self.timeout, self.execute_bundle_simulation(request.clone())).await {
-            Ok(result) => result,
-            Err(_) => {
-                warn!(
-                    bundle_id = %request.bundle_id,
-                    timeout_ms = self.timeout.as_millis(),
-                    "Bundle simulation timed out"
-                );
-                
-                Ok(SimulationResult::failure(
-                    Uuid::new_v4(),
-                    request.bundle_id,
-                    request.block_number,
-                    request.block_hash,
-                    self.timeout.as_micros(),
-                    SimulationError::Timeout,
-                ))
-            }
-        }
-    }
-}
-
 /// Create a bundle simulation engine
-pub fn create_simulation_engine(
-    state_provider: Arc<dyn StateProvider>,
-    timeout_ms: u64,
-) -> impl SimulationEngine {
-    BundleSimulationEngine::new(state_provider, timeout_ms)
+pub fn create_simulation_engine(timeout_ms: u64) -> RethSimulationEngine {
+    RethSimulationEngine::new(timeout_ms)
 }

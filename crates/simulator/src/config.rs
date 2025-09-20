@@ -1,14 +1,13 @@
 use crate::types::ExExSimulationConfig;
 use clap::Parser;
-use std::path::PathBuf;
 
 /// Combined configuration for reth node with simulator ExEx
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug)]
 #[command(author, version, about = "Reth node with Tips Simulator ExEx")]
 pub struct SimulatorNodeConfig {
     /// Reth node arguments
     #[command(flatten)]
-    pub node: reth_cli::Cli,
+    pub node: reth::cli::Cli,
 
     /// Data directory for simulator
     #[arg(long, env = "TIPS_SIMULATOR_DATADIR", default_value = "~/.tips-simulator-reth")]
@@ -40,10 +39,10 @@ pub struct SimulatorExExConfig {
     pub simulation_timeout_ms: u64,
 }
 
-impl From<SimulatorNodeConfig> for ExExSimulationConfig {
-    fn from(config: SimulatorNodeConfig) -> Self {
+impl From<&SimulatorNodeConfig> for ExExSimulationConfig {
+    fn from(config: &SimulatorNodeConfig) -> Self {
         Self {
-            database_url: config.database_url,
+            database_url: config.database_url.clone(),
             max_concurrent_simulations: config.max_concurrent_simulations,
             simulation_timeout_ms: config.simulation_timeout_ms,
         }
