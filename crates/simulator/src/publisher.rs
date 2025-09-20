@@ -21,6 +21,7 @@ pub trait SimulationResultPublisher: Send + Sync {
     async fn get_result_by_id(&self, result_id: Uuid) -> Result<Option<SimulationResult>>;
 }
 
+#[derive(Clone)]
 pub struct DatabaseResultPublisher {
     datastore: Arc<PostgresDatastore>,
     kafka_publisher: Option<Arc<dyn MempoolEventPublisher>>,

@@ -5,6 +5,7 @@ pub mod exex;
 pub mod mempool;
 pub mod publisher;
 pub mod types;
+pub mod worker_pool;
 
 use eyre::Result;
 use reth_exex::ExExContext;
@@ -48,7 +49,7 @@ where
         .map_err(|e| eyre::eyre!("Failed to run migrations: {}", e))?;
     info!("Database migrations completed");
 
-    let publisher = create_database_publisher(datastore);
+    let publisher = create_database_publisher(datastore.clone());
     info!("Database publisher initialized");
 
     // Create simulation engine
@@ -102,7 +103,7 @@ pub async fn init_mempool_event_simulator(
         .map_err(|e| eyre::eyre!("Failed to run migrations: {}", e))?;
     info!("Database migrations completed");
 
-    let publisher = create_database_publisher(datastore);
+    let publisher = create_database_publisher(datastore.clone());
     info!("Database publisher initialized");
 
     // Create simulation engine

@@ -98,6 +98,7 @@ pub trait SimulationEngine: Send + Sync {
         S: StateProvider + Send + Sync;
 }
 
+#[derive(Clone)]
 pub struct RethSimulationEngine {
     timeout: Duration,
 }

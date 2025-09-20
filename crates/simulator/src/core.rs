@@ -2,7 +2,7 @@ use crate::engine::SimulationEngine;
 use crate::publisher::SimulationResultPublisher;
 use crate::types::SimulationRequest;
 use eyre::Result;
-use reth_provider::{StateProvider, StateProviderFactory};
+use reth_provider::StateProviderFactory;
 use tracing::{error, info};
 
 /// Core bundle simulator that provides shared simulation logic
