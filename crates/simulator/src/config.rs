@@ -1,5 +1,6 @@
 use crate::types::ExExSimulationConfig;
 use clap::Parser;
+use std::path::PathBuf;
 
 /// Combined configuration for reth node with simulator ExEx
 #[derive(Parser, Debug, Clone)]
@@ -8,6 +9,10 @@ pub struct SimulatorNodeConfig {
     /// Reth node arguments
     #[command(flatten)]
     pub node: reth_cli::Cli,
+
+    /// Data directory for simulator
+    #[arg(long, env = "TIPS_SIMULATOR_DATADIR", default_value = "~/.tips-simulator-reth")]
+    pub datadir: std::path::PathBuf,
 
     /// PostgreSQL database connection URL for simulator
     #[arg(long, env = "TIPS_SIMULATOR_DATABASE_URL")]
