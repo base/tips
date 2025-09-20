@@ -5,8 +5,12 @@ CREATE TABLE IF NOT EXISTS simulations (
 
     block_number BIGINT NOT NULL,
     block_hash CHAR(66) NOT NULL,
-    execution_time_us BIGINT NOT NULL,
-    gas_used BIGINT NOT NULL,
+    execution_time_us BIGINT,
+    gas_used BIGINT,
+    
+    -- Success tracking
+    success BOOLEAN NOT NULL DEFAULT true,
+    error_reason TEXT,
     
     -- State diff mapping accounts to storage slots to values
     -- Structure: { "account_address": { "slot": "value", ... }, ... }
@@ -27,3 +31,6 @@ CREATE INDEX IF NOT EXISTS idx_simulations_block_number ON simulations(block_num
 
 -- Index for block hash queries
 CREATE INDEX IF NOT EXISTS idx_simulations_block_hash ON simulations(block_hash);
+
+-- Index for success field for efficient querying
+CREATE INDEX IF NOT EXISTS idx_simulations_success ON simulations(success);
