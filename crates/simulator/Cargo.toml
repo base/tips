@@ -1,0 +1,55 @@
+[package]
+name = "tips-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tips-simulator"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+tips-datastore.workspace = true
+tips-audit.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
+dotenvy.workspace = true
+chrono.workspace = true
+eyre.workspace = true
+
+# Alloy for Ethereum types
+alloy-primitives.workspace = true
+alloy-rpc-types.workspace = true
+alloy-consensus.workspace = true
+alloy-rpc-types-mev.workspace = true
+op-alloy-consensus.workspace = true
+op-alloy-network.workspace = true
+
+# Reth ExEx dependencies
+reth = { git = "https://github.com/paradigmxyz/reth", features = ["exex"] }
+reth-exex = { git = "https://github.com/paradigmxyz/reth" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth" }
+reth-db = { git = "https://github.com/paradigmxyz/reth" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth" }
+reth-execution-types = { git = "https://github.com/paradigmxyz/reth" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth" }
+reth-cli = { git = "https://github.com/paradigmxyz/reth" }
+
+# Additional dependencies for simulation
+std-semaphore = "0.1"
+tokio-util = { version = "0.7", features = ["time"] }
+hex = "0.4"
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+testcontainers.workspace = true
+testcontainers-modules.workspace = true
