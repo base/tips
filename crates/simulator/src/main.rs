@@ -1,10 +1,10 @@
 use clap::Parser;
 use reth_node_ethereum::EthereumNode;
 use tips_simulator::{
-    init_shared_event_simulators, 
-    run_simulators_with_shared_workers, 
+    init_shared_event_listeners, 
+    run_listeners_with_shared_workers, 
     SimulatorNodeConfig,
-    MempoolSimulatorConfig
+    MempoolListenerConfig
 };
 use tracing::info;
 
@@ -14,7 +14,7 @@ async fn main() -> eyre::Result<()> {
 
     let config = SimulatorNodeConfig::parse();
     let exex_config: tips_simulator::types::ExExSimulationConfig = (&config).into();
-    let mempool_config: MempoolSimulatorConfig = (&config).into();
+    let mempool_config: MempoolListenerConfig = (&config).into();
     
     info!(
         database_url = %config.database_url,
@@ -22,31 +22,31 @@ async fn main() -> eyre::Result<()> {
         timeout_ms = config.simulation_timeout_ms,
         kafka_brokers = %config.kafka_brokers,
         kafka_topic = %config.kafka_topic,
-        "Starting reth node with both ExEx and mempool event simulators"
+        "Starting reth node with both ExEx and mempool event listeners"
     );
 
     config.node.run(|builder, _| async move {
         let handle = builder
             .node(EthereumNode::default())
             .install_exex("tips-simulator", move |ctx| async move {
-                let (worker_pool, exex_simulator, mempool_simulator) = 
-                    init_shared_event_simulators(
+                let (worker_pool, exex_listener, mempool_listener) = 
+                    init_shared_event_listeners(
                         ctx, 
                         exex_config, 
                         mempool_config,
                         config.max_concurrent_simulations,
                         config.simulation_timeout_ms
                     ).await
-                    .map_err(|e| eyre::eyre!("Failed to initialize simulators: {}", e))?;
+                    .map_err(|e| eyre::eyre!("Failed to initialize listeners: {}", e))?;
                 
-                info!("Both ExEx and mempool event simulators initialized successfully");
+                info!("Both ExEx and mempool event listeners initialized successfully");
                 
-                Ok(run_simulators_with_shared_workers(worker_pool, exex_simulator, mempool_simulator))
+                Ok(run_listeners_with_shared_workers(worker_pool, exex_listener, mempool_listener))
             })
             .launch()
             .await?;
         
-        info!("Reth node with both simulators started successfully");
+        info!("Reth node with both listeners started successfully");
         
         handle.wait_for_node_exit().await
     })?;

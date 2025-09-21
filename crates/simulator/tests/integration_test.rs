@@ -1,5 +1,5 @@
 use tips_simulator::types::SimulationRequest;
-use tips_simulator::MempoolSimulatorConfig;
+use tips_simulator::MempoolListenerConfig;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types_mev::EthSendBundle;
 use uuid::Uuid;
@@ -41,7 +41,7 @@ fn test_simulation_request_creation() {
 // Test mempool simulator configuration creation
 #[test]
 fn test_mempool_simulator_config() {
-    let config = MempoolSimulatorConfig {
+    let config = MempoolListenerConfig {
         kafka_brokers: vec!["localhost:9092".to_string()],
         kafka_topic: "mempool-events".to_string(),
         kafka_group_id: "tips-simulator".to_string(),

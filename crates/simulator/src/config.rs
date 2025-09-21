@@ -1,5 +1,5 @@
 use crate::types::ExExSimulationConfig;
-use crate::mempool::MempoolSimulatorConfig;
+use crate::listeners::MempoolListenerConfig;
 use clap::Parser;
 
 /// Combined configuration for reth node with simulator ExEx
@@ -72,7 +72,7 @@ impl From<SimulatorExExConfig> for ExExSimulationConfig {
     }
 }
 
-impl From<&SimulatorNodeConfig> for MempoolSimulatorConfig {
+impl From<&SimulatorNodeConfig> for MempoolListenerConfig {
     fn from(config: &SimulatorNodeConfig) -> Self {
         Self {
             kafka_brokers: config.kafka_brokers.split(',').map(|s| s.trim().to_string()).collect(),

@@ -17,9 +17,9 @@ use reth_provider::{BlockNumReader, HeaderProvider};
 use reth_node_api::FullNodeComponents;
 use tips_audit::types::MempoolEvent;
 
-/// Configuration for mempool event simulation
+/// Configuration for mempool event listening
 #[derive(Debug, Clone)]
-pub struct MempoolSimulatorConfig {
+pub struct MempoolListenerConfig {
     /// Kafka brokers for consuming mempool events
     pub kafka_brokers: Vec<String>,
     /// Kafka topic to consume mempool events from
@@ -31,8 +31,8 @@ pub struct MempoolSimulatorConfig {
 }
 
 
-/// Mempool event simulator that combines listening and simulation
-pub struct MempoolEventSimulator<Node, E, P> 
+/// Mempool event listener that processes events and queues simulations
+pub struct MempoolEventListener<Node, E, P> 
 where
     Node: FullNodeComponents,
     E: SimulationEngine,
@@ -48,16 +48,16 @@ where
     worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
 }
 
-impl<Node, E, P> MempoolEventSimulator<Node, E, P> 
+impl<Node, E, P> MempoolEventListener<Node, E, P> 
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
     P: SimulationResultPublisher + Clone + 'static,
 {
-    /// Create a new mempool event simulator
+    /// Create a new mempool event listener
     pub fn new(
         provider: Arc<Node::Provider>,
-        config: MempoolSimulatorConfig,
+        config: MempoolListenerConfig,
         worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
     ) -> Result<Self> {
         let consumer: StreamConsumer = ClientConfig::new()
@@ -83,7 +83,7 @@ where
         })
     }
 
-    /// Run the mempool event simulator
+    /// Run the mempool event listener
     pub async fn run(self) -> Result<()> 
     where
         E: 'static,
@@ -91,7 +91,7 @@ where
     {
         info!(
             topic = %self.topic,
-            "Starting mempool event simulator"
+            "Starting mempool event listener"
         );
         
         // Create channel for simulation requests
@@ -209,7 +209,7 @@ where
             return Err(e);
         }
         
-        info!("Mempool event simulator completed");
+        info!("Mempool event listener completed");
         Ok(())
     }
 }

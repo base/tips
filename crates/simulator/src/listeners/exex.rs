@@ -53,9 +53,9 @@ where
     }
 }
 
-/// ExEx event simulator that simulates bundles from committed blocks
-/// Processes chain events (commits, reorgs, reverts) and simulates potential bundles
-pub struct ExExEventSimulator<Node, E, P, D> 
+/// ExEx event listener that processes chain events and queues bundle simulations
+/// Processes chain events (commits, reorgs, reverts) and queues simulation tasks
+pub struct ExExEventListener<Node, E, P, D> 
 where
     Node: FullNodeComponents,
     E: crate::engine::SimulationEngine + Clone + 'static,
@@ -70,14 +70,14 @@ where
     worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
 }
 
-impl<Node, E, P, D> ExExEventSimulator<Node, E, P, D>
+impl<Node, E, P, D> ExExEventListener<Node, E, P, D>
 where
     Node: FullNodeComponents,
     E: crate::engine::SimulationEngine + Clone + 'static,
     P: crate::publisher::SimulationResultPublisher + Clone + 'static,
     D: tips_datastore::BundleDatastore + 'static,
 {
-    /// Create a new ExEx event simulator
+    /// Create a new ExEx event listener
     pub fn new(
         ctx: ExExContext<Node>,
         datastore: Arc<D>,
@@ -90,9 +90,9 @@ where
         }
     }
 
-    /// Main execution loop for the ExEx event simulator
+    /// Main execution loop for the ExEx event listener
     pub async fn run(mut self) -> Result<()> {
-        info!("Starting ExEx event simulator");
+        info!("Starting ExEx event listener");
 
         loop {
             match self.ctx.notifications.next().await {
@@ -112,7 +112,7 @@ where
             }
         }
 
-        info!("ExEx event simulator shutting down");
+        info!("ExEx event listener shutting down");
         Ok(())
     }
 
