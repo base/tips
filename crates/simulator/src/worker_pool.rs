@@ -2,6 +2,7 @@ use crate::core::BundleSimulator;
 use crate::types::SimulationRequest;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use reth_provider::StateProviderFactory;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -16,9 +17,10 @@ pub struct SimulationWorkerPool<E, P, S>
 where
     E: crate::engine::SimulationEngine,
     P: crate::publisher::SimulationResultPublisher,
+    S: StateProviderFactory,
 {
     /// Core bundle simulator
-    core_simulator: Arc<BundleSimulator<E, P>>,
+    simulator: Arc<BundleSimulator<E, P>>,
     /// State provider factory
     state_provider_factory: Arc<S>,
     /// Channel for sending simulation requests to workers
@@ -41,14 +43,14 @@ where
 {
     /// Create a new simulation worker pool
     pub fn new(
-        core_simulator: Arc<BundleSimulator<E, P>>,
+        simulator: Arc<BundleSimulator<E, P>>,
         state_provider_factory: Arc<S>,
         max_concurrent_simulations: usize,
     ) -> Self {
         let (simulation_tx, simulation_rx) = mpsc::channel(1000);
         
         Self {
-            core_simulator,
+            simulator,
             state_provider_factory,
             simulation_tx,
             simulation_rx: Arc::new(tokio::sync::Mutex::new(simulation_rx)),
@@ -63,7 +65,7 @@ where
         info!(num_workers = self.max_concurrent, "Starting simulation workers");
         
         for worker_id in 0..self.max_concurrent {
-            let core_simulator = self.core_simulator.clone();
+            let simulator = self.simulator.clone();
             let state_provider_factory = self.state_provider_factory.clone();
             let simulation_rx = self.simulation_rx.clone();
             let latest_block = self.latest_block.clone();
@@ -71,7 +73,7 @@ where
             self.worker_handles.spawn(async move {
                 Self::simulation_worker(
                     worker_id,
-                    core_simulator,
+                    simulator,
                     state_provider_factory,
                     simulation_rx,
                     latest_block,
@@ -108,7 +110,7 @@ where
     /// Worker task that processes simulation requests
     async fn simulation_worker(
         worker_id: usize,
-        core_simulator: Arc<BundleSimulator<E, P>>,
+        simulator: Arc<BundleSimulator<E, P>>,
         state_provider_factory: Arc<S>,
         simulation_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<SimulationTask>>>,
         latest_block: Arc<AtomicU64>,
@@ -144,7 +146,7 @@ where
             }
             
             // Execute the simulation
-            match core_simulator.simulate(task.request.clone(), state_provider_factory.as_ref()).await {
+            match simulator.simulate(task.request.clone(), state_provider_factory.as_ref()).await {
                 Ok(_) => {
                     debug!(
                         worker_id,

@@ -11,24 +11,58 @@ use eyre::Result;
 use reth_exex::ExExContext;
 use reth_node_api::FullNodeComponents;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{info, error};
+use crate::worker_pool::SimulationWorkerPool;
 
 pub use config::{SimulatorExExConfig, SimulatorNodeConfig};
 pub use core::BundleSimulator;
 pub use engine::{create_simulation_engine, SimulationEngine, RethSimulationEngine};
 pub use exex::ExExEventSimulator;
-pub use mempool::{MempoolEventSimulator, MempoolSimulatorConfig, MempoolEventListener, KafkaMempoolListener};
+pub use mempool::{MempoolEventSimulator, MempoolSimulatorConfig};
 pub use publisher::{create_database_publisher, SimulationResultPublisher, DatabaseResultPublisher};
 pub use types::{SimulationResult, SimulationError, ExExSimulationConfig};
 
 // Type aliases for concrete implementations
 pub type TipsBundleSimulator = BundleSimulator<RethSimulationEngine, DatabaseResultPublisher>;
 pub type TipsExExEventSimulator<Node> = ExExEventSimulator<Node, RethSimulationEngine, DatabaseResultPublisher, tips_datastore::PostgresDatastore>;
-pub type TipsMempoolEventSimulator = MempoolEventSimulator<RethSimulationEngine, DatabaseResultPublisher, KafkaMempoolListener>;
+pub type TipsMempoolEventSimulator<Node> = MempoolEventSimulator<Node, RethSimulationEngine, DatabaseResultPublisher>;
 
 // Initialization functions
 
+/// Common initialization components shared across simulators
+struct CommonSimulatorComponents {
+    datastore: Arc<tips_datastore::PostgresDatastore>,
+    simulator: BundleSimulator<RethSimulationEngine, DatabaseResultPublisher>,
+}
+
+/// Initialize common simulator components (database, publisher, engine, core simulator)
+async fn init_common_components(database_url: String, simulation_timeout_ms: u64) -> Result<CommonSimulatorComponents> {
+    let datastore = Arc::new(
+        tips_datastore::PostgresDatastore::connect(database_url).await
+            .map_err(|e| eyre::eyre!("Failed to connect to database: {}", e))?
+    );
+
+    let publisher = create_database_publisher(datastore.clone());
+    info!("Database publisher initialized");
+
+    let engine = create_simulation_engine(simulation_timeout_ms);
+    info!(
+        timeout_ms = simulation_timeout_ms,
+        "Simulation engine initialized"
+    );
+
+    let simulator = BundleSimulator::new(engine, publisher);
+    info!("Core bundle simulator initialized");
+
+    Ok(CommonSimulatorComponents {
+        datastore,
+        simulator,
+    })
+}
+
 /// Initialize ExEx event simulator (ExEx) that processes committed blocks
+/// 
+/// Note: The worker pool is created but NOT started.
 pub async fn init_exex_event_simulator<Node>(
     ctx: ExExContext<Node>,
     config: ExExSimulationConfig,
@@ -38,44 +72,20 @@ where
 {
     info!("Initializing ExEx event simulator");
 
-    // Create database connection and publisher
-    let datastore = Arc::new(
-        tips_datastore::PostgresDatastore::connect(config.database_url.clone()).await
-            .map_err(|e| eyre::eyre!("Failed to connect to database: {}", e))?
-    );
-    
-    // Run database migrations
-    datastore.run_migrations().await
-        .map_err(|e| eyre::eyre!("Failed to run migrations: {}", e))?;
-    info!("Database migrations completed");
+    let common_components = init_common_components(config.database_url.clone(), config.simulation_timeout_ms).await?;
 
-    let publisher = create_database_publisher(datastore.clone());
-    info!("Database publisher initialized");
-
-    // Create simulation engine
-    let engine = create_simulation_engine(config.simulation_timeout_ms);
-    info!(
-        timeout_ms = config.simulation_timeout_ms,
-        "Simulation engine initialized"
-    );
-
-    // Create core bundle simulator with shared logic
-    let core_simulator = BundleSimulator::new(
-        engine,
-        publisher,
-    );
-    info!("Core bundle simulator initialized");
-
-    // Get state provider factory for ExEx event simulation
     let state_provider_factory = Arc::new(ctx.components.provider().clone());
 
-    // Create the ExEx event simulator
+    let worker_pool = crate::worker_pool::SimulationWorkerPool::new(
+        Arc::new(common_components.simulator),
+        state_provider_factory,
+        config.max_concurrent_simulations,
+    );
+
     let consensus_simulator = ExExEventSimulator::new(
         ctx,
-        core_simulator,
-        state_provider_factory,
-        datastore,
-        config.max_concurrent_simulations,
+        common_components.datastore,
+        Arc::new(worker_pool),
     );
 
     info!(
@@ -87,46 +97,122 @@ where
 }
 
 /// Initialize mempool event simulator that processes mempool transactions
-pub async fn init_mempool_event_simulator(
+/// 
+/// Note: The worker pool is created but NOT started.
+pub async fn init_mempool_event_simulator<Node>(
+    provider: Arc<Node::Provider>,
     config: MempoolSimulatorConfig,
-) -> Result<TipsMempoolEventSimulator> {
+    max_concurrent_simulations: usize,
+    simulation_timeout_ms: u64,
+) -> Result<TipsMempoolEventSimulator<Node>>
+where
+    Node: FullNodeComponents,
+{
     info!("Initializing mempool event simulator");
 
-    // Create database connection and publisher
-    let datastore = Arc::new(
-        tips_datastore::PostgresDatastore::connect(config.database_url.clone()).await
-            .map_err(|e| eyre::eyre!("Failed to connect to database: {}", e))?
+    let common_components = init_common_components(config.database_url.clone(), simulation_timeout_ms).await?;
+
+    let worker_pool = crate::worker_pool::SimulationWorkerPool::new(
+        Arc::new(common_components.simulator),
+        provider.clone(),
+        max_concurrent_simulations,
     );
+
+    let mempool_simulator = MempoolEventSimulator::new(
+        provider,
+        config,
+        Arc::new(worker_pool),
+    )?;
     
-    // Run database migrations
-    datastore.run_migrations().await
-        .map_err(|e| eyre::eyre!("Failed to run migrations: {}", e))?;
-    info!("Database migrations completed");
-
-    let publisher = create_database_publisher(datastore.clone());
-    info!("Database publisher initialized");
-
-    // Create simulation engine
-    let engine = create_simulation_engine(config.simulation_timeout_ms);
     info!(
-        timeout_ms = config.simulation_timeout_ms,
-        "Simulation engine initialized"
+        max_concurrent = max_concurrent_simulations,
+        "Mempool event simulator initialized successfully"
     );
-
-    // Create core bundle simulator with shared logic
-    let core_simulator = BundleSimulator::new(
-        engine,
-        publisher,
-    );
-    info!("Core bundle simulator initialized");
-
-    // Create Kafka listener
-    let listener = KafkaMempoolListener::new(config.clone());
-    
-    // Create the mempool event simulator
-    let mempool_simulator = MempoolEventSimulator::new(core_simulator, listener, config);
-    
-    info!("Mempool event simulator initialized successfully");
 
     Ok(mempool_simulator)
+}
+
+
+/// Initialize both event simulators with a shared worker pool
+/// 
+/// Returns the shared worker pool and both simulators. The worker pool is created
+/// but NOT started.
+pub async fn init_shared_event_simulators<Node>(
+    exex_ctx: ExExContext<Node>,
+    exex_config: ExExSimulationConfig,
+    mempool_config: MempoolSimulatorConfig,
+    max_concurrent_simulations: usize,
+    simulation_timeout_ms: u64,
+) -> Result<(Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>, TipsExExEventSimulator<Node>, TipsMempoolEventSimulator<Node>)>
+where
+    Node: FullNodeComponents,
+{
+    info!("Initializing shared event simulators");
+
+    let common_components = init_common_components(exex_config.database_url.clone(), simulation_timeout_ms).await?;
+
+    let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
+
+    let shared_worker_pool = Arc::new(SimulationWorkerPool::new(
+        Arc::new(common_components.simulator),
+        state_provider_factory.clone(),
+        max_concurrent_simulations,
+    ));
+
+    let exex_simulator = ExExEventSimulator::new(
+        exex_ctx,
+        common_components.datastore,
+        shared_worker_pool.clone(),
+    );
+
+    let mempool_simulator = MempoolEventSimulator::new(
+        state_provider_factory,
+        mempool_config,
+        shared_worker_pool.clone(),
+    )?;
+    
+    Ok((shared_worker_pool, exex_simulator, mempool_simulator))
+}
+
+/// Run both simulators with lifecycle management for the shared worker pool
+/// Starts the worker pool, runs both simulators concurrently, and ensures proper shutdown
+pub async fn run_simulators_with_shared_workers<Node>(
+    mut worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>,
+    exex_simulator: TipsExExEventSimulator<Node>,
+    mempool_simulator: TipsMempoolEventSimulator<Node>,
+) -> Result<()>
+where
+    Node: FullNodeComponents,
+{
+    info!("Starting shared worker pool");
+    
+    Arc::get_mut(&mut worker_pool)
+        .ok_or_else(|| eyre::eyre!("Cannot get mutable reference to worker pool"))?
+        .start();
+    
+    info!("Running simulators concurrently");
+    
+    let result = tokio::select! {
+        res = exex_simulator.run() => {
+            info!("ExEx simulator completed");
+            res
+        },
+        res = mempool_simulator.run() => {
+            info!("Mempool simulator completed");
+            res
+        },
+    };
+    
+    info!("Shutting down worker pool");
+    match Arc::try_unwrap(worker_pool) {
+        Ok(pool) => {
+            pool.shutdown().await;
+            info!("Worker pool shutdown complete");
+        }
+        Err(_) => {
+            error!("Failed to get ownership of worker pool for shutdown");
+        }
+    }
+    
+    result
 }

@@ -1,4 +1,3 @@
-use crate::core::BundleSimulator;
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationWorkerPool, SimulationTask};
 
@@ -68,7 +67,7 @@ where
     /// Datastore for fetching bundles from mempool
     datastore: Arc<D>,
     /// Shared simulation worker pool
-    worker_pool: SimulationWorkerPool<E, P, Node::Provider>,
+    worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
 }
 
 impl<Node, E, P, D> ExExEventSimulator<Node, E, P, D>
@@ -81,17 +80,9 @@ where
     /// Create a new ExEx event simulator
     pub fn new(
         ctx: ExExContext<Node>,
-        core_simulator: BundleSimulator<E, P>,
-        state_provider_factory: Arc<Node::Provider>,
         datastore: Arc<D>,
-        max_concurrent_simulations: usize,
+        worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
     ) -> Self {
-        let worker_pool = SimulationWorkerPool::new(
-            Arc::new(core_simulator),
-            state_provider_factory,
-            max_concurrent_simulations,
-        );
-        
         Self {
             ctx,
             datastore,
@@ -102,9 +93,6 @@ where
     /// Main execution loop for the ExEx event simulator
     pub async fn run(mut self) -> Result<()> {
         info!("Starting ExEx event simulator");
-
-        // Initialize simulation workers
-        self.worker_pool.start();
 
         loop {
             match self.ctx.notifications.next().await {
@@ -125,10 +113,6 @@ where
         }
 
         info!("ExEx event simulator shutting down");
-        
-        // Shutdown the worker pool
-        self.worker_pool.shutdown().await;
-        
         Ok(())
     }
 
