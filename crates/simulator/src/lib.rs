@@ -74,7 +74,7 @@ where
 
     let state_provider_factory = Arc::new(ctx.components.provider().clone());
 
-    let worker_pool = crate::worker_pool::SimulationWorkerPool::new(
+    let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
         state_provider_factory,
         config.max_concurrent_simulations,
@@ -110,7 +110,7 @@ where
 
     let common_components = init_common_components(config.database_url.clone(), simulation_timeout_ms).await?;
 
-    let worker_pool = crate::worker_pool::SimulationWorkerPool::new(
+    let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
         provider.clone(),
         max_concurrent_simulations,
@@ -135,7 +135,7 @@ where
 /// 
 /// Returns the shared worker pool and both listeners. The worker pool is created
 /// but NOT started.
-pub async fn init_shared_event_listeners<Node>(
+pub async fn init_listeners_with_shared_workers<Node>(
     exex_ctx: ExExContext<Node>,
     exex_config: ExExSimulationConfig,
     mempool_config: MempoolListenerConfig,

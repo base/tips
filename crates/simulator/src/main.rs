@@ -1,7 +1,7 @@
 use clap::Parser;
 use reth_node_ethereum::EthereumNode;
 use tips_simulator::{
-    init_shared_event_listeners, 
+    init_listeners_with_shared_workers, 
     run_listeners_with_shared_workers, 
     SimulatorNodeConfig,
     MempoolListenerConfig
@@ -30,7 +30,7 @@ async fn main() -> eyre::Result<()> {
             .node(EthereumNode::default())
             .install_exex("tips-simulator", move |ctx| async move {
                 let (worker_pool, exex_listener, mempool_listener) = 
-                    init_shared_event_listeners(
+                    init_listeners_with_shared_workers(
                         ctx, 
                         exex_config, 
                         mempool_config,

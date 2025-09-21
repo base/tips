@@ -1,4 +1,6 @@
 use crate::core::BundleSimulator;
+use crate::engine::SimulationEngine;
+use crate::publisher::SimulationResultPublisher;
 use crate::types::SimulationRequest;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -15,8 +17,8 @@ pub struct SimulationTask {
 /// Generic simulation worker pool that can be shared across different simulators
 pub struct SimulationWorkerPool<E, P, S>
 where
-    E: crate::engine::SimulationEngine,
-    P: crate::publisher::SimulationResultPublisher,
+    E: SimulationEngine,
+    P: SimulationResultPublisher,
     S: StateProviderFactory,
 {
     /// Core bundle simulator
@@ -37,8 +39,8 @@ where
 
 impl<E, P, S> SimulationWorkerPool<E, P, S>
 where
-    E: crate::engine::SimulationEngine + Clone + 'static,
-    P: crate::publisher::SimulationResultPublisher + Clone + 'static,
+    E: SimulationEngine + Clone + 'static,
+    P: SimulationResultPublisher + Clone + 'static,
     S: reth_provider::StateProviderFactory + Send + Sync + 'static,
 {
     /// Create a new simulation worker pool
