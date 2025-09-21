@@ -1,8 +1,7 @@
 use clap::Parser;
 use reth_node_ethereum::EthereumNode;
 use tips_simulator::{
-    init_listeners_with_shared_workers, 
-    run_listeners_with_shared_workers, 
+    ListenersWithWorkers,
     SimulatorNodeConfig,
     MempoolListenerConfig
 };
@@ -29,19 +28,18 @@ async fn main() -> eyre::Result<()> {
         let handle = builder
             .node(EthereumNode::default())
             .install_exex("tips-simulator", move |ctx| async move {
-                let (worker_pool, exex_listener, mempool_listener) = 
-                    init_listeners_with_shared_workers(
-                        ctx, 
-                        exex_config, 
-                        mempool_config,
-                        config.max_concurrent_simulations,
-                        config.simulation_timeout_ms
-                    ).await
-                    .map_err(|e| eyre::eyre!("Failed to initialize listeners: {}", e))?;
+                let listeners = ListenersWithWorkers::new(
+                    ctx, 
+                    exex_config, 
+                    mempool_config,
+                    config.max_concurrent_simulations,
+                    config.simulation_timeout_ms
+                ).await
+                .map_err(|e| eyre::eyre!("Failed to initialize listeners: {}", e))?;
                 
                 info!("Both ExEx and mempool event listeners initialized successfully");
                 
-                Ok(run_listeners_with_shared_workers(worker_pool, exex_listener, mempool_listener))
+                Ok(listeners.run())
             })
             .launch()
             .await?;

@@ -131,86 +131,98 @@ where
 }
 
 
-/// Initialize both event listeners with a shared worker pool
+/// Encapsulates both event listeners with their shared worker pool
 /// 
-/// Returns the shared worker pool and both listeners. The worker pool is created
-/// but NOT started.
-pub async fn init_listeners_with_shared_workers<Node>(
-    exex_ctx: ExExContext<Node>,
-    exex_config: ExExSimulationConfig,
-    mempool_config: MempoolListenerConfig,
-    max_concurrent_simulations: usize,
-    simulation_timeout_ms: u64,
-) -> Result<(Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>, TipsExExEventListener<Node>, TipsMempoolEventListener<Node>)>
-where
-    Node: FullNodeComponents,
-{
-    info!("Initializing shared event listeners");
-
-    let common_components = init_common_components(exex_config.database_url.clone(), simulation_timeout_ms).await?;
-
-    let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
-
-    let shared_worker_pool = Arc::new(SimulationWorkerPool::new(
-        Arc::new(common_components.simulator),
-        state_provider_factory.clone(),
-        max_concurrent_simulations,
-    ));
-
-    let exex_listener = ExExEventListener::new(
-        exex_ctx,
-        common_components.datastore,
-        shared_worker_pool.clone(),
-    );
-
-    let mempool_listener = MempoolEventListener::new(
-        state_provider_factory,
-        mempool_config,
-        shared_worker_pool.clone(),
-    )?;
-    
-    Ok((shared_worker_pool, exex_listener, mempool_listener))
-}
-
-/// Run both listeners with lifecycle management for the shared worker pool
-/// Starts the worker pool, runs both listeners concurrently, and ensures proper shutdown
-pub async fn run_listeners_with_shared_workers<Node>(
-    mut worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>,
+/// This struct ensures that the ExEx and mempool listeners always use the same
+/// worker pool instance, preventing potential misconfigurations.
+pub struct ListenersWithWorkers<Node: FullNodeComponents> {
+    worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>,
     exex_listener: TipsExExEventListener<Node>,
     mempool_listener: TipsMempoolEventListener<Node>,
-) -> Result<()>
-where
-    Node: FullNodeComponents,
-{
-    info!("Starting shared worker pool");
-    
-    Arc::get_mut(&mut worker_pool)
-        .ok_or_else(|| eyre::eyre!("Cannot get mutable reference to worker pool"))?
-        .start();
-    
-    info!("Running listeners concurrently");
-    
-    let result = tokio::select! {
-        res = exex_listener.run() => {
-            info!("ExEx listener completed");
-            res
-        },
-        res = mempool_listener.run() => {
-            info!("Mempool listener completed");
-            res
-        },
-    };
-    
-    info!("Shutting down worker pool");
-    match Arc::try_unwrap(worker_pool) {
-        Ok(pool) => {
-            pool.shutdown().await;
-            info!("Worker pool shutdown complete");
-        }
-        Err(_) => {
-            error!("Failed to get ownership of worker pool for shutdown");
-        }
+}
+
+impl<Node: FullNodeComponents> ListenersWithWorkers<Node> {
+    /// Initialize both event listeners with a shared worker pool
+    /// 
+    /// The worker pool is created but NOT started. Call `run()` to start
+    /// the worker pool and begin processing events.
+    pub async fn new(
+        exex_ctx: ExExContext<Node>,
+        exex_config: ExExSimulationConfig,
+        mempool_config: MempoolListenerConfig,
+        max_concurrent_simulations: usize,
+        simulation_timeout_ms: u64,
+    ) -> Result<Self> {
+        info!("Initializing shared event listeners");
+
+        let common_components = init_common_components(exex_config.database_url.clone(), simulation_timeout_ms).await?;
+
+        let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
+
+        let shared_worker_pool = Arc::new(SimulationWorkerPool::new(
+            Arc::new(common_components.simulator),
+            state_provider_factory.clone(),
+            max_concurrent_simulations,
+        ));
+
+        let exex_listener = ExExEventListener::new(
+            exex_ctx,
+            common_components.datastore,
+            shared_worker_pool.clone(),
+        );
+
+        let mempool_listener = MempoolEventListener::new(
+            state_provider_factory,
+            mempool_config,
+            shared_worker_pool.clone(),
+        )?;
+        
+        info!(
+            max_concurrent = max_concurrent_simulations,
+            "Both ExEx and mempool event listeners initialized successfully"
+        );
+        
+        Ok(Self {
+            worker_pool: shared_worker_pool,
+            exex_listener,
+            mempool_listener,
+        })
     }
     
-    result
+    /// Run both listeners with lifecycle management for the shared worker pool
+    /// 
+    /// Starts the worker pool, runs both listeners concurrently, and ensures proper shutdown
+    pub async fn run(mut self) -> Result<()> {
+        info!("Starting shared worker pool");
+        
+        Arc::get_mut(&mut self.worker_pool)
+            .ok_or_else(|| eyre::eyre!("Cannot get mutable reference to worker pool"))?
+            .start();
+        
+        info!("Running listeners concurrently");
+        
+        let result = tokio::select! {
+            res = self.exex_listener.run() => {
+                info!("ExEx listener completed");
+                res
+            },
+            res = self.mempool_listener.run() => {
+                info!("Mempool listener completed");
+                res
+            },
+        };
+        
+        info!("Shutting down worker pool");
+        match Arc::try_unwrap(self.worker_pool) {
+            Ok(pool) => {
+                pool.shutdown().await;
+                info!("Worker pool shutdown complete");
+            }
+            Err(_) => {
+                error!("Failed to get ownership of worker pool for shutdown");
+            }
+        }
+        
+        result
+    }
 }
