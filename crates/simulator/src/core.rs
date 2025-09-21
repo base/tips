@@ -1,5 +1,5 @@
 use crate::engine::SimulationEngine;
-use crate::publisher::SimulationResultPublisher;
+use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
 use eyre::Result;
 use reth_provider::StateProviderFactory;
@@ -10,7 +10,7 @@ use tracing::{error, info};
 pub struct BundleSimulator<E, P> 
 where
     E: SimulationEngine,
-    P: SimulationResultPublisher,
+    P: SimulationPublisher,
 {
     engine: E,
     publisher: P,
@@ -19,7 +19,7 @@ where
 impl<E, P> BundleSimulator<E, P> 
 where
     E: SimulationEngine,
-    P: SimulationResultPublisher,
+    P: SimulationPublisher,
 {
     pub fn new(engine: E, publisher: P) -> Self {
         Self {

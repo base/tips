@@ -1,5 +1,5 @@
 use crate::engine::SimulationEngine;
-use crate::publisher::SimulationResultPublisher;
+use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationTask, SimulationWorkerPool};
 use eyre::Result;
@@ -36,7 +36,7 @@ pub struct MempoolEventListener<Node, E, P>
 where
     Node: FullNodeComponents,
     E: SimulationEngine,
-    P: SimulationResultPublisher,
+    P: SimulationPublisher,
 {
     /// State provider factory for getting current block info
     provider: Arc<Node::Provider>,
@@ -52,7 +52,7 @@ impl<Node, E, P> MempoolEventListener<Node, E, P>
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
-    P: SimulationResultPublisher + Clone + 'static,
+    P: SimulationPublisher + Clone + 'static,
 {
     /// Create a new mempool event listener
     pub fn new(

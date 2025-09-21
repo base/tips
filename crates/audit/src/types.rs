@@ -68,6 +68,15 @@ pub enum MempoolEvent {
         bundle_id: BundleId,
         reason: DropReason,
     },
+    Simulated {
+        bundle_id: BundleId,
+        simulation_id: uuid::Uuid,
+        block_number: u64,
+        success: bool,
+        gas_used: Option<u64>,
+        execution_time_us: u128,
+        error_reason: Option<String>,
+    },
 }
 
 impl MempoolEvent {
@@ -80,6 +89,7 @@ impl MempoolEvent {
             MempoolEvent::FlashblockIncluded { bundle_id, .. } => *bundle_id,
             MempoolEvent::BlockIncluded { bundle_id, .. } => *bundle_id,
             MempoolEvent::Dropped { bundle_id, .. } => *bundle_id,
+            MempoolEvent::Simulated { bundle_id, .. } => *bundle_id,
         }
     }
 
@@ -111,6 +121,7 @@ impl MempoolEvent {
             MempoolEvent::FlashblockIncluded { .. } => vec![],
             MempoolEvent::BlockIncluded { .. } => vec![],
             MempoolEvent::Dropped { .. } => vec![],
+            MempoolEvent::Simulated { .. } => vec![],
         }
     }
 }

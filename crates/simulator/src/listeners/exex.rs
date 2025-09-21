@@ -1,7 +1,7 @@
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationWorkerPool, SimulationTask};
 use crate::engine::SimulationEngine;
-use crate::publisher::SimulationResultPublisher;
+use crate::publisher::SimulationPublisher;
 
 use alloy_consensus::BlockHeader;
 use alloy_primitives::B256;
@@ -61,7 +61,7 @@ pub struct ExExEventListener<Node, E, P, D>
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
-    P: SimulationResultPublisher + Clone + 'static,
+    P: SimulationPublisher + Clone + 'static,
     D: tips_datastore::BundleDatastore,
 {
     /// The execution extension context
@@ -76,7 +76,7 @@ impl<Node, E, P, D> ExExEventListener<Node, E, P, D>
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
-    P: SimulationResultPublisher + Clone + 'static,
+    P: SimulationPublisher + Clone + 'static,
     D: tips_datastore::BundleDatastore + 'static,
 {
     /// Create a new ExEx event listener

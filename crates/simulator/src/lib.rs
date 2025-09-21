@@ -17,31 +17,46 @@ pub use config::SimulatorNodeConfig;
 pub use core::BundleSimulator;
 pub use engine::{create_simulation_engine, SimulationEngine, RethSimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
-pub use publisher::{create_database_publisher, SimulationResultPublisher, DatabaseResultPublisher};
+pub use publisher::{SimulationPublisher, TipsSimulationPublisher};
 pub use types::{SimulationResult, SimulationError, ExExSimulationConfig};
 
 // Type aliases for concrete implementations
-pub type TipsBundleSimulator = BundleSimulator<RethSimulationEngine, DatabaseResultPublisher>;
-pub type TipsExExEventListener<Node> = ExExEventListener<Node, RethSimulationEngine, DatabaseResultPublisher, tips_datastore::PostgresDatastore>;
-pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, RethSimulationEngine, DatabaseResultPublisher>;
+pub type TipsBundleSimulator = BundleSimulator<RethSimulationEngine, TipsSimulationPublisher>;
+pub type TipsExExEventListener<Node> = ExExEventListener<Node, RethSimulationEngine, TipsSimulationPublisher, tips_datastore::PostgresDatastore>;
+pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, RethSimulationEngine, TipsSimulationPublisher>;
 
 // Initialization functions
 
 /// Common initialization components shared across listeners
 struct CommonListenerComponents {
     datastore: Arc<tips_datastore::PostgresDatastore>,
-    simulator: BundleSimulator<RethSimulationEngine, DatabaseResultPublisher>,
+    simulator: BundleSimulator<RethSimulationEngine, TipsSimulationPublisher>,
 }
 
 /// Initialize common listener components (database, publisher, engine, core simulator)
-async fn init_common_components(database_url: String, simulation_timeout_ms: u64) -> Result<CommonListenerComponents> {
+async fn init_common_components(
+    database_url: String, 
+    simulation_timeout_ms: u64,
+    kafka_brokers: String,
+    kafka_topic: String,
+) -> Result<CommonListenerComponents> {
     let datastore = Arc::new(
         tips_datastore::PostgresDatastore::connect(database_url).await
             .map_err(|e| eyre::eyre!("Failed to connect to database: {}", e))?
     );
 
-    let publisher = create_database_publisher(datastore.clone());
-    info!("Database publisher initialized");
+    // Create Kafka producer
+    let kafka_producer = rdkafka::config::ClientConfig::new()
+        .set("bootstrap.servers", &kafka_brokers)
+        .set("message.timeout.ms", "5000")
+        .create::<rdkafka::producer::FutureProducer>()
+        .map_err(|e| eyre::eyre!("Failed to create Kafka producer: {}", e))?;
+
+    let publisher = TipsSimulationPublisher::new(datastore.clone(), kafka_producer, kafka_topic);
+    info!(
+        kafka_brokers = %kafka_brokers,
+        "Database publisher with Kafka initialized"
+    );
 
     let engine = create_simulation_engine(simulation_timeout_ms);
     info!(
@@ -64,13 +79,20 @@ async fn init_common_components(database_url: String, simulation_timeout_ms: u64
 pub async fn init_exex_event_listener<Node>(
     ctx: ExExContext<Node>,
     config: ExExSimulationConfig,
+    kafka_brokers: String,
+    kafka_topic: String,
 ) -> Result<TipsExExEventListener<Node>>
 where
     Node: FullNodeComponents,
 {
     info!("Initializing ExEx event listener");
 
-    let common_components = init_common_components(config.database_url.clone(), config.simulation_timeout_ms).await?;
+    let common_components = init_common_components(
+        config.database_url.clone(), 
+        config.simulation_timeout_ms,
+        kafka_brokers,
+        kafka_topic,
+    ).await?;
 
     let state_provider_factory = Arc::new(ctx.components.provider().clone());
 
@@ -108,7 +130,12 @@ where
 {
     info!("Initializing mempool event listener");
 
-    let common_components = init_common_components(config.database_url.clone(), simulation_timeout_ms).await?;
+    let common_components = init_common_components(
+        config.database_url.clone(), 
+        simulation_timeout_ms,
+        config.kafka_brokers.join(","),
+        config.kafka_topic.clone(),
+    ).await?;
 
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
@@ -136,7 +163,7 @@ where
 /// This struct ensures that the ExEx and mempool listeners always use the same
 /// worker pool instance, preventing potential misconfigurations.
 pub struct ListenersWithWorkers<Node: FullNodeComponents> {
-    worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, DatabaseResultPublisher, Node::Provider>>,
+    worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, TipsSimulationPublisher, Node::Provider>>,
     exex_listener: TipsExExEventListener<Node>,
     mempool_listener: TipsMempoolEventListener<Node>,
 }
@@ -155,7 +182,12 @@ impl<Node: FullNodeComponents> ListenersWithWorkers<Node> {
     ) -> Result<Self> {
         info!("Initializing shared event listeners");
 
-        let common_components = init_common_components(exex_config.database_url.clone(), simulation_timeout_ms).await?;
+        let common_components = init_common_components(
+            exex_config.database_url.clone(), 
+            simulation_timeout_ms,
+            mempool_config.kafka_brokers.join(","),
+            mempool_config.kafka_topic.clone(),
+        ).await?;
 
         let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
 

@@ -74,6 +74,16 @@ pub enum BundleHistoryEvent {
         timestamp: i64,
         reason: DropReason,
     },
+    Simulated {
+        key: String,
+        timestamp: i64,
+        simulation_id: uuid::Uuid,
+        block_number: u64,
+        success: bool,
+        gas_used: Option<u64>,
+        execution_time_us: u128,
+        error_reason: Option<String>,
+    },
 }
 
 impl BundleHistoryEvent {
@@ -86,6 +96,7 @@ impl BundleHistoryEvent {
             BundleHistoryEvent::FlashblockIncluded { key, .. } => key,
             BundleHistoryEvent::BlockIncluded { key, .. } => key,
             BundleHistoryEvent::Dropped { key, .. } => key,
+            BundleHistoryEvent::Simulated { key, .. } => key,
         }
     }
 }
@@ -164,6 +175,24 @@ fn update_bundle_history_transform(
             timestamp: event.timestamp,
             reason: reason.clone(),
         },
+        MempoolEvent::Simulated {
+            simulation_id,
+            block_number,
+            success,
+            gas_used,
+            execution_time_us,
+            error_reason,
+            ..
+        } => BundleHistoryEvent::Simulated {
+            key: event.key.clone(),
+            timestamp: event.timestamp,
+            simulation_id: *simulation_id,
+            block_number: *block_number,
+            success: *success,
+            gas_used: *gas_used,
+            execution_time_us: *execution_time_us,
+            error_reason: error_reason.clone(),
+        }
     };
 
     history.push(history_event);

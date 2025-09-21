@@ -2,72 +2,39 @@ use crate::types::SimulationResult;
 use eyre::Result;
 use async_trait::async_trait;
 use rdkafka::producer::FutureProducer;
-use serde_json;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tips_audit::{MempoolEventPublisher, KafkaMempoolEventPublisher};
-use tips_datastore::PostgresDatastore;
+use tips_datastore::{PostgresDatastore, BundleDatastore, postgres::StateDiff};
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 #[async_trait]
-pub trait SimulationResultPublisher: Send + Sync {
+pub trait SimulationPublisher: Send + Sync {
     /// Store a simulation result
     async fn publish_result(&self, result: SimulationResult) -> Result<()>;
-    
-    /// Get simulation results for a bundle
-    async fn get_results_for_bundle(&self, bundle_id: Uuid) -> Result<Vec<SimulationResult>>;
-    
-    /// Get a specific simulation result by ID
-    async fn get_result_by_id(&self, result_id: Uuid) -> Result<Option<SimulationResult>>;
 }
 
 #[derive(Clone)]
-pub struct DatabaseResultPublisher {
+pub struct TipsSimulationPublisher {
     datastore: Arc<PostgresDatastore>,
     kafka_publisher: Option<Arc<dyn MempoolEventPublisher>>,
 }
 
-impl DatabaseResultPublisher {
+impl TipsSimulationPublisher {
     pub fn new(
-        datastore: Arc<PostgresDatastore>,
-        kafka_publisher: Option<Arc<dyn MempoolEventPublisher>>,
-    ) -> Self {
-        Self {
-            datastore,
-            kafka_publisher,
-        }
-    }
-
-    pub fn with_kafka(
         datastore: Arc<PostgresDatastore>,
         producer: FutureProducer,
         topic: String,
     ) -> Self {
-        let publisher = Arc::new(KafkaMempoolEventPublisher::new(producer, topic));
-        Self::new(datastore, Some(publisher))
-    }
-
-    /// Convert SimulationResult to database format
-    fn result_to_db_format(&self, result: &SimulationResult) -> Result<DatabaseSimulation> {
-        Ok(DatabaseSimulation {
-            id: result.id,
-            bundle_id: result.bundle_id,
-            block_number: result.block_number as i64,
-            block_hash: format!("0x{}", hex::encode(result.block_hash.as_slice())),
-            success: result.success,
-            gas_used: result.gas_used.map(|g| g as i64),
-            execution_time_us: result.execution_time_us as i64,
-            state_diff: serde_json::to_value(&result.state_diff)?,
-            error_reason: result.error_reason.clone(),
-            created_at: result.created_at,
-            updated_at: result.created_at, // For new records, created_at == updated_at
-        })
+        let kafka_publisher = Arc::new(KafkaMempoolEventPublisher::new(producer, topic));
+        Self {
+            datastore,
+            kafka_publisher: Some(kafka_publisher),
+        }
     }
 
     /// Store result in database
     async fn store_in_database(&self, result: &SimulationResult) -> Result<()> {
-        let _db_result = self.result_to_db_format(result)?;
-        
         info!(
             simulation_id = %result.id,
             bundle_id = %result.bundle_id,
@@ -76,28 +43,51 @@ impl DatabaseResultPublisher {
             "Storing simulation result in database"
         );
 
-        // TODO: This would need to be implemented with proper sqlx queries
-        // For now, we'll use the datastore interface if it has simulation methods
-        // Otherwise, we need to add simulation-specific methods to the datastore
+        // Convert state diff from alloy format to datastore format
+        let state_diff = self.convert_state_diff(&result.state_diff)?;
         
-        // Placeholder implementation - in a real scenario, we'd add methods to PostgresDatastore
-        // like: datastore.store_simulation_result(result).await?;
+        // Store the simulation using the datastore interface
+        let simulation_id = self.datastore.insert_simulation(
+            result.bundle_id,
+            result.block_number,
+            format!("0x{}", hex::encode(result.block_hash.as_slice())),
+            result.execution_time_us as u64,
+            result.gas_used.unwrap_or(0),
+            state_diff,
+        ).await.map_err(|e| eyre::eyre!("Failed to insert simulation: {}", e))?;
         
         debug!(
-            simulation_id = %result.id,
-            "Database storage placeholder - would insert simulation result here"
+            simulation_id = %simulation_id,
+            bundle_id = %result.bundle_id,
+            "Successfully stored simulation result in database"
         );
         
         Ok(())
     }
 
+    /// Convert state diff from simulator format to datastore format
+    fn convert_state_diff(&self, state_diff: &HashMap<alloy_primitives::Address, HashMap<alloy_primitives::U256, alloy_primitives::U256>>) -> Result<StateDiff> {
+        // StateDiff expects HashMap<Address, HashMap<B256, U256>>
+        // where StorageKey is B256 and StorageValue is U256
+        let mut converted = HashMap::new();
+        
+        for (address, storage) in state_diff {
+            let mut storage_map = HashMap::new();
+            for (key, value) in storage {
+                // Convert U256 key to B256 for storage key
+                let key_bytes = key.to_be_bytes::<32>();
+                let storage_key = alloy_primitives::B256::from(key_bytes);
+                storage_map.insert(storage_key, *value);
+            }
+            converted.insert(*address, storage_map);
+        }
+        
+        Ok(converted)
+    }
+
     /// Publish result to Kafka if configured
     async fn publish_to_kafka(&self, result: &SimulationResult) -> Result<()> {
-        if let Some(ref _publisher) = self.kafka_publisher {
-            // Create a custom event type for simulation results
-            // For now, we'll create a mock event - in the future, we might want to extend
-            // the MempoolEvent enum to include simulation results
-            
+        if let Some(ref publisher) = self.kafka_publisher {
             debug!(
                 simulation_id = %result.id,
                 bundle_id = %result.bundle_id,
@@ -105,18 +95,24 @@ impl DatabaseResultPublisher {
                 "Publishing simulation result to Kafka"
             );
             
-            // TODO: Implement proper simulation result event
-            // For now, this is commented out as we'd need to extend the MempoolEvent enum
+            let event = tips_audit::types::MempoolEvent::Simulated {
+                bundle_id: result.bundle_id,
+                simulation_id: result.id,
+                block_number: result.block_number,
+                success: result.success,
+                gas_used: result.gas_used,
+                execution_time_us: result.execution_time_us,
+                error_reason: result.error_reason.clone(),
+            };
             
-            // let event = MempoolEvent::SimulationComplete {
-            //     bundle_id: result.bundle_id,
-            //     simulation_id: result.id,
-            //     success: result.success,
-            //     gas_used: result.gas_used,
-            //     execution_time_us: result.execution_time_us,
-            // };
-            
-            // publisher.publish(event).await?;
+            publisher.publish(event).await
+                .map_err(|e| eyre::eyre!("Failed to publish simulation event: {}", e))?;
+                
+            debug!(
+                simulation_id = %result.id,
+                bundle_id = %result.bundle_id,
+                "Successfully published simulation result to Kafka"
+            );
         }
         
         Ok(())
@@ -124,7 +120,7 @@ impl DatabaseResultPublisher {
 }
 
 #[async_trait]
-impl SimulationResultPublisher for DatabaseResultPublisher {
+impl SimulationPublisher for TipsSimulationPublisher {
     async fn publish_result(&self, result: SimulationResult) -> Result<()> {
         info!(
             simulation_id = %result.id,
@@ -161,60 +157,4 @@ impl SimulationResultPublisher for DatabaseResultPublisher {
 
         Ok(())
     }
-
-    async fn get_results_for_bundle(&self, bundle_id: Uuid) -> Result<Vec<SimulationResult>> {
-        info!(bundle_id = %bundle_id, "Fetching simulation results for bundle");
-        
-        // TODO: Implement actual database query
-        // For now, return empty vec as placeholder
-        
-        debug!(bundle_id = %bundle_id, "No simulation results found");
-        Ok(vec![])
-    }
-
-    async fn get_result_by_id(&self, result_id: Uuid) -> Result<Option<SimulationResult>> {
-        info!(simulation_id = %result_id, "Fetching simulation result by ID");
-        
-        // TODO: Implement actual database query
-        // For now, return None as placeholder
-        
-        debug!(simulation_id = %result_id, "Simulation result not found");
-        Ok(None)
-    }
 }
-
-/// Database representation of a simulation result
-/// This matches the expected database schema
-#[derive(Debug, Clone)]
-struct DatabaseSimulation {
-    id: Uuid,
-    bundle_id: Uuid,
-    block_number: i64,
-    block_hash: String,
-    success: bool,
-    gas_used: Option<i64>,
-    execution_time_us: i64,
-    state_diff: serde_json::Value,
-    error_reason: Option<String>,
-    created_at: chrono::DateTime<chrono::Utc>,
-    updated_at: chrono::DateTime<chrono::Utc>,
-}
-
-/// Create a result publisher with database storage
-pub fn create_database_publisher(
-    datastore: Arc<PostgresDatastore>,
-) -> DatabaseResultPublisher {
-    DatabaseResultPublisher::new(datastore, None)
-}
-
-/// Create a result publisher with database storage and Kafka publishing
-pub fn create_database_kafka_publisher(
-    datastore: Arc<PostgresDatastore>,
-    producer: FutureProducer,
-    topic: String,
-) -> impl SimulationResultPublisher {
-    DatabaseResultPublisher::with_kafka(datastore, producer, topic)
-}
-
-// We'll need to add hex as a dependency for block hash formatting
-// For now, using a simple placeholder
