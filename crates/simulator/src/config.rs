@@ -39,33 +39,10 @@ pub struct SimulatorNodeConfig {
     pub kafka_group_id: String,
 }
 
-/// Legacy standalone ExEx config (for library use)
-#[derive(Debug, Clone)]
-pub struct SimulatorExExConfig {
-    /// PostgreSQL database connection URL
-    pub database_url: String,
-
-    /// Maximum number of concurrent simulations
-    pub max_concurrent_simulations: usize,
-
-    /// Timeout for individual simulations in milliseconds
-    pub simulation_timeout_ms: u64,
-}
-
 impl From<&SimulatorNodeConfig> for ExExSimulationConfig {
     fn from(config: &SimulatorNodeConfig) -> Self {
         Self {
             database_url: config.database_url.clone(),
-            max_concurrent_simulations: config.max_concurrent_simulations,
-            simulation_timeout_ms: config.simulation_timeout_ms,
-        }
-    }
-}
-
-impl From<SimulatorExExConfig> for ExExSimulationConfig {
-    fn from(config: SimulatorExExConfig) -> Self {
-        Self {
-            database_url: config.database_url,
             max_concurrent_simulations: config.max_concurrent_simulations,
             simulation_timeout_ms: config.simulation_timeout_ms,
         }

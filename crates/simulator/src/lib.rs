@@ -13,7 +13,7 @@ use std::sync::Arc;
 use tracing::{info, error};
 use crate::worker_pool::SimulationWorkerPool;
 
-pub use config::{SimulatorExExConfig, SimulatorNodeConfig};
+pub use config::SimulatorNodeConfig;
 pub use core::BundleSimulator;
 pub use engine::{create_simulation_engine, SimulationEngine, RethSimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
