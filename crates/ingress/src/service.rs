@@ -111,7 +111,7 @@ where
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
         }
 
-        // TODO: have DB Writer consume from the queue and insert_bundle to datastore
+        // TODO: have DB Writer consume from the queue and move the insert_bundle logic there
         let result = self
             .datastore
             .insert_bundle(bundle.clone())
