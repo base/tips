@@ -10,6 +10,7 @@ use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
+mod queue;
 mod service;
 use service::{IngressApiServer, IngressService};
 use tips_datastore::PostgresDatastore;

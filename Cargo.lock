@@ -1846,8 +1846,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "145052bdd345b87320e369255277e3fb5152762ad123a901ef5c262dd38fe8d2"
 dependencies = [
  "iana-time-zone",
+ "js-sys",
  "num-traits",
  "serde",
+ "wasm-bindgen",
  "windows-link 0.2.0",
 ]
 
@@ -7069,6 +7071,7 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types-mev",
  "anyhow",
+ "chrono",
  "clap",
  "dotenvy",
  "eyre",
@@ -7077,12 +7080,15 @@ dependencies = [
  "op-alloy-network",
  "rdkafka",
  "reth-rpc-eth-types",
+ "serde",
+ "serde_json",
  "tips-audit",
  "tips-datastore",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
  "url",
+ "uuid",
 ]
 
 [[package]]
