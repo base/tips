@@ -1,5 +1,4 @@
 use clap::Parser;
-use reth_node_ethereum::EthereumNode;
 use tips_simulator::{
     ListenersWithWorkers,
     SimulatorNodeConfig,
@@ -26,7 +25,7 @@ async fn main() -> eyre::Result<()> {
 
     config.node.run(|builder, _| async move {
         let handle = builder
-            .node(EthereumNode::default())
+            .node(reth_node_ethereum::EthereumNode::default())
             .install_exex("tips-simulator", move |ctx| async move {
                 let listeners = ListenersWithWorkers::new(
                     ctx, 

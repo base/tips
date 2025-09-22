@@ -1,18 +1,24 @@
 use crate::types::{SimulationError, SimulationRequest, SimulationResult};
-use alloy_consensus::transaction::{SignerRecoverable, Transaction};
+use alloy_consensus::{transaction::SignerRecoverable, BlockHeader};
 use alloy_primitives::{Address, B256, U256};
 use alloy_eips::eip2718::Decodable2718;
 use alloy_rpc_types::BlockNumberOrTag;
 use eyre::Result;
 use async_trait::async_trait;
-use op_alloy_consensus::OpTxEnvelope;
-use reth_provider::{StateProvider, StateProviderFactory};
+use reth_node_api::FullNodeComponents;
+use reth_provider::{StateProvider, StateProviderFactory, HeaderProvider};
+use reth_revm::{database::StateProviderDatabase, db::State};
+use reth_evm::ConfigureEvm;
+use reth_evm::NextBlockEnvAttributes;
+use reth_evm::execute::BlockBuilder;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::time::Duration;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info};
 use uuid::Uuid;
+
+// FIXME: The block time should be retrieved from the reth node.
+const BLOCK_TIME: u64 = 2;
 
 /// Create state provider from ExEx context
 ///
@@ -99,8 +105,12 @@ pub trait SimulationEngine: Send + Sync {
 }
 
 #[derive(Clone)]
-pub struct RethSimulationEngine {
-    timeout: Duration,
+pub struct RethSimulationEngine<Node>
+where
+    Node: FullNodeComponents,
+{
+    provider: Arc<Node::Provider>,
+    evm_config: Node::Evm,
 }
 
 /// Represents the execution context for a bundle simulation
@@ -118,202 +128,29 @@ struct ExecutionContext {
     gas_used: u64,
 }
 
-impl RethSimulationEngine {
-    pub fn new(timeout_ms: u64) -> Self {
+impl<Node> RethSimulationEngine<Node>
+where
+    Node: FullNodeComponents,
+{
+    pub fn new(provider: Arc<Node::Provider>, evm_config: Node::Evm) -> Self {
         Self {
-            timeout: Duration::from_millis(timeout_ms),
+            provider,
+            evm_config,
         }
     }
 
-    /// Extract transaction details from raw transaction bytes
-    fn decode_transaction(&self, tx_bytes: &[u8]) -> Result<OpTxEnvelope> {
-        OpTxEnvelope::decode_2718_exact(tx_bytes)
-            .map_err(|e| eyre::eyre!("Failed to decode transaction: {}", e))
-    }
-
-    /// Validate that a transaction can be executed in the current context
-    fn validate_transaction(
-        &self,
-        tx: &OpTxEnvelope,
-        context: &ExecutionContext,
-    ) -> Result<(), SimulationError> {
-        let sender = tx.recover_signer()
-            .map_err(|_| SimulationError::Unknown { 
-                message: "Failed to recover transaction sender".to_string() 
-            })?;
-
-        // Check nonce
-        let expected_nonce = context.initial_nonces.get(&sender)
-            .copied()
-            .unwrap_or(0);
-        let tx_nonce = tx.nonce();
-
-        if tx_nonce != expected_nonce {
-            return Err(SimulationError::InvalidNonce {
-                tx_index: 0, // TODO: Pass actual tx index
-                expected: expected_nonce,
-                actual: tx_nonce,
-            });
-        }
-
-        // Check balance for gas payment
-        let gas_fee = U256::from(tx.gas_limit()) * U256::from(tx.max_fee_per_gas());
-        let available_balance = context.initial_balances.get(&sender)
-            .copied()
-            .unwrap_or(U256::ZERO);
-
-        if available_balance < gas_fee {
-            return Err(SimulationError::InsufficientBalance {
-                tx_index: 0, // TODO: Pass actual tx index
-                required: gas_fee,
-                available: available_balance,
-            });
-        }
-
-        Ok(())
-    }
-
-    /// Simulate a single transaction execution
-    fn simulate_transaction(
-        &self,
-        tx: &OpTxEnvelope,
-        context: &mut ExecutionContext,
-        tx_index: usize,
-    ) -> Result<(), SimulationError> {
-        // For now, this is a placeholder implementation
-        // In a full implementation, this would:
-        // 1. Create an EVM instance with the current state
-        // 2. Execute the transaction
-        // 3. Track gas usage and state changes
-        // 4. Handle reverts appropriately
-
-        debug!(
-            tx_index = tx_index,
-            tx_hash = ?tx.hash(),
-            gas_limit = tx.gas_limit(),
-            "Simulating transaction"
-        );
-
-        // Validate the transaction first
-        self.validate_transaction(tx, context)?;
-
-        // Simulate gas usage (placeholder logic)
-        let estimated_gas = std::cmp::min(tx.gas_limit(), 100_000); // Simple estimation
-        context.gas_used += estimated_gas;
-
-        // Simulate some state changes (placeholder)
-        if let Some(to) = tx.to() {
-            let storage_slot = U256::from(tx_index);
-            let new_value = U256::from(context.gas_used);
-            
-            context.storage_changes
-                .entry(Address::from(*to))
-                .or_insert_with(HashMap::new)
-                .insert(storage_slot, new_value);
-        }
-
-        // Update nonce for sender
-        let sender = tx.recover_signer()
-            .map_err(|_| SimulationError::Unknown { 
-                message: "Failed to recover sender".to_string() 
-            })?;
-        
-        if let Some(nonce) = context.initial_nonces.get_mut(&sender) {
-            *nonce += 1;
-        }
-
-        debug!(
-            tx_index = tx_index,
-            gas_used = estimated_gas,
-            total_gas = context.gas_used,
-            "Transaction simulation completed"
-        );
-
-        Ok(())
-    }
-
-    /// Initialize execution context by fetching initial state
-    fn initialize_context<S>(
-        &self,
-        request: &SimulationRequest,
-        state_provider: &S,
-    ) -> Result<ExecutionContext>
-    where
-        S: StateProvider,
-    {
-        let mut initial_balances = HashMap::new();
-        let mut initial_nonces = HashMap::new();
-        
-        // Extract all addresses involved in the bundle
-        let mut addresses = std::collections::HashSet::new();
-        
-        for tx_bytes in &request.bundle.txs {
-            match self.decode_transaction(tx_bytes) {
-                Ok(tx) => {
-                    if let Ok(sender) = tx.recover_signer() {
-                        addresses.insert(sender);
-                    }
-                    if let Some(to) = tx.to() {
-                        addresses.insert(Address::from(*to));
-                    }
-                }
-                Err(e) => {
-                    warn!(error = %e, "Failed to decode transaction in bundle");
-                }
-            }
-        }
-
-        // Fetch initial state for all addresses
-        for address in addresses {
-            match state_provider.account_balance(&address) {
-                Ok(Some(balance)) => {
-                    initial_balances.insert(address, balance);
-                }
-                Ok(None) => {
-                    initial_balances.insert(address, U256::ZERO);
-                }
-                Err(e) => {
-                    error!(
-                        error = %e,
-                        address = %address,
-                        "Failed to fetch balance for address"
-                    );
-                }
-            }
-
-            match state_provider.account_nonce(&address) {
-                Ok(Some(nonce)) => {
-                    initial_nonces.insert(address, nonce);
-                }
-                Ok(None) => {
-                    initial_nonces.insert(address, 0);
-                }
-                Err(e) => {
-                    error!(
-                        error = %e,
-                        address = %address,
-                        "Failed to fetch nonce for address"
-                    );
-                }
-            }
-        }
-
-        Ok(ExecutionContext {
-            block_number: request.block_number,
-            initial_balances,
-            initial_nonces,
-            storage_changes: HashMap::new(),
-            gas_used: 0,
-        })
-    }
 }
 
 #[async_trait]
-impl SimulationEngine for RethSimulationEngine {
+impl<Node> SimulationEngine for RethSimulationEngine<Node>
+where
+    Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+{
     async fn simulate_bundle<S>(
         &self,
         request: SimulationRequest,
-        state_provider: &S,
+        _state_provider: &S,
     ) -> Result<SimulationResult>
     where
         S: StateProvider + Send + Sync,
@@ -329,63 +166,108 @@ impl SimulationEngine for RethSimulationEngine {
             "Starting bundle simulation"
         );
 
-        // Initialize execution context
-        let mut context = self.initialize_context(&request, state_provider)
-            .map_err(|e| eyre::eyre!("Failed to initialize context: {}", e))?;
+        // Get the parent header for building the next block
+        let header = self
+            .provider
+            .sealed_header_by_hash(request.block_hash)
+            .map_err(|e| eyre::eyre!("Failed to get parent header: {}", e))?
+            .ok_or_else(|| eyre::eyre!("Parent block {} not found", request.block_hash))?;
+
+        // Create the state database and builder for next block
+        let state_provider = self.provider.state_by_block_hash(request.block_hash)?;
+        let state_db = StateProviderDatabase::new(state_provider);
+        let mut db = State::builder().with_database(state_db).with_bundle_update().build();
+        let attributes = NextBlockEnvAttributes {
+            timestamp: header.timestamp() + BLOCK_TIME,  // Optimism 2-second block time
+            suggested_fee_recipient: header.beneficiary(),
+            prev_randao: B256::random(),
+            gas_limit: header.gas_limit(),
+            parent_beacon_block_root: header.parent_beacon_block_root(),
+            withdrawals: None,
+        };
+
+        // NOTE: We use the reth block builder here, which diverges from op-rbuilder. It's
+        // not yet clear which builder we want to simulate with, so we're using reth because
+        // it's easy.
+        let mut builder = self
+            .evm_config
+            .builder_for_next_block(&mut db, &header, attributes)
+            .map_err(|e| eyre::eyre!("Failed to init block builder: {}", e))?;
+
+        // Variables to track bundle execution
+        let mut total_gas_used = 0u64;
+        let all_storage_changes = HashMap::new();
+        let mut failed = false;
+        let mut failure_reason = None;
+
+        // Apply pre-execution changes
+        builder.apply_pre_execution_changes().map_err(|e| eyre::eyre!("Failed pre-exec: {}", e))?;
 
         // Simulate each transaction in the bundle
         for (tx_index, tx_bytes) in request.bundle.txs.iter().enumerate() {
-            let tx = self.decode_transaction(tx_bytes)
-                .map_err(|e| SimulationError::Unknown { 
-                    message: format!("Failed to decode transaction {}: {}", tx_index, e) 
-                })?;
+            // Decode bytes into the node's SignedTx type and recover the signer for execution
+            type NodeSignedTxTy<Node> = 
+                <<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives as reth_node_api::NodePrimitives>::SignedTx;
+            let mut reader = tx_bytes.iter().as_slice();
+            let signed: NodeSignedTxTy<Node> = Decodable2718::decode_2718(&mut reader)
+                .map_err(|e| eyre::eyre!("Failed to decode tx {tx_index}: {e}"))?;
+            let recovered = signed
+                .try_into_recovered()
+                .map_err(|e| eyre::eyre!("Failed to recover tx {tx_index}: {e}"))?;
 
-            if let Err(sim_error) = self.simulate_transaction(&tx, &mut context, tx_index) {
-                let execution_time = start_time.elapsed().as_micros();
-                
-                error!(
-                    bundle_id = %request.bundle_id,
-                    simulation_id = %simulation_id,
-                    tx_index = tx_index,
-                    error = %sim_error,
-                    "Bundle simulation failed"
-                );
-
-                return Ok(SimulationResult::failure(
-                    simulation_id,
-                    request.bundle_id,
-                    request.block_number,
-                    request.block_hash,
-                    execution_time,
-                    sim_error,
-                ));
+            match builder.execute_transaction(recovered) {
+                Ok(gas_used) => {
+                    total_gas_used = total_gas_used.saturating_add(gas_used);
+                }
+                Err(e) => {
+                    failed = true;
+                    failure_reason = Some(SimulationError::Unknown { message: format!("Execution failed: {}", e) });
+                    break;
+                }
             }
         }
 
         let execution_time = start_time.elapsed().as_micros();
 
-        info!(
-            bundle_id = %request.bundle_id,
-            simulation_id = %simulation_id,
-            gas_used = context.gas_used,
-            execution_time_us = execution_time,
-            storage_changes = context.storage_changes.len(),
-            "Bundle simulation completed successfully"
-        );
+        if failed {
+            error!(
+                bundle_id = %request.bundle_id,
+                simulation_id = %simulation_id,
+                error = ?failure_reason,
+                "Bundle simulation failed"
+            );
 
-        Ok(SimulationResult::success(
-            simulation_id,
-            request.bundle_id,
-            request.block_number,
-            request.block_hash,
-            context.gas_used,
-            execution_time,
-            context.storage_changes,
-        ))
+            Ok(SimulationResult::failure(
+                simulation_id,
+                request.bundle_id,
+                request.block_number,
+                request.block_hash,
+                execution_time,
+                failure_reason.unwrap_or(SimulationError::Unknown {
+                    message: "Unknown failure".to_string(),
+                }),
+            ))
+        } else {
+            info!(
+                bundle_id = %request.bundle_id,
+                simulation_id = %simulation_id,
+                gas_used = total_gas_used,
+                execution_time_us = execution_time,
+                storage_changes = all_storage_changes.len(),
+                "Bundle simulation completed successfully"
+            );
+
+            // TODO: Collect the state diff.
+
+            Ok(SimulationResult::success(
+                simulation_id,
+                request.bundle_id,
+                request.block_number,
+                request.block_hash,
+                total_gas_used,
+                execution_time,
+                all_storage_changes,
+            ))
+        }
     }
-}
-
-/// Create a bundle simulation engine
-pub fn create_simulation_engine(timeout_ms: u64) -> RethSimulationEngine {
-    RethSimulationEngine::new(timeout_ms)
 }

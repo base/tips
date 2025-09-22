@@ -9,37 +9,47 @@ pub mod worker_pool;
 use eyre::Result;
 use reth_exex::ExExContext;
 use reth_node_api::FullNodeComponents;
+use reth_evm::{ConfigureEvm, NextBlockEnvAttributes};
 use std::sync::Arc;
 use tracing::{info, error};
 use crate::worker_pool::SimulationWorkerPool;
 
 pub use config::SimulatorNodeConfig;
 pub use core::BundleSimulator;
-pub use engine::{create_simulation_engine, SimulationEngine, RethSimulationEngine};
+pub use engine::{SimulationEngine, RethSimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
 pub use publisher::{SimulationPublisher, TipsSimulationPublisher};
 pub use types::{SimulationResult, SimulationError, ExExSimulationConfig};
 
 // Type aliases for concrete implementations
-pub type TipsBundleSimulator = BundleSimulator<RethSimulationEngine, TipsSimulationPublisher>;
-pub type TipsExExEventListener<Node> = ExExEventListener<Node, RethSimulationEngine, TipsSimulationPublisher, tips_datastore::PostgresDatastore>;
-pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, RethSimulationEngine, TipsSimulationPublisher>;
+pub type TipsBundleSimulator<Node> = BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
+pub type TipsExExEventListener<Node> = ExExEventListener<Node, RethSimulationEngine<Node>, TipsSimulationPublisher, tips_datastore::PostgresDatastore>;
+pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, RethSimulationEngine<Node>, TipsSimulationPublisher>;
 
 // Initialization functions
 
 /// Common initialization components shared across listeners
-struct CommonListenerComponents {
+struct CommonListenerComponents<Node> 
+where
+    Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+{
     datastore: Arc<tips_datastore::PostgresDatastore>,
-    simulator: BundleSimulator<RethSimulationEngine, TipsSimulationPublisher>,
+    simulator: BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>,
 }
 
 /// Initialize common listener components (database, publisher, engine, core simulator)
-async fn init_common_components(
+async fn init_common_components<Node>(
+    provider: Arc<Node::Provider>,
+    evm_config: Node::Evm,
     database_url: String, 
-    simulation_timeout_ms: u64,
     kafka_brokers: String,
     kafka_topic: String,
-) -> Result<CommonListenerComponents> {
+) -> Result<CommonListenerComponents<Node>>
+where
+    Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+{
     let datastore = Arc::new(
         tips_datastore::PostgresDatastore::connect(database_url).await
             .map_err(|e| eyre::eyre!("Failed to connect to database: {}", e))?
@@ -58,11 +68,8 @@ async fn init_common_components(
         "Database publisher with Kafka initialized"
     );
 
-    let engine = create_simulation_engine(simulation_timeout_ms);
-    info!(
-        timeout_ms = simulation_timeout_ms,
-        "Simulation engine initialized"
-    );
+    let engine = RethSimulationEngine::new(provider, evm_config);
+    info!("Simulation engine initialized");
 
     let simulator = BundleSimulator::new(engine, publisher);
     info!("Core bundle simulator initialized");
@@ -84,21 +91,25 @@ pub async fn init_exex_event_listener<Node>(
 ) -> Result<TipsExExEventListener<Node>>
 where
     Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
 {
     info!("Initializing ExEx event listener");
+    
+    let state_provider_factory = Arc::new(ctx.components.provider().clone());
+    let provider = Arc::new(ctx.components.provider().clone());
+    let evm_config = ctx.components.evm_config().clone();
 
     let common_components = init_common_components(
-        config.database_url.clone(), 
-        config.simulation_timeout_ms,
+        provider,
+        evm_config,
+        config.database_url.clone(),
         kafka_brokers,
         kafka_topic,
     ).await?;
 
-    let state_provider_factory = Arc::new(ctx.components.provider().clone());
-
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
-        state_provider_factory,
+        state_provider_factory.clone(),
         config.max_concurrent_simulations,
     );
 
@@ -120,19 +131,22 @@ where
 /// 
 /// Note: The worker pool is created but NOT started.
 pub async fn init_mempool_event_listener<Node>(
+    ctx: Arc<ExExContext<Node>>,
     provider: Arc<Node::Provider>,
     config: MempoolListenerConfig,
     max_concurrent_simulations: usize,
-    simulation_timeout_ms: u64,
 ) -> Result<TipsMempoolEventListener<Node>>
 where
     Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
 {
     info!("Initializing mempool event listener");
 
+    let evm_config = ctx.components.evm_config().clone();
     let common_components = init_common_components(
-        config.database_url.clone(), 
-        simulation_timeout_ms,
+        provider.clone(),
+        evm_config,
+        config.database_url.clone(),
         config.kafka_brokers.join(","),
         config.kafka_topic.clone(),
     ).await?;
@@ -162,13 +176,21 @@ where
 /// 
 /// This struct ensures that the ExEx and mempool listeners always use the same
 /// worker pool instance, preventing potential misconfigurations.
-pub struct ListenersWithWorkers<Node: FullNodeComponents> {
-    worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine, TipsSimulationPublisher, Node::Provider>>,
+pub struct ListenersWithWorkers<Node> 
+where
+    Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+{
+    worker_pool: Arc<SimulationWorkerPool<RethSimulationEngine<Node>, TipsSimulationPublisher, Node::Provider>>,
     exex_listener: TipsExExEventListener<Node>,
     mempool_listener: TipsMempoolEventListener<Node>,
 }
 
-impl<Node: FullNodeComponents> ListenersWithWorkers<Node> {
+impl<Node> ListenersWithWorkers<Node>
+where
+    Node: FullNodeComponents,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+{
     /// Initialize both event listeners with a shared worker pool
     /// 
     /// The worker pool is created but NOT started. Call `run()` to start
@@ -178,18 +200,21 @@ impl<Node: FullNodeComponents> ListenersWithWorkers<Node> {
         exex_config: ExExSimulationConfig,
         mempool_config: MempoolListenerConfig,
         max_concurrent_simulations: usize,
-        simulation_timeout_ms: u64,
+        _simulation_timeout_ms: u64,
     ) -> Result<Self> {
         info!("Initializing shared event listeners");
 
+        let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
+        let provider = Arc::new(exex_ctx.components.provider().clone());
+        let evm_config = exex_ctx.components.evm_config().clone();
+
         let common_components = init_common_components(
-            exex_config.database_url.clone(), 
-            simulation_timeout_ms,
+            provider,
+            evm_config,
+            exex_config.database_url.clone(),
             mempool_config.kafka_brokers.join(","),
             mempool_config.kafka_topic.clone(),
         ).await?;
-
-        let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
 
         let shared_worker_pool = Arc::new(SimulationWorkerPool::new(
             Arc::new(common_components.simulator),

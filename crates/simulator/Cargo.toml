@@ -43,12 +43,17 @@ reth-node-api.workspace = true
 reth-evm.workspace = true
 reth-node-builder.workspace = true
 reth-node-ethereum.workspace = true
+reth-revm.workspace = true
+reth-chainspec.workspace = true
+reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", features = ["serde", "serde-bincode-compat"] }
 
 # Additional dependencies for simulation
 std-semaphore = "0.1"
 tokio-util = { version = "0.7", features = ["time"] }
 hex = "0.4"
 rdkafka.workspace = true
+revm-primitives = { version = "3.1.1", default-features = false }
 
 [dev-dependencies]
 tokio-test = "0.4.4"
