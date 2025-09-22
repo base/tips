@@ -186,43 +186,45 @@ where
             withdrawals: None,
         };
 
-        // NOTE: We use the reth block builder here, which diverges from op-rbuilder. It's
-        // not yet clear which builder we want to simulate with, so we're using reth because
-        // it's easy.
-        let mut builder = self
-            .evm_config
-            .builder_for_next_block(&mut db, &header, attributes)
-            .map_err(|e| eyre::eyre!("Failed to init block builder: {}", e))?;
-
         // Variables to track bundle execution
         let mut total_gas_used = 0u64;
-        let all_storage_changes = HashMap::new();
+        let all_storage_changes: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
         let mut failed = false;
         let mut failure_reason = None;
 
-        // Apply pre-execution changes
-        builder.apply_pre_execution_changes().map_err(|e| eyre::eyre!("Failed pre-exec: {}", e))?;
+        // Apply pre-execution changes and simulate transactions in a scope
+        // to ensure builder is dropped before we call take_bundle()
+        {
+            // NOTE: We use the reth block builder here, which diverges from op-rbuilder. It's
+            // not yet clear which builder we want to simulate with, so we're using reth because
+            // it's easy.
+            let mut builder = self
+                .evm_config
+                .builder_for_next_block(&mut db, &header, attributes)
+                .map_err(|e| eyre::eyre!("Failed to init block builder: {}", e))?;
+            builder.apply_pre_execution_changes().map_err(|e| eyre::eyre!("Failed pre-exec: {}", e))?;
 
-        // Simulate each transaction in the bundle
-        for (tx_index, tx_bytes) in request.bundle.txs.iter().enumerate() {
-            // Decode bytes into the node's SignedTx type and recover the signer for execution
-            type NodeSignedTxTy<Node> = 
-                <<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives as reth_node_api::NodePrimitives>::SignedTx;
-            let mut reader = tx_bytes.iter().as_slice();
-            let signed: NodeSignedTxTy<Node> = Decodable2718::decode_2718(&mut reader)
-                .map_err(|e| eyre::eyre!("Failed to decode tx {tx_index}: {e}"))?;
-            let recovered = signed
-                .try_into_recovered()
-                .map_err(|e| eyre::eyre!("Failed to recover tx {tx_index}: {e}"))?;
+            // Simulate each transaction in the bundle
+            for (tx_index, tx_bytes) in request.bundle.txs.iter().enumerate() {
+                // Decode bytes into the node's SignedTx type and recover the signer for execution
+                type NodeSignedTxTy<Node> = 
+                    <<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives as reth_node_api::NodePrimitives>::SignedTx;
+                let mut reader = tx_bytes.iter().as_slice();
+                let signed: NodeSignedTxTy<Node> = Decodable2718::decode_2718(&mut reader)
+                    .map_err(|e| eyre::eyre!("Failed to decode tx {tx_index}: {e}"))?;
+                let recovered = signed
+                    .try_into_recovered()
+                    .map_err(|e| eyre::eyre!("Failed to recover tx {tx_index}: {e}"))?;
 
-            match builder.execute_transaction(recovered) {
-                Ok(gas_used) => {
-                    total_gas_used = total_gas_used.saturating_add(gas_used);
-                }
-                Err(e) => {
-                    failed = true;
-                    failure_reason = Some(SimulationError::Unknown { message: format!("Execution failed: {}", e) });
-                    break;
+                match builder.execute_transaction(recovered) {
+                    Ok(gas_used) => {
+                        total_gas_used = total_gas_used.saturating_add(gas_used);
+                    }
+                    Err(e) => {
+                        failed = true;
+                        failure_reason = Some(SimulationError::Unknown { message: format!("Execution failed: {}", e) });
+                        break;
+                    }
                 }
             }
         }
@@ -257,7 +259,23 @@ where
                 "Bundle simulation completed successfully"
             );
 
-            // TODO: Collect the state diff.
+            // Collect the state diff
+            let bundle = db.take_bundle();
+            
+            // Extract storage changes from the bundle
+            let mut modified_storage_slots = HashMap::new();
+            for (address, account) in bundle.state() {
+                let mut storage_changes = HashMap::new();
+                for (slot, slot_value) in account.storage.iter() {
+                    // Only include modified slots (non-zero values or explicitly set to zero)
+                    if slot_value.present_value != slot_value.original_value() {
+                        storage_changes.insert(*slot, slot_value.present_value);
+                    }
+                }
+                if !storage_changes.is_empty() {
+                    modified_storage_slots.insert(*address, storage_changes);
+                }
+            }
 
             Ok(SimulationResult::success(
                 simulation_id,
@@ -266,7 +284,7 @@ where
                 request.block_hash,
                 total_gas_used,
                 execution_time,
-                all_storage_changes,
+                modified_storage_slots,
             ))
         }
     }
