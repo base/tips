@@ -1,91 +1,68 @@
 use alloy_primitives::Address;
 use alloy_rpc_types_mev::EthSendBundle;
-use chrono::Utc;
-use eyre::{Error, Result};
+use anyhow::{Error, Result};
+use async_trait::async_trait;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use rdkafka::util::Timeout;
-use serde::{Deserialize, Serialize};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use tracing::{error, info};
-use uuid::Uuid;
 
-pub struct TransactionQueue {
+/// A queue to buffer transactions
+#[async_trait]
+pub trait QueuePublisher: Send + Sync {
+    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()>;
+}
+
+/// A queue to buffer transactions
+pub struct KafkaQueuePublisher {
     producer: FutureProducer,
     topic: String,
 }
 
-impl TransactionQueue {
+impl KafkaQueuePublisher {
     pub fn new(producer: FutureProducer, topic: String) -> Self {
         Self { producer, topic }
     }
 
     pub async fn enqueue_bundle(
         &self,
-        bundle_id: Uuid,
         bundle: &EthSendBundle,
         sender: Address,
     ) -> Result<(), Error> {
-        let partition_key = self.compute_partition_key(sender);
-        let payload = self.serialize_bundle_message(bundle_id, bundle)?;
+        let key = sender.to_string();
+        let payload = serde_json::to_vec(bundle)?;
 
-        let record = FutureRecord::to(&self.topic)
-            .key(&partition_key)
-            .payload(&payload);
+        let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
         match self
             .producer
-            .send(record, Timeout::After(std::time::Duration::from_secs(5)))
+            .send(record, tokio::time::Duration::from_secs(5))
             .await
         {
             Ok((partition, offset)) => {
                 info!(
-                    message = "Bundle enqueued successfully",
-                    bundle_id = %bundle_id,
                     sender = %sender,
                     partition = partition,
                     offset = offset,
-                    topic = %self.topic
+                    topic = %self.topic,
+                    "Successfully enqueued bundle"
                 );
                 Ok(())
             }
-            Err((kafka_error, _)) => {
+            Err((err, _)) => {
                 error!(
-                    message = "Failed to enqueue bundle",
-                    bundle_id = %bundle_id,
                     sender = %sender,
-                    error = %kafka_error,
-                    topic = %self.topic
+                    error = %err,
+                    topic = %self.topic,
+                    "Failed to enqueue bundle"
                 );
-                Err(kafka_error.into())
+                Err(anyhow::anyhow!("Failed to enqueue bundle: {}", err))
             }
         }
     }
-
-    fn compute_partition_key(&self, sender: Address) -> String {
-        let mut hasher = DefaultHasher::new();
-        sender.hash(&mut hasher);
-        format!("sender_{:x}", hasher.finish())
-    }
-
-    fn serialize_bundle_message(
-        &self,
-        bundle_id: Uuid,
-        bundle: &EthSendBundle,
-    ) -> Result<String, Error> {
-        let message = BundleQueueMessage {
-            bundle_id,
-            bundle: bundle.clone(),
-            timestamp: Utc::now().timestamp(),
-        };
-
-        serde_json::to_string(&message).map_err(Error::from)
-    }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-struct BundleQueueMessage {
-    bundle_id: Uuid,
-    bundle: EthSendBundle,
-    timestamp: i64,
+#[async_trait]
+impl QueuePublisher for KafkaQueuePublisher {
+    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()> {
+        self.enqueue_bundle(bundle, sender).await
+    }
 }
