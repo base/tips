@@ -113,20 +113,6 @@ where
     evm_config: Node::Evm,
 }
 
-/// Represents the execution context for a bundle simulation
-#[derive(Debug)]
-struct ExecutionContext {
-    /// Block number for simulation
-    block_number: u64,
-    /// Initial balances of involved accounts
-    initial_balances: HashMap<Address, U256>,
-    /// Initial nonces of involved accounts
-    initial_nonces: HashMap<Address, u64>,
-    /// Storage changes during simulation
-    storage_changes: HashMap<Address, HashMap<U256, U256>>,
-    /// Gas used so far
-    gas_used: u64,
-}
 
 impl<Node> RethSimulationEngine<Node>
 where
