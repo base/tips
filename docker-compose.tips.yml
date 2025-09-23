@@ -1,0 +1,40 @@
+services:
+  tips-ingress:
+    build:
+      context: .
+      dockerfile: crates/ingress/Dockerfile
+    container_name: tips-ingress
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+
+  tips-audit:
+    build:
+      context: .
+      dockerfile: crates/audit/Dockerfile
+    container_name: tips-audit
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+
+  tips-maintenance:
+    build:
+      context: .
+      dockerfile: crates/maintenance/Dockerfile
+    container_name: tips-maintenance
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+
+  tips-ui:
+    build:
+      context: .
+      dockerfile: ui/Dockerfile
+    ports:
+      - "3000:3000"
+    container_name: tips-ui
+    env_file:
+      - .env.docker
+    restart: unless-stopped

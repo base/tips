@@ -27,8 +27,21 @@ sync: deps-reset
     cd ui && mv ./drizzle/schema.ts ./src/db/
     cd ui && rm -rf ./drizzle
     ###   ENV    ###
+    just sync-env
+    ###    REFORMAT   ###
+    just fix
+
+sync-env:
     cp .env.example .env
     cp .env.example ./ui/.env
+    cp .env.example .env.docker
+    # Change kafka ports
+    sed -i '' 's/localhost:9092/host.docker.internal:9094/g' ./.env.docker
+    # Change other dependencies
+    sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
+
+start-all:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && docker compose build && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
 
 ### RUN SERVICES ###
 deps-reset:

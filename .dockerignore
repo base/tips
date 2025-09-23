@@ -1,0 +1,9 @@
+/target/
+/ui/node_modules
+/ui/.next
+.git
+/data
+*.log
+.env
+.env.docker
+/ui/.env
