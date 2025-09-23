@@ -1,0 +1,23 @@
+[package]
+name = "tips-writer"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "tips-writer"
+path = "src/main.rs"
+
+[dependencies]
+tips-datastore.workspace = true
+alloy-rpc-types-mev.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+dotenvy.workspace = true
+rdkafka.workspace = true
+serde_json.workspace = true
+async-trait.workspace = true
+backon.workspace = true
+uuid.workspace = true

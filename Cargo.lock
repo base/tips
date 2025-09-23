@@ -7135,6 +7135,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "tips-writer"
+version = "0.1.0"
+dependencies = [
+ "alloy-rpc-types-mev",
+ "anyhow",
+ "async-trait",
+ "backon",
+ "clap",
+ "dotenvy",
+ "rdkafka",
+ "serde_json",
+ "tips-datastore",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+ "uuid",
+]
+
+[[package]]
 name = "tokio"
 version = "1.47.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

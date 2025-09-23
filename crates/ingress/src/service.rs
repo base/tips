@@ -15,7 +15,6 @@ use tips_audit::{MempoolEvent, MempoolEventPublisher};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
-use crate::writer::Writer;
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -32,38 +31,34 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Publisher, Queue, DBWriter> {
+pub struct IngressService<Publisher, Queue> {
     provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
     publisher: Publisher,
     queue: Queue,
-    writer: DBWriter,
 }
 
-impl<Publisher, Queue, DBWriter> IngressService<Publisher, Queue, DBWriter> {
+impl<Publisher, Queue> IngressService<Publisher, Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         dual_write_mempool: bool,
         publisher: Publisher,
         queue: Queue,
-        writer: DBWriter,
     ) -> Self {
         Self {
             provider,
             dual_write_mempool,
             publisher,
             queue,
-            writer,
         }
     }
 }
 
 #[async_trait]
-impl<Publisher, Queue, DBWriter> IngressApiServer for IngressService<Publisher, Queue, DBWriter>
+impl<Publisher, Queue> IngressApiServer for IngressService<Publisher, Queue>
 where
     Publisher: MempoolEventPublisher + Sync + Send + 'static,
     Queue: QueuePublisher + Sync + Send + 'static,
-    DBWriter: Writer + Sync + Send + 'static,
 {
     async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
         warn!(
@@ -109,27 +104,14 @@ where
         let sender = transaction.signer();
         if let Err(e) = self.queue.publish(&bundle, sender).await {
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
+            return Err(ErrorObject::owned(
+                12,
+                "Failed to queue bundle",
+                Some(sender.to_string()),
+            ));
         }
 
-        // DBWriter consumes bundles from the queue and inserts them into the database
-        let result = self
-            .writer
-            .insert_bundle()
-            .await
-            .map_err(|_e| ErrorObject::owned(11, "todo", Some(2)))?;
-
-        info!(message="inserted singleton bundle", uuid=%result, txn_hash=%transaction.tx_hash());
-
-        if let Err(e) = self
-            .publisher
-            .publish(MempoolEvent::Created {
-                bundle_id: result,
-                bundle,
-            })
-            .await
-        {
-            warn!(message = "Failed to publish MempoolEvent::Created", error = %e);
-        }
+        info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
 
         if self.dual_write_mempool {
             let response = self

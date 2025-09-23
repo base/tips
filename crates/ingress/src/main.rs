@@ -13,11 +13,8 @@ use url::Url;
 
 mod queue;
 mod service;
-mod writer;
 use queue::KafkaQueuePublisher;
 use service::{IngressApiServer, IngressService};
-use tips_datastore::PostgresDatastore;
-use writer::DatastoreWriter;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -33,10 +30,6 @@ struct Config {
     /// URL of the mempool service to proxy transactions to
     #[arg(long, env = "TIPS_INGRESS_RPC_MEMPOOL")]
     mempool_url: Url,
-
-    /// URL of the Postgres DB to store bundles in
-    #[arg(long, env = "TIPS_INGRESS_DATABASE_URL")]
-    database_url: String,
 
     /// Enable dual writing raw transactions to the mempool
     #[arg(long, env = "TIPS_INGRESS_DUAL_WRITE_MEMPOOL", default_value = "false")]
@@ -106,9 +99,6 @@ async fn main() -> anyhow::Result<()> {
         .network::<Optimism>()
         .connect_http(config.mempool_url);
 
-    let bundle_store = PostgresDatastore::connect(config.database_url).await?;
-    bundle_store.run_migrations().await?;
-
     let kafka_producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &config.kafka_brokers)
         .set("message.timeout.ms", "5000")
@@ -122,18 +112,7 @@ async fn main() -> anyhow::Result<()> {
     let publisher = KafkaMempoolEventPublisher::new(kafka_producer, config.kafka_topic);
     let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic.clone());
 
-    let queue_consumer = create_kafka_consumer(&config.kafka_brokers, config.queue_topic.as_str())?;
-    queue_consumer.subscribe(&[config.queue_topic.as_str()])?;
-
-    let writer = DatastoreWriter::new(queue_consumer, config.queue_topic.clone(), bundle_store)?;
-
-    let service = IngressService::new(
-        provider,
-        config.dual_write_mempool,
-        publisher,
-        queue,
-        writer,
-    );
+    let service = IngressService::new(provider, config.dual_write_mempool, publisher, queue);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;
