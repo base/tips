@@ -92,8 +92,8 @@ ingress-writer:
 simulator:
     cargo run --bin tips-simulator node
 
-simulator-playground dir="$HOME/.playground/devnet/":
-    cargo run --bin tips-simulator -- --builder.playground {{ dir }} node
+simulator-playground:
+    cargo run --bin tips-simulator -- --builder.playground=$HOME/.playground/devnet/ node --datadir ~/.playground/devnet/tips-simulator
 
 ui:
     cd ui && yarn dev

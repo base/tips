@@ -20,7 +20,9 @@
 
 use alloy_primitives::hex;
 use anyhow::{Result, anyhow};
-use reth_chainspec::ChainSpec;
+use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_cli::chainspec::OpChainSpecParser;
+use reth_cli::chainspec::ChainSpecParser;
 use reth_network::config::SecretKey;
 use reth_network_peers::TrustedPeer;
 use serde_json::Value;
@@ -36,7 +38,10 @@ use url::{Host, Url};
 #[derive(Clone, Debug)]
 pub struct PlaygroundOptions {
     /// Chain spec loaded from playground
-    pub chain: Arc<ChainSpec>,
+    pub chain: Arc<OpChainSpec>,
+    
+    /// Path to the genesis file
+    pub genesis_path: String,
 
     /// HTTP RPC port
     pub http_port: u16,
@@ -71,7 +76,8 @@ impl PlaygroundOptions {
         }
 
         let genesis_path = existing_path(path, "l2-genesis.json")?;
-        let chain = load_chain_spec(&genesis_path)?;
+        let chain = OpChainSpecParser::parse(&genesis_path)
+            .map_err(|e| anyhow!("Failed to parse chain spec: {}", e))?;
 
         let authrpc_addr = Ipv4Addr::UNSPECIFIED.into();
         let http_port = pick_preferred_port(2222, 3000..9999);
@@ -92,9 +98,13 @@ impl PlaygroundOptions {
             trusted_peer_port,
             &trusted_peer_key,
         );
+        
+        eprintln!("Trusted peer configured: {}", trusted_peer);
+        eprintln!("Chain block time: {:?}", chain_block_time);
 
         Ok(Self {
             chain,
+            genesis_path,
             http_port,
             authrpc_addr,
             authrpc_port,
@@ -108,6 +118,10 @@ impl PlaygroundOptions {
     /// Get command line arguments that should be applied to reth node
     pub fn to_cli_args(&self) -> Vec<String> {
         let mut args = vec![];
+        
+        // Chain configuration
+        args.push("--chain".to_string());
+        args.push(self.genesis_path.clone());
         
         // HTTP RPC settings
         args.push("--http".to_string());
@@ -137,7 +151,7 @@ impl PlaygroundOptions {
     }
     
     /// Get the chain spec for use in the node builder
-    pub fn chain(&self) -> Arc<ChainSpec> {
+    pub fn chain(&self) -> Arc<OpChainSpec> {
         Arc::clone(&self.chain)
     }
     
@@ -147,29 +161,6 @@ impl PlaygroundOptions {
     }
 }
 
-fn load_chain_spec(genesis_path: &str) -> Result<Arc<ChainSpec>> {
-    // Read the genesis file
-    let genesis_content = read_to_string(genesis_path)
-        .map_err(|e| anyhow!("Failed to read genesis file: {}", e))?;
-    
-    // Parse as JSON to extract chain ID
-    let genesis_json: Value = serde_json::from_str(&genesis_content)
-        .map_err(|e| anyhow!("Failed to parse genesis JSON: {}", e))?;
-    
-    let _chain_id = genesis_json["config"]["chainId"]
-        .as_u64()
-        .ok_or_else(|| anyhow!("Missing chainId in genesis config"))?;
-    
-    // For now, we'll create a basic chain spec with the chain ID
-    // This is a simplified approach - in production you'd want to fully parse the genesis
-    use reth_chainspec::MAINNET;
-    
-    // Use mainnet spec as a base
-    // Note: In a real implementation, you'd want to create a custom ChainSpec from the genesis file
-    let spec = MAINNET.clone();
-    
-    Ok(spec)
-}
 
 fn existing_path(base: &Path, relative: &str) -> Result<String> {
     let path = base.join(relative);
