@@ -51,7 +51,7 @@ export default function BundlesPage() {
 
     fetchData();
 
-    const interval = setInterval(fetchLiveBundles, 400);
+    const interval = setInterval(fetchData, 400);
 
     return () => clearInterval(interval);
   }, []);
