@@ -12,7 +12,6 @@ use reth_node_api::FullNodeComponents;
 use reth_evm::{ConfigureEvm, NextBlockEnvAttributes};
 use std::sync::Arc;
 use tracing::{info, error};
-use crate::worker_pool::SimulationWorkerPool;
 
 pub use config::SimulatorNodeConfig;
 pub use core::BundleSimulator;
@@ -20,6 +19,7 @@ pub use engine::{SimulationEngine, RethSimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
 pub use publisher::{SimulationPublisher, TipsSimulationPublisher};
 pub use types::{SimulationResult, SimulationError, ExExSimulationConfig};
+pub use worker_pool::SimulationWorkerPool;
 
 // Type aliases for concrete implementations
 pub type TipsBundleSimulator<Node> = BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
@@ -62,13 +62,13 @@ where
         .create::<rdkafka::producer::FutureProducer>()
         .map_err(|e| eyre::eyre!("Failed to create Kafka producer: {}", e))?;
 
-    let publisher = TipsSimulationPublisher::new(datastore.clone(), kafka_producer, kafka_topic);
+    let publisher = TipsSimulationPublisher::new(Arc::clone(&datastore), kafka_producer, kafka_topic);
     info!(
         kafka_brokers = %kafka_brokers,
         "Database publisher with Kafka initialized"
     );
 
-    let engine = RethSimulationEngine::new(provider, evm_config);
+    let engine = RethSimulationEngine::new(Arc::clone(&provider), evm_config);
     info!("Simulation engine initialized");
 
     let simulator = BundleSimulator::new(engine, publisher);
@@ -95,12 +95,11 @@ where
 {
     info!("Initializing ExEx event listener");
     
-    let state_provider_factory = Arc::new(ctx.components.provider().clone());
     let provider = Arc::new(ctx.components.provider().clone());
     let evm_config = ctx.components.evm_config().clone();
 
     let common_components = init_common_components(
-        provider,
+        Arc::clone(&provider),
         evm_config,
         config.database_url.clone(),
         kafka_brokers,
@@ -109,14 +108,14 @@ where
 
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
-        state_provider_factory.clone(),
+        Arc::clone(&provider),
         config.max_concurrent_simulations,
     );
 
     let consensus_listener = ExExEventListener::new(
         ctx,
         common_components.datastore,
-        Arc::new(worker_pool),
+        worker_pool,
     );
 
     info!(
@@ -144,7 +143,7 @@ where
 
     let evm_config = ctx.components.evm_config().clone();
     let common_components = init_common_components(
-        provider.clone(),
+        Arc::clone(&provider),
         evm_config,
         config.database_url.clone(),
         config.kafka_brokers.join(","),
@@ -153,14 +152,14 @@ where
 
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
-        provider.clone(),
+        Arc::clone(&provider),
         max_concurrent_simulations,
     );
 
     let mempool_listener = MempoolEventListener::new(
-        provider,
+        Arc::clone(&provider),
         config,
-        Arc::new(worker_pool),
+        worker_pool,
     )?;
     
     info!(
@@ -204,34 +203,33 @@ where
     ) -> Result<Self> {
         info!("Initializing shared event listeners");
 
-        let state_provider_factory = Arc::new(exex_ctx.components.provider().clone());
         let provider = Arc::new(exex_ctx.components.provider().clone());
         let evm_config = exex_ctx.components.evm_config().clone();
 
         let common_components = init_common_components(
-            provider,
+            Arc::clone(&provider),
             evm_config,
             exex_config.database_url.clone(),
             mempool_config.kafka_brokers.join(","),
             mempool_config.kafka_topic.clone(),
         ).await?;
 
-        let shared_worker_pool = Arc::new(SimulationWorkerPool::new(
+        let shared_worker_pool = SimulationWorkerPool::new(
             Arc::new(common_components.simulator),
-            state_provider_factory.clone(),
+            Arc::clone(&provider),
             max_concurrent_simulations,
-        ));
+        );
 
         let exex_listener = ExExEventListener::new(
             exex_ctx,
             common_components.datastore,
-            shared_worker_pool.clone(),
+            Arc::clone(&shared_worker_pool),
         );
 
         let mempool_listener = MempoolEventListener::new(
-            state_provider_factory,
+            Arc::clone(&provider),
             mempool_config,
-            shared_worker_pool.clone(),
+            Arc::clone(&shared_worker_pool),
         )?;
         
         info!(
@@ -249,12 +247,10 @@ where
     /// Run both listeners with lifecycle management for the shared worker pool
     /// 
     /// Starts the worker pool, runs both listeners concurrently, and ensures proper shutdown
-    pub async fn run(mut self) -> Result<()> {
+    pub async fn run(self) -> Result<()> {
         info!("Starting shared worker pool");
         
-        Arc::get_mut(&mut self.worker_pool)
-            .ok_or_else(|| eyre::eyre!("Cannot get mutable reference to worker pool"))?
-            .start();
+        self.worker_pool.start().await;
         
         info!("Running listeners concurrently");
         

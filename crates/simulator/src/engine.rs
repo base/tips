@@ -1,6 +1,6 @@
 use crate::types::{SimulationError, SimulationRequest, SimulationResult};
 use alloy_consensus::{transaction::SignerRecoverable, BlockHeader};
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::B256;
 use alloy_eips::eip2718::Decodable2718;
 use alloy_rpc_types::BlockNumberOrTag;
 use eyre::Result;
@@ -97,7 +97,7 @@ pub trait SimulationEngine: Send + Sync {
     /// Simulate a bundle execution
     async fn simulate_bundle<S>(
         &self,
-        request: SimulationRequest,
+        request: &SimulationRequest,
         state_provider: &S,
     ) -> Result<SimulationResult>
     where
@@ -135,7 +135,7 @@ where
 {
     async fn simulate_bundle<S>(
         &self,
-        request: SimulationRequest,
+        request: &SimulationRequest,
         _state_provider: &S,
     ) -> Result<SimulationResult>
     where
@@ -174,7 +174,6 @@ where
 
         // Variables to track bundle execution
         let mut total_gas_used = 0u64;
-        let all_storage_changes: HashMap<Address, HashMap<U256, U256>> = HashMap::new();
         let mut failed = false;
         let mut failure_reason = None;
 
@@ -236,15 +235,6 @@ where
                 }),
             ))
         } else {
-            info!(
-                bundle_id = %request.bundle_id,
-                simulation_id = %simulation_id,
-                gas_used = total_gas_used,
-                execution_time_us = execution_time,
-                storage_changes = all_storage_changes.len(),
-                "Bundle simulation completed successfully"
-            );
-
             // Collect the state diff
             let bundle = db.take_bundle();
             
@@ -262,6 +252,15 @@ where
                     modified_storage_slots.insert(*address, storage_changes);
                 }
             }
+
+            info!(
+                bundle_id = %request.bundle_id,
+                simulation_id = %simulation_id,
+                gas_used = total_gas_used,
+                execution_time_us = execution_time,
+                storage_changes = modified_storage_slots.len(),
+                "Bundle simulation completed successfully"
+            );
 
             Ok(SimulationResult::success(
                 simulation_id,

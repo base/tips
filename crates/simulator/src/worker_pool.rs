@@ -30,9 +30,9 @@ where
     /// Channel for receiving simulation requests in workers
     simulation_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<SimulationTask>>>,
     /// Latest block number being processed (for cancellation)
-    latest_block: Arc<AtomicU64>,
-    /// Worker task handles
-    worker_handles: JoinSet<()>,
+    latest_block: AtomicU64,
+    /// Worker task handles (wrapped in Mutex for interior mutability)
+    worker_handles: tokio::sync::Mutex<JoinSet<()>>,
     /// Maximum number of concurrent simulations
     max_concurrent: usize,
 }
@@ -48,40 +48,42 @@ where
         simulator: Arc<BundleSimulator<E, P>>,
         state_provider_factory: Arc<S>,
         max_concurrent_simulations: usize,
-    ) -> Self {
+    ) -> Arc<Self> {
         let (simulation_tx, simulation_rx) = mpsc::channel(1000);
         
-        Self {
+        Arc::new(Self {
             simulator,
             state_provider_factory,
             simulation_tx,
             simulation_rx: Arc::new(tokio::sync::Mutex::new(simulation_rx)),
-            latest_block: Arc::new(AtomicU64::new(0)),
-            worker_handles: JoinSet::new(),
+            latest_block: AtomicU64::new(0),
+            worker_handles: tokio::sync::Mutex::new(JoinSet::new()),
             max_concurrent: max_concurrent_simulations,
-        }
+        })
     }
 
     /// Start simulation worker tasks
-    pub fn start(&mut self) {
+    /// Returns true if workers were started, false if already running
+    pub async fn start(self: &Arc<Self>) -> bool {
+        let mut handles = self.worker_handles.lock().await;
+        
+        if !handles.is_empty() {
+            debug!("Simulation workers already started");
+            return false;
+        }
         info!(num_workers = self.max_concurrent, "Starting simulation workers");
         
         for worker_id in 0..self.max_concurrent {
-            let simulator = self.simulator.clone();
-            let state_provider_factory = self.state_provider_factory.clone();
-            let simulation_rx = self.simulation_rx.clone();
-            let latest_block = self.latest_block.clone();
+            let pool = Arc::clone(self);
             
-            self.worker_handles.spawn(async move {
+            handles.spawn(async move {
                 Self::simulation_worker(
                     worker_id,
-                    simulator,
-                    state_provider_factory,
-                    simulation_rx,
-                    latest_block,
+                    pool,
                 ).await
             });
         }
+        true
     }
 
     /// Queue a simulation task
@@ -97,12 +99,13 @@ where
 
 
     /// Wait for all workers to complete
-    pub async fn shutdown(mut self) {
+    pub async fn shutdown(self) {
         // Close the channel to signal workers to stop
         drop(self.simulation_tx);
         
         // Wait for workers to complete
-        while let Some(result) = self.worker_handles.join_next().await {
+        let mut handles = self.worker_handles.lock().await;
+        while let Some(result) = handles.join_next().await {
             if let Err(e) = result {
                 tracing::error!(error = %e, "Worker task failed");
             }
@@ -112,20 +115,15 @@ where
     /// Worker task that processes simulation requests
     async fn simulation_worker(
         worker_id: usize,
-        simulator: Arc<BundleSimulator<E, P>>,
-        state_provider_factory: Arc<S>,
-        simulation_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<SimulationTask>>>,
-        latest_block: Arc<AtomicU64>,
-    ) 
-    where
-        S: reth_provider::StateProviderFactory,
-    {
+        pool: Arc<Self>,
+    ) {
         debug!(worker_id, "Simulation worker started");
         
         loop {
             // Get the next simulation task
             let task = {
-                let mut rx = simulation_rx.lock().await;
+                // FIXME: This lock looks like it prevents multiple workers from running in parallel.
+                let mut rx = pool.simulation_rx.lock().await;
                 rx.recv().await
             };
             
@@ -135,7 +133,7 @@ where
             };
             
             // Check if this simulation is for an old block
-            let current_latest = latest_block.load(Ordering::Acquire);
+            let current_latest = pool.latest_block.load(Ordering::Acquire);
             if task.request.block_number < current_latest {
                 warn!(
                     worker_id,
@@ -148,7 +146,7 @@ where
             }
             
             // Execute the simulation
-            match simulator.simulate(task.request.clone(), state_provider_factory.as_ref()).await {
+            match pool.simulator.simulate(&task.request, pool.state_provider_factory.as_ref()).await {
                 Ok(_) => {
                     debug!(
                         worker_id,

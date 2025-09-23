@@ -99,7 +99,7 @@ where
         
         // Start Kafka listener in a separate task
         let consumer = self.consumer;
-        let provider = self.provider;
+        let provider = Arc::clone(&self.provider);
         let topic = self.topic.clone();
         let listener_handle: tokio::task::JoinHandle<Result<()>> = tokio::spawn(async move {
             info!(topic = %topic, "Starting Kafka mempool event listener");
@@ -175,25 +175,26 @@ where
         });
         
         // Process simulation requests using the shared worker pool
-        let worker_pool = self.worker_pool.clone();
+        let worker_pool = Arc::clone(&self.worker_pool);
         let processing_handle = tokio::spawn(async move {
             while let Some(request) = receiver.recv().await {
+                let bundle_id = request.bundle_id;
                 debug!(
-                    bundle_id = %request.bundle_id,
+                    bundle_id = %bundle_id,
                     block_number = request.block_number,
                     "Queuing bundle simulation for mempool event"
                 );
                 
                 // Create simulation task
                 let task = SimulationTask {
-                    request: request.clone(),
+                    request,
                 };
                 
                 // Queue simulation using shared worker pool
                 if let Err(e) = worker_pool.queue_simulation(task).await {
                     error!(
                         error = %e,
-                        bundle_id = %request.bundle_id,
+                        bundle_id = %bundle_id,
                         "Failed to queue simulation task"
                     );
                 }

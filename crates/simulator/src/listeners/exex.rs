@@ -48,7 +48,7 @@ where
         // For now, we generate new IDs for each bundle
         let result = bundles_with_metadata
             .into_iter()
-            .map(|bwm| (Uuid::new_v4(), bwm.bundle.clone()))
+            .map(|bwm| (Uuid::new_v4(), bwm.bundle))
             .collect();
         
         Ok(result)

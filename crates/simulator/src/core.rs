@@ -32,7 +32,7 @@ where
     /// Convenience method that handles state provider creation
     pub async fn simulate<F>(
         &self,
-        request: SimulationRequest,
+        request: &SimulationRequest,
         state_provider_factory: &F,
     ) -> Result<()>
     where
@@ -46,7 +46,7 @@ where
             .map_err(|e| eyre::eyre!("Failed to get state provider: {}", e))?;
         
         // Run the simulation
-        match self.engine.simulate_bundle(request.clone(), &state_provider).await {
+        match self.engine.simulate_bundle(request, &state_provider).await {
             Ok(result) => {
                 info!(
                     bundle_id = %request.bundle_id,
