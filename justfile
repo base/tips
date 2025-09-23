@@ -93,7 +93,7 @@ simulator:
     cargo run --bin tips-simulator node
 
 simulator-playground:
-    cargo run --bin tips-simulator node --builder.playground=$HOME/.playground/devnet/ --datadir ~/.playground/devnet/tips-simulator
+    cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator
 
 ui:
     cd ui && yarn dev

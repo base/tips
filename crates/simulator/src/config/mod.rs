@@ -1,115 +1,15 @@
+mod simulator_node;
 pub mod playground;
 
 pub use playground::PlaygroundOptions;
-pub type Cli = OpCli<OpChainSpecParser, NoArgs>;
+pub use simulator_node::SimulatorNodeConfig;
 
 use crate::listeners::MempoolListenerConfig;
 use crate::types::ExExSimulationConfig;
-use anyhow::{anyhow, Result};
-use clap::{CommandFactory, Parser};
-use playground::IsDefaultSource;
-use reth_cli_commands::node::NoArgs;
-use reth_optimism_cli::{chainspec::OpChainSpecParser, Cli as OpCli};
+use clap::{CommandFactory, FromArgMatches};
+use reth_optimism_cli::{chainspec::OpChainSpecParser, commands::Commands, Cli as OpCli};
 
-/// Combined configuration for reth node with simulator ExEx
-#[derive(Parser, Debug)]
-#[command(author, version, about = "Reth node with Tips Simulator ExEx")]
-pub struct SimulatorNodeConfig {
-    /// Reth node arguments
-    #[command(flatten)]
-    pub node: Cli,
-
-    /// Data directory for simulator
-    #[arg(
-        long,
-        env = "TIPS_SIMULATOR_DATADIR",
-        default_value = "~/.tips-simulator-reth"
-    )]
-    pub datadir: std::path::PathBuf,
-
-    /// PostgreSQL database connection URL for simulator
-    #[arg(long, env = "TIPS_SIMULATOR_DATABASE_URL")]
-    pub database_url: String,
-
-    /// Maximum number of concurrent simulations
-    #[arg(long, env = "TIPS_SIMULATOR_MAX_CONCURRENT", default_value = "10")]
-    pub max_concurrent_simulations: usize,
-
-    /// Timeout for individual simulations in milliseconds
-    #[arg(long, env = "TIPS_SIMULATOR_TIMEOUT_MS", default_value = "5000")]
-    pub simulation_timeout_ms: u64,
-
-    /// Kafka brokers for mempool events (comma-separated)
-    #[arg(
-        long,
-        env = "TIPS_SIMULATOR_KAFKA_BROKERS",
-        default_value = "localhost:9092"
-    )]
-    pub kafka_brokers: String,
-
-    /// Kafka topic for mempool events
-    #[arg(
-        long,
-        env = "TIPS_SIMULATOR_KAFKA_TOPIC",
-        default_value = "mempool-events"
-    )]
-    pub kafka_topic: String,
-
-    /// Kafka consumer group ID
-    #[arg(
-        long,
-        env = "TIPS_SIMULATOR_KAFKA_GROUP_ID",
-        default_value = "tips-simulator"
-    )]
-    pub kafka_group_id: String,
-
-    /// Chain block time for simulator extensions
-    #[arg(long = "chain.block-time", default_value_t = 1000)]
-    pub chain_block_time: u64,
-
-    /// Path to builder playground to automatically start up the node connected to it
-    #[arg(
-        long = "builder.playground",
-        num_args = 0..=1,
-        default_missing_value = "$HOME/.playground/devnet/",
-        value_parser = expand_path,
-        env = "TIPS_SIMULATOR_PLAYGROUND_DIR",
-    )]
-    pub playground: Option<std::path::PathBuf>,
-}
-
-impl From<&SimulatorNodeConfig> for ExExSimulationConfig {
-    fn from(config: &SimulatorNodeConfig) -> Self {
-        Self {
-            database_url: config.database_url.clone(),
-            max_concurrent_simulations: config.max_concurrent_simulations,
-            simulation_timeout_ms: config.simulation_timeout_ms,
-        }
-    }
-}
-
-impl From<&SimulatorNodeConfig> for MempoolListenerConfig {
-    fn from(config: &SimulatorNodeConfig) -> Self {
-        Self {
-            kafka_brokers: config
-                .kafka_brokers
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect(),
-            kafka_topic: config.kafka_topic.clone(),
-            kafka_group_id: config.kafka_group_id.clone(),
-            database_url: config.database_url.clone(),
-        }
-    }
-}
-
-fn expand_path(s: &str) -> Result<std::path::PathBuf> {
-    shellexpand::full(s)
-        .map_err(|e| anyhow!("expansion error for `{s}`: {e}"))?
-        .into_owned()
-        .parse()
-        .map_err(|e| anyhow!("invalid path after expansion: {e}"))
-}
+pub type Cli = OpCli<OpChainSpecParser, SimulatorNodeConfig>;
 
 /// Parse CLI args with playground configuration if specified
 pub trait CliExt {
@@ -120,58 +20,42 @@ pub trait CliExt {
     fn parsed() -> Self;
 }
 
-impl CliExt for SimulatorNodeConfig {
-    fn populate_defaults(mut self) -> Self {
-        let Some(ref playground_dir) = self.playground else {
+impl CliExt for Cli {
+    fn populate_defaults(self) -> Self {
+        let Commands::Node(ref node_command) = self.command else {
+            return self;
+        };
+
+        let Some(ref playground_dir) = node_command.ext.playground else {
             return self;
         };
 
         let options = PlaygroundOptions::new(playground_dir).unwrap_or_else(|e| exit(e));
-        let matches = Self::command().get_matches();
-        let matches = matches
-            .subcommand_matches("node")
-            .expect("validated that we are in the node command");
 
-        options.apply_to_cli(&mut self.node);
-
-        if matches.value_source("chain_block_time").is_default() {
-            self.chain_block_time = options.chain_block_time().as_millis() as u64;
-        }
-
-        self
+        options.apply(self)
     }
 
     fn parsed() -> Self {
-        SimulatorNodeConfig::parse().populate_defaults()
+        let matches = Cli::command().get_matches();
+        Cli::from_arg_matches(&matches)
+            .expect("Parsing args")
+            .populate_defaults()
     }
 }
 
 impl SimulatorNodeConfig {
-    pub fn node_cli_mut(&mut self) -> &mut Cli {
-        &mut self.node
-    }
-
-    pub fn into_cli(self) -> Cli {
-        self.node
-    }
-
-    pub fn chain_block_time(&self) -> u64 {
-        self.chain_block_time
-    }
-
-    pub fn into_parts(self) -> (Cli, ExExSimulationConfig, MempoolListenerConfig, u64) {
+    pub fn into_parts(
+        self,
+        cli: Cli,
+    ) -> (Cli, ExExSimulationConfig, MempoolListenerConfig, u64) {
         let exex_config = (&self).into();
         let mempool_config = (&self).into();
         (
-            self.node,
+            cli,
             exex_config,
             mempool_config,
             self.chain_block_time,
         )
-    }
-
-    pub fn has_playground(&self) -> bool {
-        self.playground.is_some()
     }
 }
 

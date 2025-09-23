@@ -1,12 +1,17 @@
-use tips_simulator::{config::CliExt, config::SimulatorNodeConfig, ListenersWithWorkers};
+use reth_optimism_cli::commands::Commands;
+use tips_simulator::{config::Cli, config::CliExt, ListenersWithWorkers};
 use tracing::info;
 
 fn main() -> eyre::Result<()> {
     dotenvy::dotenv().ok();
 
-    let config = SimulatorNodeConfig::parsed();
-    let playground_enabled = config.playground.is_some();
-    let (cli, exex_config, mempool_config, chain_block_time) = config.into_parts();
+    let cli = <Cli as CliExt>::parsed();
+    let config = match &cli.command {
+        Commands::Node(node) => node.ext.clone(),
+        _ => eyre::bail!("tips-simulator must be run with the node command"),
+    };
+    let playground_enabled = config.has_playground();
+    let (cli, exex_config, mempool_config, chain_block_time) = config.into_parts(cli);
     let max_concurrent_simulations = exex_config.max_concurrent_simulations;
 
     info!(

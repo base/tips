@@ -18,11 +18,13 @@
 //! This will automatically try to detect the playground configuration and apply
 //! it to the tips-simulator startup settings.
 
-use super::Cli;
 use alloy_primitives::hex;
 use anyhow::{anyhow, Result};
-use clap::{parser::ValueSource, CommandFactory};
-use core::time::Duration;
+use clap::{CommandFactory, parser::ValueSource};
+use core::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    time::Duration,
+};
 use reth_cli::chainspec::ChainSpecParser;
 use reth_network_peers::TrustedPeer;
 use reth_optimism_chainspec::OpChainSpec;
@@ -31,11 +33,12 @@ use secp256k1::SecretKey;
 use serde_json::Value;
 use std::{
     fs::read_to_string,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::Arc,
 };
 use url::{Host, Url};
+
+use super::Cli;
 
 #[derive(Clone, Debug)]
 pub struct PlaygroundOptions {
@@ -107,13 +110,14 @@ impl PlaygroundOptions {
     }
 
     /// Apply playground defaults to the simulator config, only where not user-provided.
-    pub fn apply_to_cli(&self, cli: &mut Cli) {
-        let Commands::Node(node) = &mut cli.command else {
-            return;
+    pub fn apply(self, cli: Cli) -> Cli {
+        let mut cli = cli;
+        let Commands::Node(ref mut node) = cli.command else {
+            return cli;
         };
 
         if !node.network.trusted_peers.contains(&self.trusted_peer) {
-            node.network.trusted_peers.push(self.trusted_peer.clone());
+            node.network.trusted_peers.push(self.trusted_peer);
         }
 
         let matches = Cli::command().get_matches();
@@ -122,7 +126,7 @@ impl PlaygroundOptions {
             .expect("validated that we are in the node command");
 
         if matches.value_source("chain").is_default() {
-            node.chain = Arc::clone(&self.chain);
+            node.chain = self.chain;
         }
 
         if matches.value_source("http").is_default() {
@@ -146,18 +150,18 @@ impl PlaygroundOptions {
         }
 
         if matches.value_source("auth_jwtsecret").is_default() {
-            node.rpc.auth_jwtsecret = Some(self.authrpc_jwtsecret.clone());
+            node.rpc.auth_jwtsecret = Some(self.authrpc_jwtsecret);
         }
 
         if matches.value_source("disable_discovery").is_default() {
             node.network.discovery.disable_discovery = true;
         }
 
-        if matches.value_source("trusted_peers").is_default()
-            && !node.network.trusted_peers.contains(&self.trusted_peer)
-        {
-            node.network.trusted_peers.push(self.trusted_peer.clone());
+        if matches.value_source("chain_block_time").is_default() {
+            node.ext.chain_block_time = self.chain_block_time.as_millis() as u64;
         }
+
+        cli
     }
 }
 
@@ -208,8 +212,19 @@ fn pick_preferred_port(preferred: u16, fallback_range: std::ops::Range<u16>) -> 
 }
 
 fn is_port_free(port: u16) -> bool {
-    let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-    std::net::TcpListener::bind(socket).is_ok()
+    let addrs = [
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port),
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port),
+    ];
+
+    for addr in addrs {
+        match std::net::TcpListener::bind(addr) {
+            Ok(listener) => drop(listener),
+            Err(_) => return false,
+        }
+    }
+
+    true
 }
 
 fn extract_chain_block_time(basepath: &Path) -> Result<Duration> {
