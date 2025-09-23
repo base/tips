@@ -2,8 +2,8 @@ services:
   ingress-rpc:
     build:
       context: .
-      dockerfile: crates/ingress/Dockerfile
-    container_name: tips-ingress
+      dockerfile: crates/ingress-rpc/Dockerfile
+    container_name: tips-ingress-rpc
     ports:
       - "8080:8080"
     env_file:
@@ -35,6 +35,15 @@ services:
     ports:
       - "3000:3000"
     container_name: tips-ui
+    env_file:
+      - .env.docker
+    restart: unless-stopped
+
+  ingress-writer:
+    build:
+      context: .
+      dockerfile: crates/ingress-writer/Dockerfile
+    container_name: tips-ingress-writer
     env_file:
       - .env.docker
     restart: unless-stopped
