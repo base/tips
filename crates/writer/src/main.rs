@@ -11,7 +11,7 @@ use rdkafka::{
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
 use tokio::time::Duration;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -59,7 +59,7 @@ where
         })
     }
 
-    async fn insert_bundle(&self) -> Result<Uuid> {
+    async fn insert_bundle(&self) -> Result<(Uuid, EthSendBundle)> {
         match self.queue_consumer.recv().await {
             Ok(message) => {
                 let payload = message
@@ -93,22 +93,25 @@ where
                     .await
                     .map_err(|e| anyhow::anyhow!("Failed to insert bundle after retries: {e}"))?;
 
-                if let Err(e) = self
-                    .publisher
-                    .publish(MempoolEvent::Created {
-                        bundle_id,
-                        bundle: bundle.clone(),
-                    })
-                    .await
-                {
-                    error!(error = %e, bundle_id = %bundle_id, "Failed to publish MempoolEvent::Created");
-                }
-                Ok(bundle_id)
+                Ok((bundle_id, bundle))
             }
             Err(e) => {
                 error!(error = %e, "Error receiving message from Kafka");
                 Err(e.into())
             }
+        }
+    }
+
+    async fn publish(&self, bundle_id: Uuid, bundle: &EthSendBundle) {
+        if let Err(e) = self
+            .publisher
+            .publish(MempoolEvent::Created {
+                bundle_id,
+                bundle: bundle.clone(),
+            })
+            .await
+        {
+            warn!(error = %e, bundle_id = %bundle_id, "Failed to publish MempoolEvent::Created");
         }
     }
 }
@@ -150,8 +153,9 @@ async fn main() -> Result<()> {
     );
     loop {
         match writer.insert_bundle().await {
-            Ok(bundle_id) => {
+            Ok((bundle_id, bundle)) => {
                 info!(bundle_id = %bundle_id, "Successfully inserted bundle");
+                writer.publish(bundle_id, &bundle).await;
             }
             Err(e) => {
                 error!(error = %e, "Failed to process bundle");
