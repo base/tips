@@ -138,8 +138,11 @@ async fn main() -> Result<()> {
 
     let publisher = KafkaMempoolEventPublisher::new(kafka_producer, "tips-audit".to_string());
     let consumer = config.create()?;
-    let datastore = PostgresDatastore::connect(args.database_url).await?;
-    let writer = IngressWriter::new(consumer, args.kafka_topic.clone(), datastore, publisher)?;
+
+    let bundle_store = PostgresDatastore::connect(args.database_url).await?;
+    bundle_store.run_migrations().await?;
+
+    let writer = IngressWriter::new(consumer, args.kafka_topic.clone(), bundle_store, publisher)?;
 
     info!(
         "Ingress Writer service started, consuming from topic: {}",

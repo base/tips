@@ -3,7 +3,6 @@ use alloy_primitives::{B256, Bytes};
 use alloy_provider::network::eip2718::Decodable2718;
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
-use jsonrpsee::types::ErrorObject;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
@@ -95,11 +94,6 @@ where
         let sender = transaction.signer();
         if let Err(e) = self.queue.publish(&bundle, sender).await {
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
-            return Err(ErrorObject::owned(
-                12,
-                "Failed to queue bundle",
-                Some(sender.to_string()),
-            ));
         }
 
         info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());

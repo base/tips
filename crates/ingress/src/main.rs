@@ -102,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         .set("message.timeout.ms", "5000")
         .create()?;
 
-    let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic.clone());
+    let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic);
 
     let service = IngressService::new(provider, config.dual_write_mempool, queue);
     let bind_addr = format!("{}:{}", config.address, config.port);
