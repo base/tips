@@ -80,14 +80,14 @@ deps:
 audit:
     cargo run --bin tips-audit
 
-ingress:
-    cargo run --bin tips-ingress
+ingress-rpc:
+    cargo run --bin tips-ingress-rpc
 
 maintenance:
     cargo run --bin tips-maintenance
 
-writer:
-    cargo run --bin tips-writer
+ingress-writer:
+    cargo run --bin tips-ingress-writer
 
 ui:
     cd ui && yarn dev

@@ -49,7 +49,7 @@ struct Config {
     #[arg(
         long,
         env = "TIPS_INGRESS_KAFKA_QUEUE_TOPIC",
-        default_value = "tips-ingress"
+        default_value = "tips-ingress-rpc"
     )]
     queue_topic: String,
 

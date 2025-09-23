@@ -1,12 +1,12 @@
 [workspace]
-members = ["crates/datastore", "crates/audit", "crates/ingress", "crates/maintenance", "crates/writer"]
+members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-datastore = { path = "crates/datastore" }
 tips-audit = { path = "crates/audit" }
 tips-maintenance = { path = "crates/maintenance" }
-tips-writer = { path = "crates/writer" }
+tips-ingress-writer = { path = "crates/ingress-writer" }
 
 
 # Reth

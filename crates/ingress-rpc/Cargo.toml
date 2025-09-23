@@ -1,10 +1,10 @@
 [package]
-name = "tips-ingress"
+name = "tips-ingress-rpc"
 version = "0.1.0"
 edition = "2024"
 
 [[bin]]
-name = "tips-ingress"
+name = "tips-ingress-rpc"
 path = "src/main.rs"
 
 [dependencies]

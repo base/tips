@@ -23,7 +23,7 @@ struct Args {
     #[arg(long, env = "TIPS_WRITER_KAFKA_BROKERS")]
     kafka_brokers: String,
 
-    #[arg(long, env = "TIPS_WRITER_KAFKA_TOPIC", default_value = "tips-ingress")]
+    #[arg(long, env = "TIPS_WRITER_KAFKA_TOPIC", default_value = "-rpc")]
     kafka_topic: String,
 
     #[arg(long, env = "TIPS_WRITER_KAFKA_GROUP_ID")]

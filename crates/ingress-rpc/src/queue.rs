@@ -98,7 +98,7 @@ mod tests {
             .create()
             .expect("Producer creation failed");
 
-        let publisher = KafkaQueuePublisher::new(producer, "tips-ingress".to_string());
+        let publisher = KafkaQueuePublisher::new(producer, "tips-ingress-rpc".to_string());
         let bundle = create_test_bundle();
         let sender = Address::ZERO;
 
