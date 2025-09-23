@@ -78,3 +78,36 @@ impl QueuePublisher for KafkaQueuePublisher {
         self.enqueue_bundle(bundle, sender).await
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rdkafka::config::ClientConfig;
+    use tokio::time::{Duration, Instant};
+
+    fn create_test_bundle() -> EthSendBundle {
+        EthSendBundle::default()
+    }
+
+    #[tokio::test]
+    async fn test_backoff_retry_logic() {
+        // use an invalid broker address to trigger the backoff logic
+        let producer = ClientConfig::new()
+            .set("bootstrap.servers", "localhost:9999")
+            .set("message.timeout.ms", "100")
+            .create()
+            .expect("Producer creation failed");
+
+        let publisher = KafkaQueuePublisher::new(producer, "tips-ingress".to_string());
+        let bundle = create_test_bundle();
+        let sender = Address::ZERO;
+
+        let start = Instant::now();
+        let result = publisher.enqueue_bundle(&bundle, sender).await;
+        let elapsed = start.elapsed();
+
+        // the backoff tries at minimum 100ms, so verify we tried at least once
+        assert!(result.is_err());
+        assert!(elapsed >= Duration::from_millis(100));
+    }
+}
