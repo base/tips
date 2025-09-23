@@ -6,7 +6,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ ./crates/
 COPY .sqlx/ ./.sqlx/
 
-RUN cargo build --release --bin tips-ingress
+RUN cargo build --bin tips-ingress
 
 FROM debian:bookworm
 
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y libssl3 && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY --from=builder /app/target/release/tips-ingress /app/tips-ingress
+COPY --from=builder /app/target/debug/tips-ingress /app/tips-ingress
 
 EXPOSE 3000
 

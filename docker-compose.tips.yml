@@ -1,5 +1,5 @@
 services:
-  tips-ingress:
+  ingress-rpc:
     build:
       context: .
       dockerfile: crates/ingress/Dockerfile
@@ -10,7 +10,7 @@ services:
       - .env.docker
     restart: unless-stopped
 
-  tips-audit:
+  audit:
     build:
       context: .
       dockerfile: crates/audit/Dockerfile
@@ -19,7 +19,7 @@ services:
       - .env.docker
     restart: unless-stopped
 
-  tips-maintenance:
+  maintenance:
     build:
       context: .
       dockerfile: crates/maintenance/Dockerfile
@@ -28,7 +28,7 @@ services:
       - .env.docker
     restart: unless-stopped
 
-  tips-ui:
+  ui:
     build:
       context: .
       dockerfile: ui/Dockerfile
