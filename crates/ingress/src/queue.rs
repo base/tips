@@ -2,7 +2,9 @@ use alloy_primitives::Address;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::{Error, Result};
 use async_trait::async_trait;
+use backon::{ExponentialBuilder, Retryable};
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use tokio::time::Duration;
 use tracing::{error, info};
 
 /// A queue to buffer transactions
@@ -30,33 +32,43 @@ impl KafkaQueuePublisher {
         let key = sender.to_string();
         let payload = serde_json::to_vec(bundle)?;
 
-        let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
+        let enqueue = || async {
+            let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
-        match self
-            .producer
-            .send(record, tokio::time::Duration::from_secs(5))
+            match self.producer.send(record, Duration::from_secs(5)).await {
+                Ok((partition, offset)) => {
+                    info!(
+                        sender = %sender,
+                        partition = partition,
+                        offset = offset,
+                        topic = %self.topic,
+                        "Successfully enqueued bundle"
+                    );
+                    Ok(())
+                }
+                Err((err, _)) => {
+                    error!(
+                        sender = %sender,
+                        error = %err,
+                        topic = %self.topic,
+                        "Failed to enqueue bundle"
+                    );
+                    Err(anyhow::anyhow!("Failed to enqueue bundle: {}", err))
+                }
+            }
+        };
+
+        enqueue
+            .retry(
+                &ExponentialBuilder::default()
+                    .with_min_delay(Duration::from_millis(100))
+                    .with_max_delay(Duration::from_secs(5))
+                    .with_max_times(3),
+            )
+            .notify(|err: &anyhow::Error, dur: Duration| {
+                info!("retrying to enqueue bundle {:?} after {:?}", err, dur);
+            })
             .await
-        {
-            Ok((partition, offset)) => {
-                info!(
-                    sender = %sender,
-                    partition = partition,
-                    offset = offset,
-                    topic = %self.topic,
-                    "Successfully enqueued bundle"
-                );
-                Ok(())
-            }
-            Err((err, _)) => {
-                error!(
-                    sender = %sender,
-                    error = %err,
-                    topic = %self.topic,
-                    "Failed to enqueue bundle"
-                );
-                Err(anyhow::anyhow!("Failed to enqueue bundle: {}", err))
-            }
-        }
     }
 }
 
