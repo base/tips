@@ -12,9 +12,11 @@ use url::Url;
 
 mod queue;
 mod service;
+mod writer;
 use queue::KafkaQueuePublisher;
 use service::{IngressApiServer, IngressService};
 use tips_datastore::PostgresDatastore;
+use writer::DatastoreWriter;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -118,13 +120,14 @@ async fn main() -> anyhow::Result<()> {
 
     let publisher = KafkaMempoolEventPublisher::new(kafka_producer, config.kafka_topic);
     let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic);
+    let writer = DatastoreWriter::new(bundle_store.clone());
 
     let service = IngressService::new(
         provider,
-        bundle_store,
         config.dual_write_mempool,
         publisher,
         queue,
+        writer,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 

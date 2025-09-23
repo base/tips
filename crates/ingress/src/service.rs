@@ -12,10 +12,10 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use tips_audit::{MempoolEvent, MempoolEventPublisher};
-use tips_datastore::BundleDatastore;
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
+use crate::writer::Writer;
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -32,38 +32,38 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Store, Publisher, Queue> {
+pub struct IngressService<Publisher, Queue, W> {
     provider: RootProvider<Optimism>,
-    datastore: Store,
     dual_write_mempool: bool,
     publisher: Publisher,
     queue: Queue,
+    writer: W,
 }
 
-impl<Store, Publisher, Queue> IngressService<Store, Publisher, Queue> {
+impl<Publisher, Queue, W> IngressService<Publisher, Queue, W> {
     pub fn new(
         provider: RootProvider<Optimism>,
-        datastore: Store,
         dual_write_mempool: bool,
         publisher: Publisher,
         queue: Queue,
+        writer: W,
     ) -> Self {
         Self {
             provider,
-            datastore,
             dual_write_mempool,
             publisher,
             queue,
+            writer,
         }
     }
 }
 
 #[async_trait]
-impl<Store, Publisher, Queue> IngressApiServer for IngressService<Store, Publisher, Queue>
+impl<Publisher, Queue, W> IngressApiServer for IngressService<Publisher, Queue, W>
 where
-    Store: BundleDatastore + Sync + Send + 'static,
     Publisher: MempoolEventPublisher + Sync + Send + 'static,
     Queue: QueuePublisher + Sync + Send + 'static,
+    W: Writer + Sync + Send + 'static,
 {
     async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
         warn!(
@@ -111,10 +111,9 @@ where
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
         }
 
-        // TODO: have DB Writer consume from the queue and move the insert_bundle logic there
         let result = self
-            .datastore
-            .insert_bundle(bundle.clone())
+            .writer
+            .write_bundle(bundle.clone())
             .await
             .map_err(|_e| ErrorObject::owned(11, "todo", Some(2)))?;
 

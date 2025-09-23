@@ -53,7 +53,7 @@ impl KafkaQueuePublisher {
                         topic = %self.topic,
                         "Failed to enqueue bundle"
                     );
-                    Err(anyhow::anyhow!("Failed to enqueue bundle: {}", err))
+                    Err(anyhow::anyhow!("Failed to enqueue bundle: {err}"))
                 }
             }
         };
