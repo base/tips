@@ -11,7 +11,6 @@ use jsonrpsee::{
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
-use tips_audit::{MempoolEvent, MempoolEventPublisher};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
@@ -31,33 +30,25 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Publisher, Queue> {
+pub struct IngressService<Queue> {
     provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
-    publisher: Publisher,
     queue: Queue,
 }
 
-impl<Publisher, Queue> IngressService<Publisher, Queue> {
-    pub fn new(
-        provider: RootProvider<Optimism>,
-        dual_write_mempool: bool,
-        publisher: Publisher,
-        queue: Queue,
-    ) -> Self {
+impl<Queue> IngressService<Queue> {
+    pub fn new(provider: RootProvider<Optimism>, dual_write_mempool: bool, queue: Queue) -> Self {
         Self {
             provider,
             dual_write_mempool,
-            publisher,
             queue,
         }
     }
 }
 
 #[async_trait]
-impl<Publisher, Queue> IngressApiServer for IngressService<Publisher, Queue>
+impl<Queue> IngressApiServer for IngressService<Queue>
 where
-    Publisher: MempoolEventPublisher + Sync + Send + 'static,
     Queue: QueuePublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {

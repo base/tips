@@ -6,15 +6,16 @@ use rdkafka::{
     config::ClientConfig,
     consumer::{Consumer, StreamConsumer},
     message::Message,
+    producer::FutureProducer,
 };
+use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
 use tokio::time::Duration;
 use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[derive(Parser)]
-#[command(name = "tips-writer")]
-#[command(about = "TIPS Writer Service - Consumes bundles from Kafka and writes to datastore")]
+#[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(long, env = "TIPS_WRITER_DATABASE_URL")]
     database_url: String,
@@ -33,24 +34,28 @@ struct Args {
 }
 
 /// IngressWriter consumes bundles sent from the Ingress service and writes them to the datastore
-pub struct IngressWriter<Store> {
+pub struct IngressWriter<Store, Publisher> {
     queue_consumer: StreamConsumer,
     datastore: Store,
+    publisher: Publisher,
 }
 
-impl<Store> IngressWriter<Store>
+impl<Store, Publisher> IngressWriter<Store, Publisher>
 where
     Store: BundleDatastore + Send + Sync + 'static,
+    Publisher: MempoolEventPublisher + Sync + Send + 'static,
 {
     pub fn new(
         queue_consumer: StreamConsumer,
         queue_topic: String,
         datastore: Store,
+        publisher: Publisher,
     ) -> Result<Self> {
         queue_consumer.subscribe(&[queue_topic.as_str()])?;
         Ok(Self {
             queue_consumer,
             datastore,
+            publisher,
         })
     }
 
@@ -75,7 +80,7 @@ where
                         .map_err(|e| anyhow::anyhow!("Failed to insert bundle: {e}"))
                 };
 
-                insert
+                let bundle_id = insert
                     .retry(
                         &ExponentialBuilder::default()
                             .with_min_delay(Duration::from_millis(100))
@@ -86,7 +91,19 @@ where
                         info!("Retrying to insert bundle {:?} after {:?}", err, dur);
                     })
                     .await
-                    .map_err(|e| anyhow::anyhow!("Failed to insert bundle after retries: {e}"))
+                    .map_err(|e| anyhow::anyhow!("Failed to insert bundle after retries: {e}"))?;
+
+                if let Err(e) = self
+                    .publisher
+                    .publish(MempoolEvent::Created {
+                        bundle_id,
+                        bundle: bundle.clone(),
+                    })
+                    .await
+                {
+                    error!(error = %e, bundle_id = %bundle_id, "Failed to publish MempoolEvent::Created");
+                }
+                Ok(bundle_id)
             }
             Err(e) => {
                 error!(error = %e, "Error receiving message from Kafka");
@@ -114,9 +131,15 @@ async fn main() -> Result<()> {
         .set("session.timeout.ms", "6000")
         .set("enable.auto.commit", "true");
 
+    let kafka_producer: FutureProducer = ClientConfig::new()
+        .set("bootstrap.servers", &args.kafka_brokers)
+        .set("message.timeout.ms", "5000")
+        .create()?;
+
+    let publisher = KafkaMempoolEventPublisher::new(kafka_producer, "tips-audit".to_string());
     let consumer = config.create()?;
     let datastore = PostgresDatastore::connect(args.database_url).await?;
-    let writer = IngressWriter::new(consumer, args.kafka_topic.clone(), datastore)?;
+    let writer = IngressWriter::new(consumer, args.kafka_topic.clone(), datastore, publisher)?;
 
     info!(
         "Ingress Writer service started, consuming from topic: {}",

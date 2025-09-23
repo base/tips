@@ -3,10 +3,8 @@ use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
-use rdkafka::consumer::Consumer;
 use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
-use tips_audit::{KafkaMempoolEventPublisher, create_kafka_consumer};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -99,20 +97,14 @@ async fn main() -> anyhow::Result<()> {
         .network::<Optimism>()
         .connect_http(config.mempool_url);
 
-    let kafka_producer: FutureProducer = ClientConfig::new()
-        .set("bootstrap.servers", &config.kafka_brokers)
-        .set("message.timeout.ms", "5000")
-        .create()?;
-
     let queue_producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &config.kafka_brokers)
         .set("message.timeout.ms", "5000")
         .create()?;
 
-    let publisher = KafkaMempoolEventPublisher::new(kafka_producer, config.kafka_topic);
     let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic.clone());
 
-    let service = IngressService::new(provider, config.dual_write_mempool, publisher, queue);
+    let service = IngressService::new(provider, config.dual_write_mempool, queue);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

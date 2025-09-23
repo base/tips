@@ -86,5 +86,8 @@ ingress:
 maintenance:
     cargo run --bin tips-maintenance
 
+writer:
+    cargo run --bin tips-writer
+
 ui:
     cd ui && yarn dev

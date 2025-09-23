@@ -7146,6 +7146,7 @@ dependencies = [
  "dotenvy",
  "rdkafka",
  "serde_json",
+ "tips-audit",
  "tips-datastore",
  "tokio",
  "tracing",
