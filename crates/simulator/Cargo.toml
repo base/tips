@@ -54,6 +54,14 @@ tokio-util = { version = "0.7", features = ["time"] }
 hex = "0.4"
 rdkafka.workspace = true
 revm-primitives = { version = "3.1.1", default-features = false }
+shellexpand = "3.1"
+rand = "0.8"
+secp256k1 = "0.30"
+serde_yaml = "0.9"
+reth-network = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-network-peers = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+url = "2.5"
 
 [dev-dependencies]
 tokio-test = "0.4.4"

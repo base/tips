@@ -1,16 +1,14 @@
-use clap::Parser;
 use tips_simulator::{
     ListenersWithWorkers,
-    SimulatorNodeConfig,
-    MempoolListenerConfig
+    MempoolListenerConfig,
+    config::parse_config_with_playground,
 };
 use tracing::info;
 
-#[tokio::main]
-async fn main() -> eyre::Result<()> {
+fn main() -> eyre::Result<()> {
     dotenvy::dotenv().ok();
 
-    let config = SimulatorNodeConfig::parse();
+    let config = parse_config_with_playground()?;
     let exex_config: tips_simulator::types::ExExSimulationConfig = (&config).into();
     let mempool_config: MempoolListenerConfig = (&config).into();
     
@@ -20,6 +18,7 @@ async fn main() -> eyre::Result<()> {
         timeout_ms = config.simulation_timeout_ms,
         kafka_brokers = %config.kafka_brokers,
         kafka_topic = %config.kafka_topic,
+        playground = config.playground.is_some(),
         "Starting reth node with both ExEx and mempool event listeners"
     );
 

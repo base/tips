@@ -89,5 +89,11 @@ maintenance:
 ingress-writer:
     cargo run --bin tips-ingress-writer
 
+simulator:
+    cargo run --bin tips-simulator node
+
+simulator-playground dir="$HOME/.playground/devnet/":
+    cargo run --bin tips-simulator -- --builder.playground {{ dir }} node
+
 ui:
     cd ui && yarn dev
