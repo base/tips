@@ -1,13 +1,15 @@
 pub mod playground;
 
 pub use playground::PlaygroundOptions;
+pub type Cli = OpCli<OpChainSpecParser, NoArgs>;
 
-use crate::types::ExExSimulationConfig;
 use crate::listeners::MempoolListenerConfig;
-use anyhow::{Result, anyhow};
-use clap::Parser;
-use eyre;
-use tracing::info;
+use crate::types::ExExSimulationConfig;
+use anyhow::{anyhow, Result};
+use clap::{CommandFactory, Parser};
+use playground::IsDefaultSource;
+use reth_cli_commands::node::NoArgs;
+use reth_optimism_cli::{chainspec::OpChainSpecParser, Cli as OpCli};
 
 /// Combined configuration for reth node with simulator ExEx
 #[derive(Parser, Debug)]
@@ -15,10 +17,14 @@ use tracing::info;
 pub struct SimulatorNodeConfig {
     /// Reth node arguments
     #[command(flatten)]
-    pub node: reth::cli::Cli,
+    pub node: Cli,
 
     /// Data directory for simulator
-    #[arg(long, env = "TIPS_SIMULATOR_DATADIR", default_value = "~/.tips-simulator-reth")]
+    #[arg(
+        long,
+        env = "TIPS_SIMULATOR_DATADIR",
+        default_value = "~/.tips-simulator-reth"
+    )]
     pub datadir: std::path::PathBuf,
 
     /// PostgreSQL database connection URL for simulator
@@ -34,16 +40,32 @@ pub struct SimulatorNodeConfig {
     pub simulation_timeout_ms: u64,
 
     /// Kafka brokers for mempool events (comma-separated)
-    #[arg(long, env = "TIPS_SIMULATOR_KAFKA_BROKERS", default_value = "localhost:9092")]
+    #[arg(
+        long,
+        env = "TIPS_SIMULATOR_KAFKA_BROKERS",
+        default_value = "localhost:9092"
+    )]
     pub kafka_brokers: String,
 
     /// Kafka topic for mempool events
-    #[arg(long, env = "TIPS_SIMULATOR_KAFKA_TOPIC", default_value = "mempool-events")]
+    #[arg(
+        long,
+        env = "TIPS_SIMULATOR_KAFKA_TOPIC",
+        default_value = "mempool-events"
+    )]
     pub kafka_topic: String,
 
     /// Kafka consumer group ID
-    #[arg(long, env = "TIPS_SIMULATOR_KAFKA_GROUP_ID", default_value = "tips-simulator")]
+    #[arg(
+        long,
+        env = "TIPS_SIMULATOR_KAFKA_GROUP_ID",
+        default_value = "tips-simulator"
+    )]
     pub kafka_group_id: String,
+
+    /// Chain block time for simulator extensions
+    #[arg(long = "chain.block-time", default_value_t = 1000)]
+    pub chain_block_time: u64,
 
     /// Path to builder playground to automatically start up the node connected to it
     #[arg(
@@ -69,7 +91,11 @@ impl From<&SimulatorNodeConfig> for ExExSimulationConfig {
 impl From<&SimulatorNodeConfig> for MempoolListenerConfig {
     fn from(config: &SimulatorNodeConfig) -> Self {
         Self {
-            kafka_brokers: config.kafka_brokers.split(',').map(|s| s.trim().to_string()).collect(),
+            kafka_brokers: config
+                .kafka_brokers
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .collect(),
             kafka_topic: config.kafka_topic.clone(),
             kafka_group_id: config.kafka_group_id.clone(),
             database_url: config.database_url.clone(),
@@ -86,44 +112,71 @@ fn expand_path(s: &str) -> Result<std::path::PathBuf> {
 }
 
 /// Parse CLI args with playground configuration if specified
-pub fn parse_config_with_playground() -> eyre::Result<SimulatorNodeConfig> {
-    // Debug: print raw args
-    eprintln!("Raw args: {:?}", std::env::args().collect::<Vec<_>>());
-    
-    // First, parse just to check if playground is specified
-    let initial_config = SimulatorNodeConfig::parse();
-    
-    eprintln!("Parsed initial config, playground: {:?}", initial_config.playground);
-    
-    if let Some(ref playground_dir) = initial_config.playground {
-        eprintln!("Detected playground configuration, loading from: {}", playground_dir.display());
-        
-        // Load playground options
-        let options = PlaygroundOptions::new(playground_dir)
-            .map_err(|e| eyre::eyre!("Failed to load playground options: {}", e))?;
-        
-        // Get original args
-        let mut args: Vec<String> = std::env::args().collect();
-        
-        // Get playground args
-        let playground_args = options.to_cli_args();
-        eprintln!("Playground args to insert: {:?}", playground_args);
-        
-        // Find where to insert playground args (after "node" subcommand)
-        if let Some(node_pos) = args.iter().position(|arg| arg == "node") {
-            // Insert playground args right after "node"
-            // Insert in reverse order to maintain correct positions
-            for arg in playground_args.into_iter().rev() {
-                args.insert(node_pos + 1, arg);
-            }
+pub trait CliExt {
+    /// Populates default reth node args when `--builder.playground` is provided.
+    fn populate_defaults(self) -> Self;
+
+    /// Returns parsed config with defaults applied if applicable.
+    fn parsed() -> Self;
+}
+
+impl CliExt for SimulatorNodeConfig {
+    fn populate_defaults(mut self) -> Self {
+        let Some(ref playground_dir) = self.playground else {
+            return self;
+        };
+
+        let options = PlaygroundOptions::new(playground_dir).unwrap_or_else(|e| exit(e));
+        let matches = Self::command().get_matches();
+        let matches = matches
+            .subcommand_matches("node")
+            .expect("validated that we are in the node command");
+
+        options.apply_to_cli(&mut self.node);
+
+        if matches.value_source("chain_block_time").is_default() {
+            self.chain_block_time = options.chain_block_time().as_millis() as u64;
         }
-        
-        eprintln!("Final args with playground config: {:?}", args);
-        info!("Re-parsing with playground configuration arguments");
-        
-        // Re-parse with playground args included
-        Ok(SimulatorNodeConfig::parse_from(args))
-    } else {
-        Ok(initial_config)
+
+        self
     }
+
+    fn parsed() -> Self {
+        SimulatorNodeConfig::parse().populate_defaults()
+    }
+}
+
+impl SimulatorNodeConfig {
+    pub fn node_cli_mut(&mut self) -> &mut Cli {
+        &mut self.node
+    }
+
+    pub fn into_cli(self) -> Cli {
+        self.node
+    }
+
+    pub fn chain_block_time(&self) -> u64 {
+        self.chain_block_time
+    }
+
+    pub fn into_parts(self) -> (Cli, ExExSimulationConfig, MempoolListenerConfig, u64) {
+        let exex_config = (&self).into();
+        let mempool_config = (&self).into();
+        (
+            self.node,
+            exex_config,
+            mempool_config,
+            self.chain_block_time,
+        )
+    }
+
+    pub fn has_playground(&self) -> bool {
+        self.playground.is_some()
+    }
+}
+
+/// Following clap's convention, a failure to apply defaults exits non-zero.
+fn exit(error: anyhow::Error) -> ! {
+    eprintln!("{error}");
+    std::process::exit(-1);
 }

@@ -45,11 +45,13 @@ reth-node-builder.workspace = true
 reth-node-ethereum.workspace = true
 reth-revm.workspace = true
 reth-chainspec.workspace = true
-# reth-node-optimism is not available in v1.7.0, using regular node with op components
+# Optimism support for parsing chain specs
 reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 reth-optimism-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", features = ["serde", "serde-bincode-compat"] }
 reth-optimism-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 
 # Additional dependencies for simulation
 std-semaphore = "0.1"

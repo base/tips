@@ -22,10 +22,10 @@ create-migration name:
 sync: deps-reset
     ### DATABASE ###
     cargo sqlx prepare -D postgresql://postgres:postgres@localhost:5432/postgres --workspace --all --no-dotenv
-    cd ui && npx drizzle-kit pull --dialect=postgresql --url=postgresql://postgres:postgres@localhost:5432/postgres
-    cd ui && mv ./drizzle/relations.ts ./src/db/
-    cd ui && mv ./drizzle/schema.ts ./src/db/
-    cd ui && rm -rf ./drizzle
+    #cd ui && npx drizzle-kit pull --dialect=postgresql --url=postgresql://postgres:postgres@localhost:5432/postgres
+    #cd ui && mv ./drizzle/relations.ts ./src/db/
+    #cd ui && mv ./drizzle/schema.ts ./src/db/
+    #cd ui && rm -rf ./drizzle
     ###   ENV    ###
     just sync-env
     ###    REFORMAT   ###
@@ -93,7 +93,7 @@ simulator:
     cargo run --bin tips-simulator node
 
 simulator-playground:
-    cargo run --bin tips-simulator -- --builder.playground=$HOME/.playground/devnet/ node --datadir ~/.playground/devnet/tips-simulator
+    cargo run --bin tips-simulator node --builder.playground=$HOME/.playground/devnet/ --datadir ~/.playground/devnet/tips-simulator
 
 ui:
     cd ui && yarn dev

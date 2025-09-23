@@ -7,8 +7,8 @@ use async_trait::async_trait;
 use eyre::Result;
 use reth_evm::execute::BlockBuilder;
 use reth_evm::ConfigureEvm;
-use reth_evm::NextBlockEnvAttributes;
 use reth_node_api::FullNodeComponents;
+use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_provider::{HeaderProvider, StateProvider, StateProviderFactory};
 use reth_revm::{database::StateProviderDatabase, db::State};
 use std::collections::HashMap;
@@ -135,7 +135,7 @@ where
 impl<Node> SimulationEngine for RethSimulationEngine<Node>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     async fn simulate_bundle<S>(
         &self,
@@ -170,13 +170,13 @@ where
             .with_database(state_db)
             .with_bundle_update()
             .build();
-        let attributes = NextBlockEnvAttributes {
-            timestamp: header.timestamp() + BLOCK_TIME, // Optimism 2-second block time
+        let attributes = OpNextBlockEnvAttributes {
+            timestamp: header.timestamp() + BLOCK_TIME,
             suggested_fee_recipient: header.beneficiary(),
             prev_randao: B256::random(),
             gas_limit: header.gas_limit(),
             parent_beacon_block_root: header.parent_beacon_block_root(),
-            withdrawals: None,
+            extra_data: header.extra_data().clone(),
         };
 
         // Variables to track bundle execution

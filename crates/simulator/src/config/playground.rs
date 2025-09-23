@@ -18,20 +18,22 @@
 //! This will automatically try to detect the playground configuration and apply
 //! it to the tips-simulator startup settings.
 
+use super::Cli;
 use alloy_primitives::hex;
-use anyhow::{Result, anyhow};
-use reth_optimism_chainspec::OpChainSpec;
-use reth_optimism_cli::chainspec::OpChainSpecParser;
+use anyhow::{anyhow, Result};
+use clap::{parser::ValueSource, CommandFactory};
+use core::time::Duration;
 use reth_cli::chainspec::ChainSpecParser;
-use reth_network::config::SecretKey;
 use reth_network_peers::TrustedPeer;
+use reth_optimism_chainspec::OpChainSpec;
+use reth_optimism_cli::{chainspec::OpChainSpecParser, commands::Commands};
+use secp256k1::SecretKey;
 use serde_json::Value;
 use std::{
     fs::read_to_string,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::Arc,
-    time::Duration,
 };
 use url::{Host, Url};
 
@@ -39,9 +41,6 @@ use url::{Host, Url};
 pub struct PlaygroundOptions {
     /// Chain spec loaded from playground
     pub chain: Arc<OpChainSpec>,
-    
-    /// Path to the genesis file
-    pub genesis_path: String,
 
     /// HTTP RPC port
     pub http_port: u16,
@@ -75,36 +74,24 @@ impl PlaygroundOptions {
             ));
         }
 
-        let genesis_path = existing_path(path, "l2-genesis.json")?;
-        let chain = OpChainSpecParser::parse(&genesis_path)
+        let chain = OpChainSpecParser::parse(&existing_path(path, "l2-genesis.json")?)
             .map_err(|e| anyhow!("Failed to parse chain spec: {}", e))?;
 
         let authrpc_addr = Ipv4Addr::UNSPECIFIED.into();
         let http_port = pick_preferred_port(2222, 3000..9999);
-        eprintln!("Selected HTTP port: {}", http_port);
         let authrpc_jwtsecret = existing_path(path, "jwtsecret")?.into();
         let port = pick_preferred_port(30333, 30000..65535);
-        eprintln!("Selected P2P port: {}", port);
         let chain_block_time = extract_chain_block_time(path)?;
         let default_authrpc_port = extract_authrpc_port(path)?;
         let authrpc_port = pick_preferred_port(default_authrpc_port, 4000..9000);
-        eprintln!("Selected Auth RPC port: {}", authrpc_port);
-        let trusted_peer_port = extract_trusted_peer_port(path)?;
-        let trusted_peer_key = extract_deterministic_p2p_key(path)?;
-
-        // Create a trusted peer from the extracted information
         let trusted_peer = TrustedPeer::from_secret_key(
             Host::Ipv4(Ipv4Addr::LOCALHOST),
-            trusted_peer_port,
-            &trusted_peer_key,
+            extract_trusted_peer_port(path)?,
+            &extract_deterministic_p2p_key(path)?,
         );
-        
-        eprintln!("Trusted peer configured: {}", trusted_peer);
-        eprintln!("Chain block time: {:?}", chain_block_time);
 
         Ok(Self {
             chain,
-            genesis_path,
             http_port,
             authrpc_addr,
             authrpc_port,
@@ -115,52 +102,74 @@ impl PlaygroundOptions {
         })
     }
 
-    /// Get command line arguments that should be applied to reth node
-    pub fn to_cli_args(&self) -> Vec<String> {
-        let mut args = vec![];
-        
-        // Chain configuration
-        args.push("--chain".to_string());
-        args.push(self.genesis_path.clone());
-        
-        // HTTP RPC settings
-        args.push("--http".to_string());
-        args.push("--http.port".to_string());
-        args.push(self.http_port.to_string());
-        args.push("--http.addr".to_string());
-        args.push("127.0.0.1".to_string()); // Explicitly bind to localhost
-        
-        // Network settings
-        args.push("--port".to_string());
-        args.push(self.port.to_string());
-        args.push("--disable-discovery".to_string());
-        
-        // Add trusted peer
-        args.push("--trusted-peers".to_string());
-        args.push(self.trusted_peer.to_string());
-        
-        // Auth RPC settings
-        args.push("--authrpc.addr".to_string());
-        args.push(self.authrpc_addr.to_string());
-        args.push("--authrpc.port".to_string());
-        args.push(self.authrpc_port.to_string());
-        args.push("--authrpc.jwtsecret".to_string());
-        args.push(self.authrpc_jwtsecret.to_string_lossy().to_string());
-        
-        args
-    }
-    
-    /// Get the chain spec for use in the node builder
-    pub fn chain(&self) -> Arc<OpChainSpec> {
-        Arc::clone(&self.chain)
-    }
-    
-    /// Get the chain block time
     pub fn chain_block_time(&self) -> Duration {
         self.chain_block_time
     }
+
+    /// Apply playground defaults to the simulator config, only where not user-provided.
+    pub fn apply_to_cli(&self, cli: &mut Cli) {
+        let Commands::Node(node) = &mut cli.command else {
+            return;
+        };
+
+        if !node.network.trusted_peers.contains(&self.trusted_peer) {
+            node.network.trusted_peers.push(self.trusted_peer.clone());
+        }
+
+        let matches = Cli::command().get_matches();
+        let matches = matches
+            .subcommand_matches("node")
+            .expect("validated that we are in the node command");
+
+        if matches.value_source("chain").is_default() {
+            node.chain = Arc::clone(&self.chain);
+        }
+
+        if matches.value_source("http").is_default() {
+            node.rpc.http = true;
+        }
+
+        if matches.value_source("http_port").is_default() {
+            node.rpc.http_port = self.http_port;
+        }
+
+        if matches.value_source("port").is_default() {
+            node.network.port = self.port;
+        }
+
+        if matches.value_source("auth_addr").is_default() {
+            node.rpc.auth_addr = self.authrpc_addr;
+        }
+
+        if matches.value_source("auth_port").is_default() {
+            node.rpc.auth_port = self.authrpc_port;
+        }
+
+        if matches.value_source("auth_jwtsecret").is_default() {
+            node.rpc.auth_jwtsecret = Some(self.authrpc_jwtsecret.clone());
+        }
+
+        if matches.value_source("disable_discovery").is_default() {
+            node.network.discovery.disable_discovery = true;
+        }
+
+        if matches.value_source("trusted_peers").is_default()
+            && !node.network.trusted_peers.contains(&self.trusted_peer)
+        {
+            node.network.trusted_peers.push(self.trusted_peer.clone());
+        }
+    }
 }
 
+pub(crate) trait IsDefaultSource {
+    fn is_default(&self) -> bool;
+}
+
+impl IsDefaultSource for Option<ValueSource> {
+    fn is_default(&self) -> bool {
+        matches!(self, Some(ValueSource::DefaultValue)) || self.is_none()
+    }
+}
 
 fn existing_path(base: &Path, relative: &str) -> Result<String> {
     let path = base.join(relative);
@@ -192,7 +201,6 @@ fn pick_random_port(range: std::ops::Range<u16>) -> u16 {
 
 fn pick_preferred_port(preferred: u16, fallback_range: std::ops::Range<u16>) -> u16 {
     if !is_port_free(preferred) {
-        eprintln!("Port {} is not free, picking random port from range {:?}", preferred, fallback_range);
         return pick_random_port(fallback_range);
     }
 
@@ -200,18 +208,8 @@ fn pick_preferred_port(preferred: u16, fallback_range: std::ops::Range<u16>) -> 
 }
 
 fn is_port_free(port: u16) -> bool {
-    // Check if we can bind to the port on both localhost and all interfaces
-    // Different services bind to different addresses
-    
-    // Check all interfaces (0.0.0.0) - used by P2P and Auth RPC
-    let socket_all = SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), port);
-    let all_free = std::net::TcpListener::bind(socket_all).is_ok();
-    
-    // Check localhost (127.0.0.1) - used by HTTP RPC
-    let socket_local = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
-    let local_free = std::net::TcpListener::bind(socket_local).is_ok();
-    
-    all_free && local_free
+    let socket = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port);
+    std::net::TcpListener::bind(socket).is_ok()
 }
 
 fn extract_chain_block_time(basepath: &Path) -> Result<Duration> {
@@ -226,13 +224,7 @@ fn extract_chain_block_time(basepath: &Path) -> Result<Duration> {
 fn extract_deterministic_p2p_key(basepath: &Path) -> Result<SecretKey> {
     let key = read_to_string(existing_path(basepath, "enode-key-1.txt")?)?;
     let key_bytes = hex::decode(key.trim()).map_err(|e| anyhow!("Invalid hex key: {e}"))?;
-    
-    // Create secp256k1 secret key first
-    let secp_key = secp256k1::SecretKey::from_slice(&key_bytes)
-        .map_err(|e| anyhow!("Invalid secret key: {e}"))?;
-    
-    // Convert to reth's SecretKey type
-    Ok(SecretKey::from(secp_key))
+    SecretKey::from_slice(&key_bytes).map_err(|e| anyhow!("Invalid secret key: {e}"))
 }
 
 fn read_docker_compose(basepath: &Path) -> Result<serde_yaml::Value> {
@@ -270,7 +262,8 @@ fn extract_service_command_flag(basepath: &Path, service: &str, flag: &str) -> R
 fn extract_authrpc_port(basepath: &Path) -> Result<u16> {
     let builder_url = extract_service_command_flag(basepath, "rollup-boost", "--builder-url")?;
     let url = Url::parse(&builder_url).map_err(|e| anyhow!("Invalid builder-url: {e}"))?;
-    url.port().ok_or_else(|| anyhow!("missing builder-url port"))
+    url.port()
+        .ok_or_else(|| anyhow!("missing builder-url port"))
 }
 
 fn extract_trusted_peer_port(basepath: &Path) -> Result<u16> {
@@ -335,3 +328,4 @@ fn extract_trusted_peer_port(basepath: &Path) -> Result<u16> {
         .parse::<u16>()
         .map_err(|e| anyhow!("Invalid external port mapping value for op-geth: {e}"))
 }
+

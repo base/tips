@@ -7,9 +7,10 @@ pub mod types;
 pub mod worker_pool;
 
 use eyre::Result;
-use reth_evm::{ConfigureEvm, NextBlockEnvAttributes};
+use reth_evm::ConfigureEvm;
 use reth_exex::ExExContext;
 use reth_node_api::FullNodeComponents;
+use reth_optimism_evm::OpNextBlockEnvAttributes;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -39,7 +40,7 @@ pub type TipsMempoolEventListener<Node> =
 struct CommonListenerComponents<Node>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     datastore: Arc<tips_datastore::PostgresDatastore>,
     simulator: BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>,
@@ -55,7 +56,7 @@ async fn init_common_components<Node>(
 ) -> Result<CommonListenerComponents<Node>>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     let datastore = Arc::new(
         tips_datastore::PostgresDatastore::connect(database_url)
@@ -100,7 +101,7 @@ pub async fn init_exex_event_listener<Node>(
 ) -> Result<TipsExExEventListener<Node>>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     info!("Initializing ExEx event listener");
 
@@ -143,7 +144,7 @@ pub async fn init_mempool_event_listener<Node>(
 ) -> Result<TipsMempoolEventListener<Node>>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     info!("Initializing mempool event listener");
 
@@ -180,7 +181,7 @@ where
 pub struct ListenersWithWorkers<Node>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     worker_pool: Arc<
         SimulationWorkerPool<RethSimulationEngine<Node>, TipsSimulationPublisher, Node::Provider>,
@@ -192,7 +193,7 @@ where
 impl<Node> ListenersWithWorkers<Node>
 where
     Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = NextBlockEnvAttributes>,
+    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     /// Initialize both event listeners with a shared worker pool
     ///
