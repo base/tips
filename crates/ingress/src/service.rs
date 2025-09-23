@@ -32,21 +32,21 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Publisher, Queue, W> {
+pub struct IngressService<Publisher, Queue, DBWriter> {
     provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
     publisher: Publisher,
     queue: Queue,
-    writer: W,
+    writer: DBWriter,
 }
 
-impl<Publisher, Queue, W> IngressService<Publisher, Queue, W> {
+impl<Publisher, Queue, DBWriter> IngressService<Publisher, Queue, DBWriter> {
     pub fn new(
         provider: RootProvider<Optimism>,
         dual_write_mempool: bool,
         publisher: Publisher,
         queue: Queue,
-        writer: W,
+        writer: DBWriter,
     ) -> Self {
         Self {
             provider,
@@ -59,11 +59,11 @@ impl<Publisher, Queue, W> IngressService<Publisher, Queue, W> {
 }
 
 #[async_trait]
-impl<Publisher, Queue, W> IngressApiServer for IngressService<Publisher, Queue, W>
+impl<Publisher, Queue, DBWriter> IngressApiServer for IngressService<Publisher, Queue, DBWriter>
 where
     Publisher: MempoolEventPublisher + Sync + Send + 'static,
     Queue: QueuePublisher + Sync + Send + 'static,
-    W: Writer + Sync + Send + 'static,
+    DBWriter: Writer + Sync + Send + 'static,
 {
     async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
         warn!(
@@ -111,9 +111,10 @@ where
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
         }
 
+        // DBWriter consumes bundles from the queue and inserts them into the database
         let result = self
             .writer
-            .write_bundle(bundle.clone())
+            .insert_bundle()
             .await
             .map_err(|_e| ErrorObject::owned(11, "todo", Some(2)))?;
 

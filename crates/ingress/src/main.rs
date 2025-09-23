@@ -3,9 +3,10 @@ use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
+use rdkafka::consumer::Consumer;
 use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
-use tips_audit::KafkaMempoolEventPublisher;
+use tips_audit::{KafkaMempoolEventPublisher, create_kafka_consumer};
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -119,8 +120,16 @@ async fn main() -> anyhow::Result<()> {
         .create()?;
 
     let publisher = KafkaMempoolEventPublisher::new(kafka_producer, config.kafka_topic);
-    let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic);
-    let writer = DatastoreWriter::new(bundle_store.clone());
+    let queue = KafkaQueuePublisher::new(queue_producer, config.queue_topic.clone());
+
+    let queue_consumer = create_kafka_consumer(&config.kafka_brokers, config.queue_topic.as_str())?;
+    queue_consumer.subscribe(&[config.queue_topic.as_str()])?;
+
+    let writer = DatastoreWriter::new(
+        queue_consumer,
+        config.queue_topic.clone(),
+        bundle_store,
+    )?;
 
     let service = IngressService::new(
         provider,
