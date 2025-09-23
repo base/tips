@@ -7084,7 +7084,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tips-ingress"
+name = "tips-ingress-rpc"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus",
@@ -7110,6 +7110,26 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.20",
  "url",
+]
+
+[[package]]
+name = "tips-ingress-writer"
+version = "0.1.0"
+dependencies = [
+ "alloy-rpc-types-mev",
+ "anyhow",
+ "async-trait",
+ "backon",
+ "clap",
+ "dotenvy",
+ "rdkafka",
+ "serde_json",
+ "tips-audit",
+ "tips-datastore",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+ "uuid",
 ]
 
 [[package]]

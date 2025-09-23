@@ -19,11 +19,14 @@ Event streaming and archival system that:
 - Archives bundle history to S3 for long-term storage
 - See [S3 Storage Format](docs/AUDIT_S3_FORMAT.md) for data structure details
 
-### 🔌 Ingress (`crates/ingress`)
+### 🔌 Ingress RPC (`crates/ingress-rpc`)
 The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
 
 ### 🔨 Maintenance (`crates/maintenance`)
 A service that maintains the health of the TIPS DataStore, by removing stale or included bundles.
+
+### ✍️ Ingress Writer (`crates/ingress-writer`)
+A service that consumes bundles from Kafka and persists them to the datastore.
 
 ### 🖥️ UI (`ui`)
 A debug UI for viewing the state of the bundle store and S3.
