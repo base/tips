@@ -125,11 +125,7 @@ async fn main() -> anyhow::Result<()> {
     let queue_consumer = create_kafka_consumer(&config.kafka_brokers, config.queue_topic.as_str())?;
     queue_consumer.subscribe(&[config.queue_topic.as_str()])?;
 
-    let writer = DatastoreWriter::new(
-        queue_consumer,
-        config.queue_topic.clone(),
-        bundle_store,
-    )?;
+    let writer = DatastoreWriter::new(queue_consumer, config.queue_topic.clone(), bundle_store)?;
 
     let service = IngressService::new(
         provider,

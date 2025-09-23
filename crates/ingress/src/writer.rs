@@ -1,12 +1,14 @@
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
 use async_trait::async_trait;
+use backon::{ExponentialBuilder, Retryable};
 use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::Message,
 };
 use tips_datastore::BundleDatastore;
-use tracing::{debug, error};
+use tokio::time::Duration;
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[async_trait]
@@ -52,10 +54,25 @@ where
                     "Received bundle from queue"
                 );
 
-                self.datastore
-                    .insert_bundle(bundle)
+                let insert = || async {
+                    self.datastore
+                        .insert_bundle(bundle.clone())
+                        .await
+                        .map_err(|e| anyhow::anyhow!("Failed to insert bundle: {e}"))
+                };
+
+                insert
+                    .retry(
+                        &ExponentialBuilder::default()
+                            .with_min_delay(Duration::from_millis(100))
+                            .with_max_delay(Duration::from_secs(5))
+                            .with_max_times(3),
+                    )
+                    .notify(|err: &anyhow::Error, dur: Duration| {
+                        info!("Retrying to insert bundle {:?} after {:?}", err, dur);
+                    })
                     .await
-                    .map_err(|_e| anyhow::anyhow!("Failed to insert bundle"))
+                    .map_err(|e| anyhow::anyhow!("Failed to insert bundle after retries: {e}"))
             }
             Err(e) => {
                 error!(error = %e, "Error receiving message from Kafka");
