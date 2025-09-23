@@ -41,10 +41,7 @@ function createS3Client(): S3Client {
 
 const s3Client = createS3Client();
 
-const BUCKET_NAME = process.env.TIPS_UI_S3_BUCKET_NAME;
-if (process.env.TIPS_UI_S3_BUCKET_NAME === undefined) {
-  throw new Error("You must specify a valid bucket");
-}
+const BUCKET_NAME = process.env.TIPS_UI_S3_BUCKET_NAME || "tips";
 
 export interface TransactionMetadata {
   bundle_ids: string[];

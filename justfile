@@ -27,8 +27,48 @@ sync: deps-reset
     cd ui && mv ./drizzle/schema.ts ./src/db/
     cd ui && rm -rf ./drizzle
     ###   ENV    ###
+    just sync-env
+    ###    REFORMAT   ###
+    just fix
+
+sync-env:
     cp .env.example .env
     cp .env.example ./ui/.env
+    cp .env.example .env.docker
+    # Change kafka ports
+    sed -i '' 's/localhost:9092/host.docker.internal:9094/g' ./.env.docker
+    # Change other dependencies
+    sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
+
+stop-all:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && rm -rf data/
+
+# Start every service running in docker, useful for demos
+start-all: stop-all
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
+
+# Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
+start-except programs: stop-all
+    #!/bin/bash
+    all_services=(postgres kafka kafka-setup minio minio-setup ingress-rpc audit maintenance ui)
+    exclude_services=({{ programs }})
+    
+    # Create result array with services not in exclude list
+    result_services=()
+    for service in "${all_services[@]}"; do
+        skip=false
+        for exclude in "${exclude_services[@]}"; do
+            if [[ "$service" == "$exclude" ]]; then
+                skip=true
+                break
+            fi
+        done
+        if [[ "$skip" == false ]]; then
+            result_services+=("$service")
+        fi
+    done
+    
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
 ### RUN SERVICES ###
 deps-reset:
