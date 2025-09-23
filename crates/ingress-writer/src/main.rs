@@ -17,23 +17,23 @@ use uuid::Uuid;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, env = "TIPS_WRITER_DATABASE_URL")]
+    #[arg(long, env = "TIPS_INGRESS_WRITER_DATABASE_URL")]
     database_url: String,
 
-    #[arg(long, env = "TIPS_WRITER_KAFKA_BROKERS")]
+    #[arg(long, env = "TIPS_INGRESS_WRITER_KAFKA_BROKERS")]
     kafka_brokers: String,
 
     #[arg(
         long,
-        env = "TIPS_WRITER_KAFKA_TOPIC",
+        env = "TIPS_INGRESS_WRITER_KAFKA_TOPIC",
         default_value = "tips-ingress-rpc"
     )]
     kafka_topic: String,
 
-    #[arg(long, env = "TIPS_WRITER_KAFKA_GROUP_ID")]
+    #[arg(long, env = "TIPS_INGRESS_WRITER_KAFKA_GROUP_ID")]
     kafka_group_id: String,
 
-    #[arg(long, env = "TIPS_WRITER_LOG_LEVEL", default_value = "info")]
+    #[arg(long, env = "TIPS_INGRESS_WRITER_LOG_LEVEL", default_value = "info")]
     log_level: String,
 }
 
