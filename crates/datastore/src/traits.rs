@@ -1,4 +1,6 @@
-use crate::postgres::{BundleFilter, BundleWithMetadata, BundleWithLatestSimulation, Simulation, StateDiff};
+use crate::postgres::{
+    BundleFilter, BundleWithLatestSimulation, BundleWithMetadata, Simulation, StateDiff,
+};
 use alloy_primitives::TxHash;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
@@ -41,5 +43,8 @@ pub trait BundleDatastore: Send + Sync {
 
     /// Select bundles with their latest simulation
     /// Only bundles that have at least one simulation are returned
-    async fn select_bundles_with_latest_simulation(&self, filter: BundleFilter) -> Result<Vec<BundleWithLatestSimulation>>;
+    async fn select_bundles_with_latest_simulation(
+        &self,
+        filter: BundleFilter,
+    ) -> Result<Vec<BundleWithLatestSimulation>>;
 }

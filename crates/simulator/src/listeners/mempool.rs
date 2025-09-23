@@ -2,20 +2,20 @@ use crate::engine::SimulationEngine;
 use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationTask, SimulationWorkerPool};
+use alloy_primitives::B256;
 use eyre::Result;
 use rdkafka::{
     config::ClientConfig,
     consumer::{Consumer, StreamConsumer},
     message::Message,
 };
+use reth_node_api::FullNodeComponents;
+use reth_provider::{BlockNumReader, HeaderProvider};
+use std::sync::Arc;
+use std::time::Duration;
+use tips_audit::types::MempoolEvent;
 use tokio::sync::mpsc;
 use tracing::{debug, error, info};
-use std::time::Duration;
-use std::sync::Arc;
-use alloy_primitives::B256;
-use reth_provider::{BlockNumReader, HeaderProvider};
-use reth_node_api::FullNodeComponents;
-use tips_audit::types::MempoolEvent;
 
 /// Configuration for mempool event listening
 #[derive(Debug, Clone)]
@@ -30,9 +30,8 @@ pub struct MempoolListenerConfig {
     pub database_url: String,
 }
 
-
 /// Mempool event listener that processes events and queues simulations
-pub struct MempoolEventListener<Node, E, P> 
+pub struct MempoolEventListener<Node, E, P>
 where
     Node: FullNodeComponents,
     E: SimulationEngine,
@@ -48,7 +47,7 @@ where
     worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
 }
 
-impl<Node, E, P> MempoolEventListener<Node, E, P> 
+impl<Node, E, P> MempoolEventListener<Node, E, P>
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
@@ -72,8 +71,9 @@ where
             .create()
             .map_err(|e| eyre::eyre!("Failed to create Kafka consumer: {}", e))?;
 
-        consumer.subscribe(&[&config.kafka_topic])
-            .map_err(|e| eyre::eyre!("Failed to subscribe to topic {}: {}", config.kafka_topic, e))?;
+        consumer.subscribe(&[&config.kafka_topic]).map_err(|e| {
+            eyre::eyre!("Failed to subscribe to topic {}: {}", config.kafka_topic, e)
+        })?;
 
         Ok(Self {
             provider,
@@ -84,7 +84,7 @@ where
     }
 
     /// Run the mempool event listener
-    pub async fn run(self) -> Result<()> 
+    pub async fn run(self) -> Result<()>
     where
         E: 'static,
         P: 'static,
@@ -93,10 +93,10 @@ where
             topic = %self.topic,
             "Starting mempool event listener"
         );
-        
+
         // Create channel for simulation requests
         let (sender, mut receiver) = mpsc::channel::<SimulationRequest>(1000);
-        
+
         // Start Kafka listener in a separate task
         let consumer = self.consumer;
         let provider = Arc::clone(&self.provider);
@@ -124,11 +124,13 @@ where
 
                         // Convert mempool events that contain bundles into simulation requests
                         match event {
-                            MempoolEvent::Created { bundle_id, bundle } |
-                            MempoolEvent::Updated { bundle_id, bundle } => {
-                                let (block_number, block_hash) = match provider.best_block_number() {
+                            MempoolEvent::Created { bundle_id, bundle }
+                            | MempoolEvent::Updated { bundle_id, bundle } => {
+                                let (block_number, block_hash) = match provider.best_block_number()
+                                {
                                     Ok(num) => {
-                                        let hash = provider.sealed_header(num)
+                                        let hash = provider
+                                            .sealed_header(num)
                                             .unwrap_or_default()
                                             .map(|h| h.hash())
                                             .unwrap_or_default();
@@ -136,7 +138,7 @@ where
                                     }
                                     Err(_) => (0, B256::ZERO),
                                 };
-                                
+
                                 let simulation_request = SimulationRequest {
                                     bundle_id,
                                     bundle,
@@ -162,7 +164,9 @@ where
                         }
 
                         // Commit the message
-                        if let Err(e) = consumer.commit_message(&message, rdkafka::consumer::CommitMode::Async) {
+                        if let Err(e) =
+                            consumer.commit_message(&message, rdkafka::consumer::CommitMode::Async)
+                        {
                             error!(error = %e, "Failed to commit Kafka message");
                         }
                     }
@@ -173,7 +177,7 @@ where
                 }
             }
         });
-        
+
         // Process simulation requests using the shared worker pool
         let worker_pool = Arc::clone(&self.worker_pool);
         let processing_handle = tokio::spawn(async move {
@@ -184,12 +188,10 @@ where
                     block_number = request.block_number,
                     "Queuing bundle simulation for mempool event"
                 );
-                
+
                 // Create simulation task
-                let task = SimulationTask {
-                    request,
-                };
-                
+                let task = SimulationTask { request };
+
                 // Queue simulation using shared worker pool
                 if let Err(e) = worker_pool.queue_simulation(task).await {
                     error!(
@@ -200,16 +202,17 @@ where
                 }
             }
         });
-        
+
         // Wait for both tasks to complete
-        let (listener_result, _processing_result) = tokio::try_join!(listener_handle, processing_handle)
-            .map_err(|e| eyre::eyre!("Task join error: {}", e))?;
-        
+        let (listener_result, _processing_result) =
+            tokio::try_join!(listener_handle, processing_handle)
+                .map_err(|e| eyre::eyre!("Task join error: {}", e))?;
+
         if let Err(e) = listener_result {
             error!(error = %e, "Mempool listener task failed");
             return Err(e);
         }
-        
+
         info!("Mempool event listener completed");
         Ok(())
     }

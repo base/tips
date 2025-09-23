@@ -7,7 +7,7 @@ use tracing::{error, info};
 
 /// Core bundle simulator that provides shared simulation logic
 /// Used by both mempool event simulators and ExEx event simulators
-pub struct BundleSimulator<E, P> 
+pub struct BundleSimulator<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
@@ -16,18 +16,15 @@ where
     publisher: P,
 }
 
-impl<E, P> BundleSimulator<E, P> 
+impl<E, P> BundleSimulator<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
 {
     pub fn new(engine: E, publisher: P) -> Self {
-        Self {
-            engine,
-            publisher,
-        }
+        Self { engine, publisher }
     }
-    
+
     /// Process a simulation request by creating state provider from factory
     /// Convenience method that handles state provider creation
     pub async fn simulate<F>(
@@ -44,7 +41,7 @@ where
         let state_provider = state_provider_factory
             .state_by_block_hash(request.block_hash)
             .map_err(|e| eyre::eyre!("Failed to get state provider: {}", e))?;
-        
+
         // Run the simulation
         match self.engine.simulate_bundle(request, &state_provider).await {
             Ok(result) => {

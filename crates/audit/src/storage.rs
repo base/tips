@@ -192,7 +192,7 @@ fn update_bundle_history_transform(
             gas_used: *gas_used,
             execution_time_us: *execution_time_us,
             error_reason: error_reason.clone(),
-        }
+        },
     };
 
     history.push(history_event);

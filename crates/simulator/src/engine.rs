@@ -1,16 +1,16 @@
 use crate::types::{SimulationError, SimulationRequest, SimulationResult};
 use alloy_consensus::{transaction::SignerRecoverable, BlockHeader};
-use alloy_primitives::B256;
 use alloy_eips::eip2718::Decodable2718;
+use alloy_primitives::B256;
 use alloy_rpc_types::BlockNumberOrTag;
-use eyre::Result;
 use async_trait::async_trait;
-use reth_node_api::FullNodeComponents;
-use reth_provider::{StateProvider, StateProviderFactory, HeaderProvider};
-use reth_revm::{database::StateProviderDatabase, db::State};
+use eyre::Result;
+use reth_evm::execute::BlockBuilder;
 use reth_evm::ConfigureEvm;
 use reth_evm::NextBlockEnvAttributes;
-use reth_evm::execute::BlockBuilder;
+use reth_node_api::FullNodeComponents;
+use reth_provider::{HeaderProvider, StateProvider, StateProviderFactory};
+use reth_revm::{database::StateProviderDatabase, db::State};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -54,14 +54,20 @@ where
     // Get the state provider at the specified block
     let state_provider = provider
         .state_by_block_number_or_tag(BlockNumberOrTag::Number(block_number))
-        .map_err(|e| eyre::eyre!("Failed to get state provider at block {}: {}", block_number, e))?;
-    
+        .map_err(|e| {
+            eyre::eyre!(
+                "Failed to get state provider at block {}: {}",
+                block_number,
+                e
+            )
+        })?;
+
     // Get the block hash
     let block_hash = state_provider
         .block_hash(block_number)
         .map_err(|e| eyre::eyre!("Failed to get block hash: {}", e))?
         .ok_or_else(|| eyre::eyre!("Block {} not found", block_number))?;
-    
+
     Ok((state_provider, block_hash))
 }
 
@@ -71,19 +77,19 @@ where
 /// use reth_exex::ExExContext;
 /// use reth_revm::database::StateProviderDatabase;
 /// use revm::Evm;
-/// 
+///
 /// // Get provider from ExEx context
 /// let provider = ctx.provider.clone();
-/// 
+///
 /// // Prepare EVM state
 /// let (state_provider, block_hash) = prepare_evm_state::<Node>(
 ///     provider.clone(),
 ///     block_number,
 /// )?;
-/// 
+///
 /// // Create state database
 /// let db = StateProviderDatabase::new(state_provider);
-/// 
+///
 /// // Build EVM with the database
 /// // Note: You would configure the EVM with proper environment settings
 /// // based on your chain's requirements (gas limits, fork settings, etc.)
@@ -113,7 +119,6 @@ where
     evm_config: Node::Evm,
 }
 
-
 impl<Node> RethSimulationEngine<Node>
 where
     Node: FullNodeComponents,
@@ -124,7 +129,6 @@ where
             evm_config,
         }
     }
-
 }
 
 #[async_trait]
@@ -162,9 +166,12 @@ where
         // Create the state database and builder for next block
         let state_provider = self.provider.state_by_block_hash(request.block_hash)?;
         let state_db = StateProviderDatabase::new(state_provider);
-        let mut db = State::builder().with_database(state_db).with_bundle_update().build();
+        let mut db = State::builder()
+            .with_database(state_db)
+            .with_bundle_update()
+            .build();
         let attributes = NextBlockEnvAttributes {
-            timestamp: header.timestamp() + BLOCK_TIME,  // Optimism 2-second block time
+            timestamp: header.timestamp() + BLOCK_TIME, // Optimism 2-second block time
             suggested_fee_recipient: header.beneficiary(),
             prev_randao: B256::random(),
             gas_limit: header.gas_limit(),
@@ -187,12 +194,14 @@ where
                 .evm_config
                 .builder_for_next_block(&mut db, &header, attributes)
                 .map_err(|e| eyre::eyre!("Failed to init block builder: {}", e))?;
-            builder.apply_pre_execution_changes().map_err(|e| eyre::eyre!("Failed pre-exec: {}", e))?;
+            builder
+                .apply_pre_execution_changes()
+                .map_err(|e| eyre::eyre!("Failed pre-exec: {}", e))?;
 
             // Simulate each transaction in the bundle
             for (tx_index, tx_bytes) in request.bundle.txs.iter().enumerate() {
                 // Decode bytes into the node's SignedTx type and recover the signer for execution
-                type NodeSignedTxTy<Node> = 
+                type NodeSignedTxTy<Node> =
                     <<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives as reth_node_api::NodePrimitives>::SignedTx;
                 let mut reader = tx_bytes.iter().as_slice();
                 let signed: NodeSignedTxTy<Node> = Decodable2718::decode_2718(&mut reader)
@@ -207,7 +216,9 @@ where
                     }
                     Err(e) => {
                         failed = true;
-                        failure_reason = Some(SimulationError::Unknown { message: format!("Execution failed: {}", e) });
+                        failure_reason = Some(SimulationError::Unknown {
+                            message: format!("Execution failed: {}", e),
+                        });
                         break;
                     }
                 }
@@ -237,7 +248,7 @@ where
         } else {
             // Collect the state diff
             let bundle = db.take_bundle();
-            
+
             // Extract storage changes from the bundle
             let mut modified_storage_slots = HashMap::new();
             for (address, account) in bundle.state() {

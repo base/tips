@@ -460,7 +460,10 @@ impl BundleDatastore for PostgresDatastore {
         }
     }
 
-    async fn select_bundles_with_latest_simulation(&self, filter: BundleFilter) -> Result<Vec<BundleWithLatestSimulation>> {
+    async fn select_bundles_with_latest_simulation(
+        &self,
+        filter: BundleFilter,
+    ) -> Result<Vec<BundleWithLatestSimulation>> {
         let base_fee = filter.base_fee.unwrap_or(0);
         let block_number = filter.block_number.unwrap_or(0) as i64;
 

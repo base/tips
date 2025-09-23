@@ -1,11 +1,11 @@
 use crate::types::SimulationResult;
-use eyre::Result;
 use async_trait::async_trait;
+use eyre::Result;
 use rdkafka::producer::FutureProducer;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tips_audit::{MempoolEventPublisher, KafkaMempoolEventPublisher};
-use tips_datastore::{PostgresDatastore, BundleDatastore, postgres::StateDiff};
+use tips_audit::{KafkaMempoolEventPublisher, MempoolEventPublisher};
+use tips_datastore::{postgres::StateDiff, BundleDatastore, PostgresDatastore};
 use tracing::{debug, error, info, warn};
 
 #[async_trait]
@@ -21,11 +21,7 @@ pub struct TipsSimulationPublisher {
 }
 
 impl TipsSimulationPublisher {
-    pub fn new(
-        datastore: Arc<PostgresDatastore>,
-        producer: FutureProducer,
-        topic: String,
-    ) -> Self {
+    pub fn new(datastore: Arc<PostgresDatastore>, producer: FutureProducer, topic: String) -> Self {
         let kafka_publisher = Arc::new(KafkaMempoolEventPublisher::new(producer, topic));
         Self {
             datastore,
@@ -45,32 +41,42 @@ impl TipsSimulationPublisher {
 
         // Convert state diff from alloy format to datastore format
         let state_diff = self.convert_state_diff(&result.state_diff)?;
-        
+
         // Store the simulation using the datastore interface
-        let simulation_id = self.datastore.insert_simulation(
-            result.bundle_id,
-            result.block_number,
-            format!("0x{}", hex::encode(result.block_hash.as_slice())),
-            result.execution_time_us as u64,
-            result.gas_used.unwrap_or(0),
-            state_diff,
-        ).await.map_err(|e| eyre::eyre!("Failed to insert simulation: {}", e))?;
-        
+        let simulation_id = self
+            .datastore
+            .insert_simulation(
+                result.bundle_id,
+                result.block_number,
+                format!("0x{}", hex::encode(result.block_hash.as_slice())),
+                result.execution_time_us as u64,
+                result.gas_used.unwrap_or(0),
+                state_diff,
+            )
+            .await
+            .map_err(|e| eyre::eyre!("Failed to insert simulation: {}", e))?;
+
         debug!(
             simulation_id = %simulation_id,
             bundle_id = %result.bundle_id,
             "Successfully stored simulation result in database"
         );
-        
+
         Ok(())
     }
 
     /// Convert state diff from simulator format to datastore format
-    fn convert_state_diff(&self, state_diff: &HashMap<alloy_primitives::Address, HashMap<alloy_primitives::U256, alloy_primitives::U256>>) -> Result<StateDiff> {
+    fn convert_state_diff(
+        &self,
+        state_diff: &HashMap<
+            alloy_primitives::Address,
+            HashMap<alloy_primitives::U256, alloy_primitives::U256>,
+        >,
+    ) -> Result<StateDiff> {
         // StateDiff expects HashMap<Address, HashMap<B256, U256>>
         // where StorageKey is B256 and StorageValue is U256
         let mut converted = HashMap::new();
-        
+
         for (address, storage) in state_diff {
             let mut storage_map = HashMap::new();
             for (key, value) in storage {
@@ -81,7 +87,7 @@ impl TipsSimulationPublisher {
             }
             converted.insert(*address, storage_map);
         }
-        
+
         Ok(converted)
     }
 
@@ -94,7 +100,7 @@ impl TipsSimulationPublisher {
                 success = result.success,
                 "Publishing simulation result to Kafka"
             );
-            
+
             let event = tips_audit::types::MempoolEvent::Simulated {
                 bundle_id: result.bundle_id,
                 simulation_id: result.id,
@@ -104,17 +110,19 @@ impl TipsSimulationPublisher {
                 execution_time_us: result.execution_time_us,
                 error_reason: result.error_reason.clone(),
             };
-            
-            publisher.publish(event).await
+
+            publisher
+                .publish(event)
+                .await
                 .map_err(|e| eyre::eyre!("Failed to publish simulation event: {}", e))?;
-                
+
             debug!(
                 simulation_id = %result.id,
                 bundle_id = %result.bundle_id,
                 "Successfully published simulation result to Kafka"
             );
         }
-        
+
         Ok(())
     }
 }

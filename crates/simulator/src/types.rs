@@ -50,9 +50,17 @@ pub enum SimulationError {
     /// Bundle ran out of gas
     OutOfGas,
     /// Invalid nonce in one of the transactions
-    InvalidNonce { tx_index: usize, expected: u64, actual: u64 },
+    InvalidNonce {
+        tx_index: usize,
+        expected: u64,
+        actual: u64,
+    },
     /// Insufficient balance for gas payment
-    InsufficientBalance { tx_index: usize, required: U256, available: U256 },
+    InsufficientBalance {
+        tx_index: usize,
+        required: U256,
+        available: U256,
+    },
     /// State access error (RPC failure, etc.)
     StateAccessError { message: String },
     /// Simulation timeout
@@ -66,13 +74,31 @@ impl std::fmt::Display for SimulationError {
         match self {
             SimulationError::Revert { reason } => write!(f, "Bundle reverted: {}", reason),
             SimulationError::OutOfGas => write!(f, "Bundle ran out of gas"),
-            SimulationError::InvalidNonce { tx_index, expected, actual } => {
-                write!(f, "Invalid nonce in tx {}: expected {}, got {}", tx_index, expected, actual)
+            SimulationError::InvalidNonce {
+                tx_index,
+                expected,
+                actual,
+            } => {
+                write!(
+                    f,
+                    "Invalid nonce in tx {}: expected {}, got {}",
+                    tx_index, expected, actual
+                )
             }
-            SimulationError::InsufficientBalance { tx_index, required, available } => {
-                write!(f, "Insufficient balance in tx {}: required {}, available {}", tx_index, required, available)
+            SimulationError::InsufficientBalance {
+                tx_index,
+                required,
+                available,
+            } => {
+                write!(
+                    f,
+                    "Insufficient balance in tx {}: required {}, available {}",
+                    tx_index, required, available
+                )
             }
-            SimulationError::StateAccessError { message } => write!(f, "State access error: {}", message),
+            SimulationError::StateAccessError { message } => {
+                write!(f, "State access error: {}", message)
+            }
             SimulationError::Timeout => write!(f, "Simulation timed out"),
             SimulationError::Unknown { message } => write!(f, "Unknown error: {}", message),
         }

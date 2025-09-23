@@ -2,9 +2,9 @@ use crate::core::BundleSimulator;
 use crate::engine::SimulationEngine;
 use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use reth_provider::StateProviderFactory;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 use tracing::{debug, info, warn};
@@ -50,7 +50,7 @@ where
         max_concurrent_simulations: usize,
     ) -> Arc<Self> {
         let (simulation_tx, simulation_rx) = mpsc::channel(1000);
-        
+
         Arc::new(Self {
             simulator,
             state_provider_factory,
@@ -66,43 +66,43 @@ where
     /// Returns true if workers were started, false if already running
     pub async fn start(self: &Arc<Self>) -> bool {
         let mut handles = self.worker_handles.lock().await;
-        
+
         if !handles.is_empty() {
             debug!("Simulation workers already started");
             return false;
         }
-        info!(num_workers = self.max_concurrent, "Starting simulation workers");
-        
+        info!(
+            num_workers = self.max_concurrent,
+            "Starting simulation workers"
+        );
+
         for worker_id in 0..self.max_concurrent {
             let pool = Arc::clone(self);
-            
-            handles.spawn(async move {
-                Self::simulation_worker(
-                    worker_id,
-                    pool,
-                ).await
-            });
+
+            handles.spawn(async move { Self::simulation_worker(worker_id, pool).await });
         }
         true
     }
 
     /// Queue a simulation task
-    pub async fn queue_simulation(&self, task: SimulationTask) -> Result<(), mpsc::error::SendError<SimulationTask>> {
+    pub async fn queue_simulation(
+        &self,
+        task: SimulationTask,
+    ) -> Result<(), mpsc::error::SendError<SimulationTask>> {
         self.simulation_tx.send(task).await
     }
-    
+
     /// Update the latest block number being processed
     pub fn update_latest_block(&self, block_number: u64) {
         self.latest_block.store(block_number, Ordering::Release);
         debug!(block_number, "Updated latest block for cancellation");
     }
 
-
     /// Wait for all workers to complete
     pub async fn shutdown(self) {
         // Close the channel to signal workers to stop
         drop(self.simulation_tx);
-        
+
         // Wait for workers to complete
         let mut handles = self.worker_handles.lock().await;
         while let Some(result) = handles.join_next().await {
@@ -113,12 +113,9 @@ where
     }
 
     /// Worker task that processes simulation requests
-    async fn simulation_worker(
-        worker_id: usize,
-        pool: Arc<Self>,
-    ) {
+    async fn simulation_worker(worker_id: usize, pool: Arc<Self>) {
         debug!(worker_id, "Simulation worker started");
-        
+
         loop {
             // Get the next simulation task
             let task = {
@@ -126,12 +123,12 @@ where
                 let mut rx = pool.simulation_rx.lock().await;
                 rx.recv().await
             };
-            
+
             let Some(task) = task else {
                 debug!(worker_id, "Simulation channel closed, worker shutting down");
                 break;
             };
-            
+
             // Check if this simulation is for an old block
             let current_latest = pool.latest_block.load(Ordering::Acquire);
             if task.request.block_number < current_latest {
@@ -144,9 +141,13 @@ where
                 );
                 continue;
             }
-            
+
             // Execute the simulation
-            match pool.simulator.simulate(&task.request, pool.state_provider_factory.as_ref()).await {
+            match pool
+                .simulator
+                .simulate(&task.request, pool.state_provider_factory.as_ref())
+                .await
+            {
                 Ok(_) => {
                     debug!(
                         worker_id,
@@ -164,7 +165,7 @@ where
                 }
             }
         }
-        
+
         debug!(worker_id, "Simulation worker stopped");
     }
 }

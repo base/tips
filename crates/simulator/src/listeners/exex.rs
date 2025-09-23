@@ -1,48 +1,53 @@
-use crate::types::SimulationRequest;
-use crate::worker_pool::{SimulationWorkerPool, SimulationTask};
 use crate::engine::SimulationEngine;
 use crate::publisher::SimulationPublisher;
+use crate::types::SimulationRequest;
+use crate::worker_pool::{SimulationTask, SimulationWorkerPool};
 
 use alloy_consensus::BlockHeader;
 use alloy_primitives::B256;
 use alloy_rpc_types::BlockNumHash;
 use alloy_rpc_types_mev::EthSendBundle;
 use eyre::Result;
+use futures_util::StreamExt;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::FullNodeComponents;
-use futures_util::StreamExt;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Datastore-based mempool bundle provider
-pub struct DatastoreBundleProvider<D> 
+pub struct DatastoreBundleProvider<D>
 where
     D: tips_datastore::BundleDatastore,
 {
     datastore: Arc<D>,
 }
 
-impl<D> DatastoreBundleProvider<D> 
+impl<D> DatastoreBundleProvider<D>
 where
     D: tips_datastore::BundleDatastore,
 {
     pub fn new(datastore: Arc<D>) -> Self {
         Self { datastore }
     }
-    
+
     /// Get all bundles valid for a specific block
-    pub async fn get_bundles_for_block(&self, block_number: u64) -> Result<Vec<(Uuid, EthSendBundle)>> {
+    pub async fn get_bundles_for_block(
+        &self,
+        block_number: u64,
+    ) -> Result<Vec<(Uuid, EthSendBundle)>> {
         use tips_datastore::postgres::BundleFilter;
-        
+
         // Create filter for bundles valid at this block
-        let filter = BundleFilter::new()
-            .valid_for_block(block_number);
-        
+        let filter = BundleFilter::new().valid_for_block(block_number);
+
         // Fetch bundles from datastore
-        let bundles_with_metadata = self.datastore.select_bundles(filter).await
+        let bundles_with_metadata = self
+            .datastore
+            .select_bundles(filter)
+            .await
             .map_err(|e| eyre::eyre!("Failed to select bundles: {}", e))?;
-        
+
         // Convert to (Uuid, EthSendBundle) pairs
         // TODO: The bundle ID should be returned from the datastore query
         // For now, we generate new IDs for each bundle
@@ -50,14 +55,14 @@ where
             .into_iter()
             .map(|bwm| (Uuid::new_v4(), bwm.bundle))
             .collect();
-        
+
         Ok(result)
     }
 }
 
 /// ExEx event listener that processes chain events and queues bundle simulations
 /// Processes chain events (commits, reorgs, reverts) and queues simulation tasks
-pub struct ExExEventListener<Node, E, P, D> 
+pub struct ExExEventListener<Node, E, P, D>
 where
     Node: FullNodeComponents,
     E: SimulationEngine + Clone + 'static,
@@ -119,7 +124,12 @@ where
     }
 
     /// Handle ExEx notifications
-    async fn handle_notification(&mut self, notification: ExExNotification<<<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives>) -> Result<()> {
+    async fn handle_notification(
+        &mut self,
+        notification: ExExNotification<
+            <<Node as reth_node_api::FullNodeTypes>::Types as reth_node_api::NodeTypes>::Primitives,
+        >,
+    ) -> Result<()> {
         match notification {
             ExExNotification::ChainCommitted { new } => {
                 info!(
@@ -127,7 +137,7 @@ where
                     num_blocks = new.blocks().len(),
                     "Processing committed blocks"
                 );
-                
+
                 // Process each block in the committed chain
                 for (_block_num, block) in new.blocks() {
                     let block_hash = block.hash();
@@ -137,14 +147,17 @@ where
                 // Notify that we've processed this notification
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(new.tip().number(), new.tip().hash())))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(
+                        new.tip().number(),
+                        new.tip().hash(),
+                    )))?;
             }
             ExExNotification::ChainReorged { old: _, new } => {
                 warn!(
                     block_range = ?new.range(),
                     "Chain reorg detected, processing new chain"
                 );
-                
+
                 // Process the new canonical chain
                 for (_block_num, block) in new.blocks() {
                     let block_hash = block.hash();
@@ -153,7 +166,10 @@ where
 
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(new.tip().number(), new.tip().hash())))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(
+                        new.tip().number(),
+                        new.tip().hash(),
+                    )))?;
             }
             ExExNotification::ChainReverted { old } => {
                 warn!(
@@ -163,7 +179,10 @@ where
 
                 self.ctx
                     .events
-                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(old.tip().number(), old.tip().hash())))?;
+                    .send(ExExEvent::FinishedHeight(BlockNumHash::new(
+                        old.tip().number(),
+                        old.tip().hash(),
+                    )))?;
             }
         }
 
@@ -171,13 +190,16 @@ where
     }
 
     /// Process a single block for potential bundle simulations
-    async fn process_block<B>(&mut self, block: (&B256, &reth_primitives::RecoveredBlock<B>)) -> Result<()> 
+    async fn process_block<B>(
+        &mut self,
+        block: (&B256, &reth_primitives::RecoveredBlock<B>),
+    ) -> Result<()>
     where
         B: reth_node_api::Block,
     {
         let (block_hash, sealed_block) = block;
         let block_number = sealed_block.number();
-        
+
         debug!(
             block_number = block_number,
             block_hash = ?block_hash,
@@ -189,9 +211,8 @@ where
 
         // Fetch all bundles valid for this block from datastore
         use tips_datastore::postgres::BundleFilter;
-        let filter = BundleFilter::new()
-            .valid_for_block(block_number);
-        
+        let filter = BundleFilter::new().valid_for_block(block_number);
+
         let bundles_with_metadata = match self.datastore.select_bundles(filter).await {
             Ok(bundles) => bundles,
             Err(e) => {
@@ -203,7 +224,7 @@ where
                 return Ok(());
             }
         };
-        
+
         info!(
             block_number,
             num_bundles = bundles_with_metadata.len(),
@@ -215,7 +236,7 @@ where
             // TODO: The bundle ID should be returned from the datastore query
             // For now, we generate new IDs for each bundle
             let bundle_id = Uuid::new_v4();
-            
+
             // Create simulation request
             let request = SimulationRequest {
                 bundle_id,
@@ -223,12 +244,10 @@ where
                 block_number,
                 block_hash: *block_hash,
             };
-            
+
             // Create simulation task
-            let task = SimulationTask {
-                request,
-            };
-            
+            let task = SimulationTask { request };
+
             // Send to worker queue
             if let Err(e) = self.worker_pool.queue_simulation(task).await {
                 error!(

@@ -1,7 +1,7 @@
-use tips_simulator::types::SimulationRequest;
-use tips_simulator::MempoolListenerConfig;
 use alloy_primitives::{Bytes, B256};
 use alloy_rpc_types_mev::EthSendBundle;
+use tips_simulator::types::SimulationRequest;
+use tips_simulator::MempoolListenerConfig;
 use uuid::Uuid;
 
 // Basic smoke test to ensure the core simulation types work correctly
@@ -51,7 +51,10 @@ fn test_mempool_simulator_config() {
     assert_eq!(config.kafka_brokers, vec!["localhost:9092"]);
     assert_eq!(config.kafka_topic, "mempool-events");
     assert_eq!(config.kafka_group_id, "tips-simulator");
-    assert_eq!(config.database_url, "postgresql://user:pass@localhost:5432/tips");
+    assert_eq!(
+        config.database_url,
+        "postgresql://user:pass@localhost:5432/tips"
+    );
 }
 
 // Future integration tests would test both:
