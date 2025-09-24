@@ -1,4 +1,5 @@
 use reth_optimism_cli::commands::Commands;
+use reth_optimism_node::args::RollupArgs;
 use tips_simulator::{config::Cli, config::CliExt, ListenersWithWorkers};
 use tracing::info;
 
@@ -25,8 +26,12 @@ fn main() -> eyre::Result<()> {
     );
 
     cli.run(|builder, _| async move {
+        // Keep the Base mempool private.
+        let mut rollup_args = RollupArgs::default();
+        rollup_args.disable_txpool_gossip = true;
+
         let handle = builder
-            .node(reth_optimism_node::OpNode::default())
+            .node(reth_optimism_node::OpNode::new(rollup_args))
             .install_exex("tips-simulator", move |ctx| async move {
                 let listeners = ListenersWithWorkers::new(
                     ctx,
