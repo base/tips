@@ -368,7 +368,7 @@ async fn update_bundles_state() -> eyre::Result<()> {
         .data_store
         .update_bundles_state(
             uuids.clone(),
-            BundleState::Ready,
+            vec![BundleState::Ready],
             BundleState::IncludedInBlock,
         )
         .await
@@ -426,7 +426,7 @@ async fn update_bundles_state() -> eyre::Result<()> {
         .data_store
         .update_bundles_state(
             vec![bundle3_id],
-            BundleState::IncludedInFlashblock,
+            vec![BundleState::IncludedInFlashblock],
             BundleState::IncludedInBlock,
         )
         .await
@@ -445,6 +445,26 @@ async fn update_bundles_state() -> eyre::Result<()> {
         .expect("Failed to get bundle1 after no-op update")
         .unwrap();
     assert!(matches!(still_unchanged.state, BundleState::Ready));
+
+    let updated = harness
+        .data_store
+        .update_bundles_state(
+            vec![bundle3_id],
+            vec![BundleState::IncludedInFlashblock, BundleState::Ready],
+            BundleState::IncludedInBlock,
+        )
+        .await
+        .expect("Failed to call update_bundles_state");
+
+    assert_eq!(updated.len(), 1);
+
+    let changed = harness
+        .data_store
+        .get_bundle(bundle3_id)
+        .await
+        .expect("Failed to get bundle1 after no-op update")
+        .unwrap();
+    assert!(matches!(changed.state, BundleState::IncludedInBlock));
 
     Ok(())
 }

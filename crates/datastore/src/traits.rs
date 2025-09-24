@@ -30,7 +30,7 @@ pub trait BundleDatastore: Send + Sync {
     async fn update_bundles_state(
         &self,
         uuids: Vec<Uuid>,
-        prev_state: BundleState,
+        allowed_prev_states: Vec<BundleState>,
         new_state: BundleState,
     ) -> Result<Vec<Uuid>>;
 }

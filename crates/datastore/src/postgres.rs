@@ -33,6 +33,7 @@ struct BundleRow {
     block_number: Option<i64>,
     min_timestamp: Option<i64>,
     max_timestamp: Option<i64>,
+    #[sqlx(rename = "bundle_state")]
     state: BundleState,
     state_changed_at: DateTime<Utc>,
 }
@@ -215,7 +216,7 @@ impl BundleDatastore for PostgresDatastore {
         sqlx::query!(
             r#"
             INSERT INTO bundles (
-                id, "state", senders, minimum_base_fee, txn_hashes, 
+                id, bundle_state, senders, minimum_base_fee, txn_hashes, 
                 txs, reverting_tx_hashes, dropping_tx_hashes, 
                 block_number, min_timestamp, max_timestamp,
                 created_at, updated_at, state_changed_at
@@ -244,7 +245,7 @@ impl BundleDatastore for PostgresDatastore {
         let result = sqlx::query_as::<_, BundleRow>(
             r#"
             SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
-                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp, "state", state_changed_at
+                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp, bundle_state, state_changed_at
             FROM bundles 
             WHERE id = $1
             "#,
@@ -284,7 +285,7 @@ impl BundleDatastore for PostgresDatastore {
         let rows = sqlx::query_as::<_, BundleRow>(
             r#"
             SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
-                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp, "state", state_changed_at
+                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp, bundle_state, state_changed_at
             FROM bundles 
             WHERE minimum_base_fee >= $1
               AND (block_number = $2 OR block_number IS NULL OR block_number = 0 OR $2 = 0)
@@ -338,19 +339,27 @@ impl BundleDatastore for PostgresDatastore {
     async fn update_bundles_state(
         &self,
         uuids: Vec<Uuid>,
-        prev_state: BundleState,
+        allowed_prev_states: Vec<BundleState>,
         new_state: BundleState,
     ) -> Result<Vec<Uuid>> {
+        let prev_states_sql: Vec<String> = allowed_prev_states
+            .iter()
+            .map(|s| match s {
+                BundleState::Ready => "Ready".to_string(),
+                BundleState::IncludedInFlashblock => "IncludedInFlashblock".to_string(),
+                BundleState::IncludedInBlock => "IncludedInBlock".to_string(),
+            })
+            .collect();
         let rows = sqlx::query!(
             r#"
             UPDATE bundles 
-            SET "state" = $1, updated_at = NOW(), state_changed_at = NOW()
-            WHERE id = ANY($2) AND "state" = $3
+            SET bundle_state = $1, updated_at = NOW(), state_changed_at = NOW()
+            WHERE id = ANY($2) AND bundle_state::text = ANY($3)
             RETURNING id
             "#,
             new_state as BundleState,
             &uuids,
-            prev_state as BundleState
+            &prev_states_sql
         )
         .fetch_all(&self.pool)
         .await?;

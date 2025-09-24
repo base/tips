@@ -1,0 +1,66 @@
+- Race condition
+  - Builder using a txn
+  - User updating a txn
+  - End state should be: REC, INC, UPD
+
+- Do we allow the same transaction to be in multiple user-submitted bundles?
+  - @danyal.prout ask dmarz if that's required for non-backruns
+    - Assuming excluding searcher backruns for the rest of this
+  - Truly identical bundles are deduplicated, which is fine
+  - What we're talking bout here is
+      - bundle a = (txa, txb)
+      - bundle b = (txa, txc) <== not allowed
+  - Yes
+    - *** ON TRANSACTION INCLUSION, NEED TO GET SMART ABOUT DROPPING RELATED BUNDLES ***
+  - No
+    - *** DETECT PARTIAL OVERLAPS ON SUBMISSION ***
+    - *** MIGHT BE USEFUL BUT RARE ***
+  - Challenges
+    - P0: send raw txn upsert based on (address, nonce)
+    - P0: need to be able to **uniquely** map []txhash to a bundle
+    - eth_sendBundle duplicate
+      - partial overlap (diff bundle hash): 
+    - eth_sendBundle replace
+  - YES
+  - NO
+  - 
+  - Primary key: address + nonce (limiting, simplifies)
+  - Send Raw Transaction 
+    - Upsert existing bundle
+  - eth_sendBundle
+
+
+- Bundle:
+    - [(address, nonce),...]
+    - Send Raw Transaction
+        - Don't allow duplicates:
+        - Upsert
+    - Send Bundle
+        - Don't allow duplicates (only time we check duplicates when write to DB, too late)
+        - Solutions:
+            - Bundle Status API
+            - Read the DB (redis, read-only replica)
+        - Allow duplicates
+            - Only allow them for bundles (not for send raw txn)
+            -
+
+- Bundle selection:
+    - Limits are met (timestamp etc)
+    - Max total fees from bundle
+        - total bundle fee = sum(tx fees(base + pri + mev))
+        - total bundle fee = sum(tx fee(base + pri + mev)) + <<bundle fee>>
+            - How is the bundle fee paid?
+            - Onchain? eth payment?
+            - bundle fee = account + nonce
+                - If the fee isn't valid? Or the user doesn't have funds
+        - submitted_bundle = desired_bundle + [txn w/ high pri fee]
+
+- Bundle Options
+    - Free submission + reputation filtering
+    - Paid submission (x402) + no reputation filtering
+        - total bundle fee = sum(tx fee(base + pri + mev))
+        - payment_for_submission_fee = x402 payment
+            - Process payment, if payment unsuccessful drop the bundle
+            - Process payment, if successful mark it as paid and then process bundle
+    - Send Raw Txn + limited features
+

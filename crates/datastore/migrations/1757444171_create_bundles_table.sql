@@ -9,16 +9,20 @@ BEGIN
     END IF;
 END$$;
 
-
 -- Create bundles table
 CREATE TABLE IF NOT EXISTS bundles (
     id UUID PRIMARY KEY,
-    "state" bundle_state NOT NULL,
+    bundle_state bundle_state NOT NULL,
     state_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
+    -- todo: bundle_hash, key cannot insert the same bundle, on conflict return existing UUID
+    -- todo: bundle_type (single, bundle)
+    -- todo: single_key: (address, nonce)
+    -- on bundle_type: single allow to upsert by (address, nonce)
+
+    txn_hashes CHAR(66)[],
     senders CHAR(42)[],
     minimum_base_fee BIGINT, -- todo find a larger type
-    txn_hashes CHAR(66)[],
 
     txs TEXT[] NOT NULL,
     reverting_tx_hashes CHAR(66)[],

@@ -1,5 +1,7 @@
 mod job;
 
+use job::BundleStore;
+
 use alloy_provider::network::TransactionResponse;
 use alloy_provider::network::primitives::BlockTransactions;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider};

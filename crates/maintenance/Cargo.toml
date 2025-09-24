@@ -23,3 +23,5 @@ dotenvy.workspace = true
 rdkafka.workspace = true
 serde_json.workspace = true
 url.workspace = true
+uuid.workspace = true
+op-alloy-rpc-types.workspace = true
