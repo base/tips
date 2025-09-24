@@ -1,3 +1,5 @@
+mod job;
+
 use alloy_provider::network::TransactionResponse;
 use alloy_provider::network::primitives::BlockTransactions;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider};
@@ -17,28 +19,68 @@ use url::Url;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    #[arg(long, env = "TIPS_MAINTENANCE_RPC_NODE")]
-    node_url: Url,
-
     #[arg(long, env = "TIPS_MAINTENANCE_KAFKA_BROKERS")]
     kafka_brokers: String,
 
     #[arg(
         long,
         env = "TIPS_MAINTENANCE_KAFKA_TOPIC",
-        default_value = "mempool-events"
+        default_value = "tips-audit"
     )]
     kafka_topic: String,
 
     #[arg(long, env = "TIPS_MAINTENANCE_DATABASE_URL")]
     database_url: String,
 
-    #[arg(long, env = "TIPS_MAINTENANCE_POLL_INTERVAL_MS", default_value = "250")]
-    poll_interval: u64,
+    #[arg(long, env = "TIPS_MAINTENANCE_RPC_URL")]
+    rpc_url: Url,
+
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_RPC_POLL_INTERVAL_MS",
+        default_value = "250"
+    )]
+    rpc_poll_interval: u64,
+
+    #[arg(long, env = "TIPS_MAINTENANCE_FLASHBLOCKS_WS")]
+    flashblocks_ws: Url,
 
     #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
     log_level: String,
 }
+
+/*
+
+Todos:
+
+blocks (keep X blocks):
+number | hash
+
+flashblocks (keep Y blocks):
+block | number | txns
+
+1. routine:
+    - listens to new blocks (calls on_new_block)
+    - moves to included in block (R, IF => IB)
+2. routine:
+    - listens to websocket (calls on_new_flashblock)
+    - moves to included in flashblock (R => IF)
+3. routine: periodic reorg (1s)
+    - get all included in block more than X seconds ago
+    - get all included in flashblock more than Y seconds ago
+    - bulk fetches receipts, any can't be fetched move to R, any that can be drop
+
+BundleStore
+    bundle_store: BundleStore
+    eth_rpc: EthRpc
+
+BundleStoreMaintenance
+    // blocks + reorgs
+    async on_new_block(...);
+    async on_new_flashblock(...);
+    async handle_reorgs();
+
+ */
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -74,7 +116,7 @@ async fn main() -> Result<()> {
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
-        .connect_http(args.node_url);
+        .connect_http(args.rpc_url);
 
     let datastore = PostgresDatastore::connect(args.database_url).await?;
 
@@ -96,7 +138,7 @@ async fn main() -> Result<()> {
             }
         }
 
-        sleep(Duration::from_millis(args.poll_interval)).await;
+        sleep(Duration::from_millis(args.rpc_poll_interval)).await;
     }
 }
 

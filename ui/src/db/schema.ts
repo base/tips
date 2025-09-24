@@ -10,9 +10,6 @@ import {
 
 export const bundleState = pgEnum("bundle_state", [
   "Ready",
-  "BundleLimit",
-  "AccountLimits",
-  "GlobalLimits",
   "IncludedInFlashblock",
   "IncludedInBlock",
 ]);
@@ -20,6 +17,12 @@ export const bundleState = pgEnum("bundle_state", [
 export const bundles = pgTable("bundles", {
   id: uuid().primaryKey().notNull(),
   state: bundleState().notNull(),
+  stateChangedAt: timestamp("state_changed_at", {
+    withTimezone: true,
+    mode: "string",
+  })
+    .defaultNow()
+    .notNull(),
   senders: char({ length: 42 }).array(),
   // You can use { mode: "bigint" } if numbers are exceeding js number limitations
   minimumBaseFee: bigint("minimum_base_fee", { mode: "number" }),

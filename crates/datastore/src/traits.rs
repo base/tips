@@ -1,4 +1,4 @@
-use crate::postgres::{BundleFilter, BundleWithMetadata};
+use crate::postgres::{BundleFilter, BundleState, BundleWithMetadata};
 use alloy_primitives::TxHash;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
@@ -24,4 +24,13 @@ pub trait BundleDatastore: Send + Sync {
 
     /// Remove a bundle by ID
     async fn remove_bundle(&self, id: Uuid) -> Result<()>;
+
+    /// Update bundle states for multiple bundles
+    /// Returns the number of rows that were actually updated
+    async fn update_bundles_state(
+        &self,
+        uuids: Vec<Uuid>,
+        prev_state: BundleState,
+        new_state: BundleState,
+    ) -> Result<Vec<Uuid>>;
 }

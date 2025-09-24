@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE bundles \n            SET \"state\" = $1, updated_at = NOW(), state_changed_at = NOW()\n            WHERE id = ANY($2) AND \"state\" = $3\n            RETURNING id\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "bundle_state",
+            "kind": {
+              "Enum": [
+                "Ready",
+                "IncludedInFlashblock",
+                "IncludedInBlock"
+              ]
+            }
+          }
+        },
+        "UuidArray",
+        {
+          "Custom": {
+            "name": "bundle_state",
+            "kind": {
+              "Enum": [
+                "Ready",
+                "IncludedInFlashblock",
+                "IncludedInBlock"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "52f447984afbdae140544fa7b3ea24f5ada0f9165676cbb07917d188495f0361"
+}

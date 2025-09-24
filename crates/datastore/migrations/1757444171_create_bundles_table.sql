@@ -3,9 +3,6 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'bundle_state') THEN
         CREATE TYPE bundle_state AS ENUM (
             'Ready',
-            'BundleLimit',
-            'AccountLimits',
-            'GlobalLimits',
             'IncludedInFlashblock',
             'IncludedInBlock'
         );
@@ -17,6 +14,7 @@ END$$;
 CREATE TABLE IF NOT EXISTS bundles (
     id UUID PRIMARY KEY,
     "state" bundle_state NOT NULL,
+    state_changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
     senders CHAR(42)[],
     minimum_base_fee BIGINT, -- todo find a larger type
@@ -32,3 +30,4 @@ CREATE TABLE IF NOT EXISTS bundles (
     created_at TIMESTAMPTZ NOT NULL,
     updated_at TIMESTAMPTZ NOT NULL
 );
+

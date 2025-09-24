@@ -135,6 +135,17 @@ async fn insert_and_get() -> eyre::Result<()> {
     );
     assert_eq!(metadata.senders[0], TX_SENDER, "Sender should match");
 
+    // Test that state_changed_at is set (should be recent)
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let state_changed_timestamp = metadata.state_changed_at.timestamp();
+    assert!(
+        (now - state_changed_timestamp).abs() < 10,
+        "state_changed_at should be recent (within 10 seconds)"
+    );
+
     Ok(())
 }
 
@@ -298,6 +309,142 @@ async fn cancel_bundle_workflow() -> eyre::Result<()> {
         still_exists_bundle2.is_some(),
         "Bundle2 should still exist after bundle1 cancellation"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn update_bundles_state() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
+    let bundle3 = create_test_bundle(300, None, None)?;
+
+    let bundle1_id = harness
+        .data_store
+        .insert_bundle(bundle1)
+        .await
+        .expect("Failed to insert bundle1");
+    let bundle2_id = harness
+        .data_store
+        .insert_bundle(bundle2)
+        .await
+        .expect("Failed to insert bundle2");
+    let bundle3_id = harness
+        .data_store
+        .insert_bundle(bundle3)
+        .await
+        .expect("Failed to insert bundle3");
+
+    let bundle1_metadata = harness
+        .data_store
+        .get_bundle(bundle1_id)
+        .await
+        .expect("Failed to get bundle1")
+        .unwrap();
+    let bundle2_metadata = harness
+        .data_store
+        .get_bundle(bundle2_id)
+        .await
+        .expect("Failed to get bundle2")
+        .unwrap();
+    let bundle3_metadata = harness
+        .data_store
+        .get_bundle(bundle3_id)
+        .await
+        .expect("Failed to get bundle3")
+        .unwrap();
+
+    assert!(matches!(bundle1_metadata.state, BundleState::Ready));
+    assert!(matches!(bundle2_metadata.state, BundleState::Ready));
+    assert!(matches!(bundle3_metadata.state, BundleState::Ready));
+
+    let bundle1_initial_timestamp = bundle1_metadata.state_changed_at;
+    let bundle2_initial_timestamp = bundle2_metadata.state_changed_at;
+
+    let uuids = vec![bundle1_id, bundle2_id];
+    let updated_uuids = harness
+        .data_store
+        .update_bundles_state(
+            uuids.clone(),
+            BundleState::Ready,
+            BundleState::IncludedInBlock,
+        )
+        .await
+        .expect("Failed to update bundle states");
+
+    assert_eq!(updated_uuids.len(), 2, "Should update exactly 2 bundles");
+    assert!(
+        updated_uuids.contains(&bundle1_id),
+        "Should contain bundle1_id"
+    );
+    assert!(
+        updated_uuids.contains(&bundle2_id),
+        "Should contain bundle2_id"
+    );
+
+    let updated_bundle1 = harness
+        .data_store
+        .get_bundle(bundle1_id)
+        .await
+        .expect("Failed to get updated bundle1")
+        .unwrap();
+    let updated_bundle2 = harness
+        .data_store
+        .get_bundle(bundle2_id)
+        .await
+        .expect("Failed to get updated bundle2")
+        .unwrap();
+    let unchanged_bundle3 = harness
+        .data_store
+        .get_bundle(bundle3_id)
+        .await
+        .expect("Failed to get unchanged bundle3")
+        .unwrap();
+
+    assert!(matches!(
+        updated_bundle1.state,
+        BundleState::IncludedInBlock
+    ));
+    assert!(matches!(
+        updated_bundle2.state,
+        BundleState::IncludedInBlock
+    ));
+    assert!(matches!(unchanged_bundle3.state, BundleState::Ready));
+
+    assert!(
+        updated_bundle1.state_changed_at > bundle1_initial_timestamp,
+        "Bundle1 state_changed_at should be updated"
+    );
+    assert!(
+        updated_bundle2.state_changed_at > bundle2_initial_timestamp,
+        "Bundle2 state_changed_at should be updated"
+    );
+
+    let no_update_uuids = harness
+        .data_store
+        .update_bundles_state(
+            vec![bundle3_id],
+            BundleState::IncludedInFlashblock,
+            BundleState::IncludedInBlock,
+        )
+        .await
+        .expect("Failed to call update_bundles_state");
+
+    assert_eq!(
+        no_update_uuids.len(),
+        0,
+        "Should not update any bundles when prev_state doesn't match"
+    );
+
+    let still_unchanged = harness
+        .data_store
+        .get_bundle(bundle3_id)
+        .await
+        .expect("Failed to get bundle1 after no-op update")
+        .unwrap();
+    assert!(matches!(still_unchanged.state, BundleState::Ready));
 
     Ok(())
 }
