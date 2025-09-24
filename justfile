@@ -101,7 +101,7 @@ simulator:
     cargo run --bin tips-simulator node
 
 simulator-playground:
-    cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator
+    cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator --authrpc.port=8554
 
 ui:
     cd ui && yarn dev
