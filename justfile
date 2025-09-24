@@ -14,7 +14,7 @@ fix:
     cargo fmt --all
     cargo clippy --fix --allow-dirty --allow-staged
     # UI
-    cd ui && npx biome check --fix
+    cd ui && npx biome check --write --unsafe
 
 create-migration name:
     touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
@@ -72,10 +72,10 @@ start-except programs: stop-all
 
 ### RUN SERVICES ###
 deps-reset:
-    docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
+    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
 
 deps:
-    docker compose down && docker compose rm && docker compose up -d
+    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && docker compose up -d
 
 audit:
     cargo run --bin tips-audit
