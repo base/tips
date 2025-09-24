@@ -1,25 +1,26 @@
 use alloy_consensus::Typed2718;
-use alloy_consensus::{transaction::SignerRecoverable, Transaction, Signed};
 use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_primitives::{Address, B256, Bytes, U256, U64};
+use alloy_consensus::{Transaction, transaction::SignerRecoverable};
+use alloy_primitives::{Address, B256, Bytes, address};
 use alloy_provider::network::eip2718::Decodable2718;
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
+use anyhow::Result;
+use jsonrpsee::types::ErrorObject;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
-use op_alloy_consensus::{OpTxEnvelope, OpTxType};
+use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
-use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
-use reth_transaction_pool::noop::MockTransactionValidator;
-use tracing::{debug, info, warn};
-use anyhow::Result;
-use jsonrpsee::types::ErrorObject;
-use reth_optimism_txpool::OpTransactionValidator;
-use reth_transaction_pool::{validate::EthTransactionValidatorBuilder, blobstore::InMemoryBlobStore};
+use reth_rpc_eth_types::EthApiError;
+use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
+
+// from: https://github.com/alloy-rs/op-alloy/blob/main/crates/consensus/src/interop.rs#L9
+// reference: https://github.com/paradigmxyz/reth/blob/bdc59799d0651133d8b191bbad62746cb5036595/crates/optimism/txpool/src/supervisor/access_list.rs#L39
+const CROSS_L2_INBOX_ADDRESS: Address = address!("0x4200000000000000000000000000000000000022");
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -59,11 +60,24 @@ impl<Queue> IngressService<Queue> {
         if envelope.is_eip4844() {
             return Err(anyhow::anyhow!("EIP-4844 transactions are not supported"));
         }
-        // TODO: skip if interop is supported
+
+        // from: https://github.com/paradigmxyz/reth/blob/3b0d98f3464b504d96154b787a860b2488a61b3e/crates/optimism/txpool/src/supervisor/client.rs#L76-L84
+        // it returns `None` if a tx is not cross chain, which is when `inbox_entries` is empty in the snippet above.
+        // we can do something similar where if the inbox_entries is non-empty then it is a cross chain tx and it's something we don't support
+        if let Some(access_list) = envelope.access_list() {
+            let inbox_entries = access_list
+                .iter()
+                .filter(|entry| entry.address == CROSS_L2_INBOX_ADDRESS);
+            if inbox_entries.count() > 0 {
+                return Err(anyhow::anyhow!("Interop transactions are not supported"));
+            }
+        }
 
         // check account bytecode to see if the account is 7702 then is the tx 7702
         if account.code_hash != KECCAK_EMPTY && envelope.is_eip7702() {
-            return Err(anyhow::anyhow!("Account is a 7702 account but transaction is not EIP-7702"));
+            return Err(anyhow::anyhow!(
+                "Account is a 7702 account but transaction is not EIP-7702"
+            ));
         }
 
         // check if nonce is the latest
@@ -119,7 +133,11 @@ where
                 error = ?validation_error,
                 "Transaction validation failed"
             );
-            return Err(ErrorObject::owned(11, validation_error.to_string(), Some(2)));
+            return Err(ErrorObject::owned(
+                11,
+                validation_error.to_string(),
+                Some(2),
+            ));
         }
 
         // TODO: parallelize DB and mempool setup
