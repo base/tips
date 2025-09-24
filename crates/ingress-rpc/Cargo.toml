@@ -1,7 +1,11 @@
 [package]
 name = "tips-ingress-rpc"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+edition.workspace = true
 
 [[bin]]
 name = "tips-ingress-rpc"
@@ -35,4 +39,3 @@ op-revm.workspace = true
 revm-context-interface.workspace = true
 alloy-signer-local.workspace = true
 reth-optimism-evm.workspace = true
-reth-errors.workspace = true

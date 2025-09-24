@@ -6,52 +6,57 @@ This document describes the S3 storage format used by the audit system for archi
 
 ### Bundle History: `/bundles/<UUID>`
 
-Each bundle is stored as a JSON object containing its complete lifecycle history:
+Each bundle is stored as a JSON object containing its complete lifecycle history. The history events in this object are 
+dervied from the events defined in the [bundle states](./BUNDLE_STATES.md).
 
 ```json
 {
    "history": [
         {
-            "event": "Created",
-            "timestamp": 1234567890,
-            "bundle": {
+            "event": "Created",          // Event type (see ./BUNDLE_STATES.md)
+            "timestamp": 1234567890,     // timestamp event was written to kafka
+            "key": "<bundle_id>-<uuid>", // used to dedup events
+            "data": {
+              "bundle": {
                 // EthSendBundle object
+              }
             }
-        },
-        {
-            "event": "Updated",
-            "timestamp": 1234567891,
-            "bundle": {
-                // EthSendBundle object
-            }
-        },
-        {
-            "event": "Cancelled",
-            "timestamp": 1234567892
         },
         {
             "event": "BuilderIncluded",
-            "builder": "builder-id",
             "timestamp": 1234567893,
-            "blockNumber": 12345,
-            "flashblockIndex": 1
+            "key": "<bundle_id>-<uuid>",
+            "data": {
+              "blockNumber": 12345,
+              "flashblockIndex": 1,
+              "builderId": "builder-id"
+            }
         },
         {
             "event": "FlashblockIncluded",
             "timestamp": 1234567894,
-            "blockNumber": 12345,
-            "flashblockIndex": 1
+            "key": "<bundle_id>-<uuid>",
+            "data": {
+              "blockNumber": 12345,
+              "flashblockIndex": 1
+            },
         },
         {
             "event": "BlockIncluded",
             "timestamp": 1234567895,
-            "blockNumber": 12345,
-            "blockHash": "0x..."
+            "key": "<bundle_id>-<uuid>",
+            "data": {
+              "blockNumber": 12345,
+              "blockHash": "0x..."
+            }
         },
         {
             "event": "Dropped",
             "timestamp": 1234567896,
-            "reason": "TIMEOUT"
+            "key": "<bundle_id>-<uuid>",
+            "data": {
+              "reason": "TIMEOUT"
+            }
         }
     ]
 }
@@ -69,19 +74,3 @@ Transaction hash to bundle mapping for efficient lookups:
     ]
 }
 ```
-
-## Event Types
-
-### Bundle Events
-
-- **Created**: Initial bundle creation with transaction list
-- **Updated**: Bundle modification (transaction additions/removals)
-- **Cancelled**: Bundle explicitly cancelled
-- **BuilderIncluded**: Bundle included by builder in flashblock
-- **FlashblockIncluded**: Flashblock containing bundle included in chain
-- **BlockIncluded**: Final confirmation in blockchain
-- **Dropped**: Bundle dropped from processing
-
-### Drop Reasons
-
-- `TIMEOUT`: Bundle expired without inclusion
