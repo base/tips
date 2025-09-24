@@ -8,9 +8,11 @@ services:
       - "19222:9222/udp" # P2P UDP
       - "17300:7300" # metrics
       - "16060:6060" # pprof
-    command: ["bash", "./op-node-entrypoint"]
+    # As written, op-node-entrypoint must write its own JWT secret to the file system.
+    command: ["bash", "-c", "OP_NODE_L2_ENGINE_AUTH_RAW=$(cat /data/jwtsecret) exec ./op-node-entrypoint"]
     volumes:
       - ~/.playground/devnet/:/artifacts
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret
       - ~/.playground/devnet/rollup.json:/data/rollup.json
     env_file:
       - ${NETWORK_ENV:-.env.playground}
