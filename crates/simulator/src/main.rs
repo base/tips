@@ -2,9 +2,22 @@ use reth_optimism_cli::commands::Commands;
 use reth_optimism_node::args::RollupArgs;
 use tips_simulator::{config::Cli, config::CliExt, ListenersWithWorkers};
 use tracing::info;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
+fn init_tracing() {
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(tracing_subscriber::fmt::layer())
+        .init();
+}
 
 fn main() -> eyre::Result<()> {
     dotenvy::dotenv().ok();
+
+    init_tracing();
 
     let cli = <Cli as CliExt>::parsed();
     let config = match &cli.command {
@@ -24,6 +37,16 @@ fn main() -> eyre::Result<()> {
         playground = playground_enabled,
         "Starting reth node with both ExEx and mempool event listeners"
     );
+
+    if let Commands::Node(node_command) = &cli.command {
+        match node_command.rpc.auth_jwtsecret.as_ref() {
+            Some(secret_path) => info!(
+                auth_jwtsecret = %secret_path.display(),
+                "Auth RPC JWT secret configured"
+            ),
+            None => info!("Auth RPC JWT secret not configured"),
+        }
+    }
 
     cli.run(|builder, _| async move {
         // Keep the Base mempool private.
