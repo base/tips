@@ -90,18 +90,3 @@ services:
       /usr/bin/mc anonymous set public minio/tips;
       exit 0;
       "
-  simulator-cl:
-    image: base-node-reth
-    container_name: tips-simulator-cl
-    ports:
-      - "18545:8545" # RPC
-      - "19222:9222" # P2P TCP
-      - "19222:9222/udp" # P2P UDP
-      - "17300:7300" # metrics
-      - "16060:6060" # pprof
-    command: ["bash", "./op-node-entrypoint"]
-    volumes:
-      - ~/.playground/devnet/:/artifacts
-      - ~/.playground/devnet/rollup.json:/data/rollup.json
-    env_file:
-      - ${NETWORK_ENV:-./docker/.env.playground}
