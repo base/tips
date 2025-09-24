@@ -4,7 +4,14 @@ import { bundles } from "@/db/schema";
 
 export interface Bundle {
   id: string;
-  txnHashes: string[] | null;
+  txnHashes: string[];
+  state:
+    | "Ready"
+    | "BundleLimit"
+    | "AccountLimits"
+    | "GlobalLimits"
+    | "IncludedInFlashblock"
+    | "IncludedInBlock";
 }
 
 export async function GET() {
@@ -13,6 +20,7 @@ export async function GET() {
       .select({
         id: bundles.id,
         txnHashes: bundles.txnHashes,
+        state: bundles.state,
       })
       .from(bundles);
 

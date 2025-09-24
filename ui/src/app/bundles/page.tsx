@@ -85,12 +85,33 @@ export default function BundlesPage() {
                     href={`/bundles/${bundle.id}`}
                     className="block p-3 border rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
                   >
-                    <span className="font-mono text-sm">
-                      {bundle.id}
-                      {" ("}
-                      {bundle.txnHashes?.join(", ") || "No transactions"}
-                      {")"}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className="font-mono text-sm">{bundle.id}</span>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span
+                          className={`px-2 py-1 rounded font-medium ${
+                            bundle.state === "Ready"
+                              ? "bg-blue-100 text-blue-600"
+                              : bundle.state === "BundleLimit"
+                                ? "bg-yellow-100 text-yellow-600"
+                                : bundle.state === "AccountLimits"
+                                  ? "bg-orange-100 text-orange-600"
+                                  : bundle.state === "GlobalLimits"
+                                    ? "bg-red-100 text-red-600"
+                                    : bundle.state === "IncludedInFlashblock"
+                                      ? "bg-purple-100 text-purple-600"
+                                      : bundle.state === "IncludedInBlock"
+                                        ? "bg-green-100 text-green-600"
+                                        : "bg-gray-100 text-gray-600"
+                          }`}
+                        >
+                          {bundle.state}
+                        </span>
+                        <span className="text-gray-500">
+                          {bundle.txnHashes?.join(", ") || "No transactions"}
+                        </span>
+                      </div>
+                    </div>
                   </Link>
                 </li>
               ))}
