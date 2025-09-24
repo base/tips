@@ -1,5 +1,7 @@
-use alloy_consensus::transaction::SignerRecoverable;
-use alloy_primitives::{B256, Bytes};
+use alloy_consensus::Typed2718;
+use alloy_consensus::{transaction::SignerRecoverable, Transaction, Signed};
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_primitives::{Address, B256, Bytes, U256, U64};
 use alloy_provider::network::eip2718::Decodable2718;
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
@@ -7,10 +9,15 @@ use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
-use op_alloy_consensus::OpTxEnvelope;
+use op_alloy_consensus::{OpTxEnvelope, OpTxType};
 use op_alloy_network::Optimism;
-use reth_rpc_eth_types::EthApiError;
-use tracing::{info, warn};
+use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use reth_transaction_pool::noop::MockTransactionValidator;
+use tracing::{debug, info, warn};
+use anyhow::Result;
+use jsonrpsee::types::ErrorObject;
+use reth_optimism_txpool::OpTransactionValidator;
+use reth_transaction_pool::{validate::EthTransactionValidatorBuilder, blobstore::InMemoryBlobStore};
 
 use crate::queue::QueuePublisher;
 
@@ -42,6 +49,33 @@ impl<Queue> IngressService<Queue> {
             dual_write_mempool,
             queue,
         }
+    }
+
+    async fn validate_tx(&self, envelope: &OpTxEnvelope) -> Result<()> {
+        let sender = envelope.recover_signer().unwrap_or_default();
+        let account = self.provider.get_account(sender).await.unwrap_or_default();
+
+        // skip eip4844 transactions
+        if envelope.is_eip4844() {
+            return Err(anyhow::anyhow!("EIP-4844 transactions are not supported"));
+        }
+        // TODO: skip if interop is supported
+
+        // check account bytecode to see if the account is 7702 then is the tx 7702
+        if account.code_hash != KECCAK_EMPTY && envelope.is_eip7702() {
+            return Err(anyhow::anyhow!("Account is a 7702 account but transaction is not EIP-7702"));
+        }
+
+        // check if nonce is the latest
+        if account.nonce < envelope.nonce() {
+            return Err(anyhow::anyhow!("Nonce is not the latest"));
+        }
+
+        // check if execution cost <= balance
+        if account.balance < envelope.value() {
+            return Err(anyhow::anyhow!("Insufficient funds"));
+        }
+        Ok(())
     }
 }
 
@@ -75,10 +109,19 @@ where
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
         let transaction = envelope
+            .clone()
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        // TODO: Validation and simulation
+        if let Err(validation_error) = self.validate_tx(&envelope).await {
+            warn!(
+                sender = %transaction.recover_signer().unwrap_or_default(),
+                error = ?validation_error,
+                "Transaction validation failed"
+            );
+            return Err(ErrorObject::owned(11, validation_error.to_string(), Some(2)));
+        }
+
         // TODO: parallelize DB and mempool setup
 
         let bundle = EthSendBundle {
