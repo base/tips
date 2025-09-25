@@ -1,7 +1,7 @@
 use alloy_consensus::Typed2718;
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{Address, B256, Bytes, address};
+use alloy_primitives::{Address, B256, Bytes, U256, address};
 use alloy_provider::network::eip2718::Decodable2718;
 use alloy_provider::{Provider, RootProvider};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
@@ -21,6 +21,27 @@ use crate::queue::QueuePublisher;
 // from: https://github.com/alloy-rs/op-alloy/blob/main/crates/consensus/src/interop.rs#L9
 // reference: https://github.com/paradigmxyz/reth/blob/bdc59799d0651133d8b191bbad62746cb5036595/crates/optimism/txpool/src/supervisor/access_list.rs#L39
 const CROSS_L2_INBOX_ADDRESS: Address = address!("0x4200000000000000000000000000000000000022");
+
+pub struct AccountInfo {
+    pub balance: U256,
+    pub nonce: u64,
+    pub code_hash: B256,
+}
+
+pub trait AccountInfoLookup {
+    async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo>;
+}
+
+impl AccountInfoLookup for RootProvider<Optimism> {
+    async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo> {
+        let account = self.get_account(address).await?;
+        Ok(AccountInfo {
+            balance: account.balance,
+            nonce: account.nonce,
+            code_hash: account.code_hash,
+        })
+    }
+}
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -54,7 +75,7 @@ impl<Queue> IngressService<Queue> {
 
     async fn validate_tx(&self, envelope: &OpTxEnvelope) -> Result<()> {
         let sender = envelope.recover_signer().unwrap_or_default();
-        let account = self.provider.get_account(sender).await.unwrap_or_default();
+        let account = self.provider.fetch_account_info(sender).await?;
 
         // skip eip4844 transactions
         if envelope.is_eip4844() {
@@ -73,22 +94,24 @@ impl<Queue> IngressService<Queue> {
             }
         }
 
-        // check account bytecode to see if the account is 7702 then is the tx 7702
-        if account.code_hash != KECCAK_EMPTY && envelope.is_eip7702() {
+        // error if account is 7702 but tx is not 7702
+        if account.code_hash != KECCAK_EMPTY && !envelope.is_eip7702() {
             return Err(anyhow::anyhow!(
                 "Account is a 7702 account but transaction is not EIP-7702"
             ));
         }
 
-        // check if nonce is the latest
-        if account.nonce < envelope.nonce() {
+        // error if tx nonce is not the latest
+        if envelope.nonce() != account.nonce - 1 {
             return Err(anyhow::anyhow!("Nonce is not the latest"));
         }
 
-        // check if execution cost <= balance
-        if account.balance < envelope.value() {
+        // error if execution cost costs more than balance
+        if envelope.value() > account.balance {
             return Err(anyhow::anyhow!("Insufficient funds"));
         }
+
+        // TODO: op-checks (l1 block info, l1 balance > execution + DA fee)
         Ok(())
     }
 }
@@ -127,18 +150,9 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        if let Err(validation_error) = self.validate_tx(&envelope).await {
-            warn!(
-                sender = %transaction.recover_signer().unwrap_or_default(),
-                error = ?validation_error,
-                "Transaction validation failed"
-            );
-            return Err(ErrorObject::owned(
-                11,
-                validation_error.to_string(),
-                Some(2),
-            ));
-        }
+        self.validate_tx(&envelope)
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
 
         // TODO: parallelize DB and mempool setup
 
