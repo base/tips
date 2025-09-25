@@ -47,3 +47,15 @@ services:
     env_file:
       - .env.docker
     restart: unless-stopped
+
+  simulator:
+    build:
+      context: .
+      dockerfile: crates/simulator/Dockerfile
+    container_name: tips-simulator
+    volumes:
+      - ${TIPS_SIMULATOR_DATADIR}:/data
+      - ${TIPS_SIMULATOR_BUILDER_PLAYGROUND_DIR}:/playground
+    env_file:
+      - .env.docker
+    restart: unless-stopped
