@@ -88,7 +88,7 @@ impl PlaygroundOptions {
         let default_authrpc_port = extract_authrpc_port(path)?;
         let authrpc_port = pick_preferred_port(default_authrpc_port, 4000..9000);
         let trusted_peer = TrustedPeer::from_secret_key(
-            Host::Ipv4(Ipv4Addr::LOCALHOST),
+            resolve_trusted_peer_host(),
             extract_trusted_peer_port(path)?,
             &extract_deterministic_p2p_key(path)?,
         );
@@ -342,5 +342,13 @@ fn extract_trusted_peer_port(basepath: &Path) -> Result<u16> {
     port_mapping
         .parse::<u16>()
         .map_err(|e| anyhow!("Invalid external port mapping value for op-geth: {e}"))
+}
+
+fn resolve_trusted_peer_host() -> Host {
+    if std::fs::metadata("/.dockerenv").is_ok() {
+        Host::Domain("host.docker.internal".into())
+    } else {
+        Host::Ipv4(Ipv4Addr::LOCALHOST)
+    }
 }
 
