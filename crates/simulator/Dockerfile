@@ -38,5 +38,5 @@ WORKDIR /app
 
 COPY --from=builder /tmp/tips-simulator /app/tips-simulator
 
-CMD ["/app/tips-simulator", "node", "--datadir", "/data", "--builder.playground", "/playground"]
+CMD ["/app/tips-simulator", "node", "--datadir", "/data", "--http.addr", "0.0.0.0", "--builder.playground", "/playground"]
 

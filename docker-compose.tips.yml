@@ -53,6 +53,9 @@ services:
       context: .
       dockerfile: crates/simulator/Dockerfile
     container_name: tips-simulator
+    ports:
+      - "2222:2222"
+      - "4444:4444"
     volumes:
       - ${TIPS_SIMULATOR_DATADIR}:/data
       - ${TIPS_SIMULATOR_BUILDER_PLAYGROUND_DIR}:/playground
