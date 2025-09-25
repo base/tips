@@ -13,12 +13,17 @@ services:
       - bash
       - -c
       - |
-          OP_NODE_L2_ENGINE_AUTH_RAW=$(cat /data/jwtsecret)
-          OP_NODE_P2P_BOOTNODES=$(grep 'enr=' /artifacts/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')
-          export OP_NODE_L2_ENGINE_AUTH_RAW OP_NODE_P2P_BOOTNODES
-          exec ./op-node-entrypoint
+          echo "Writing JWT secret to $${OP_NODE_L2_ENGINE_AUTH}"
+          cat /data/jwtsecret > "$${OP_NODE_L2_ENGINE_AUTH}"
+          export OP_NODE_P2P_BOOTNODES=$(grep 'enr=' /artifacts/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')
+          eval "OP_NODE_L2_ENGINE_HTTP=\$${OP_NODE_L2_ENGINE_RPC/ws/http}"
+          until [ "$(curl -s -w '%{http_code}' -o /dev/null "$${OP_NODE_L2_ENGINE_HTTP}")" -eq 401 ]; do
+            echo "waiting for execution client to be ready"
+            sleep 5
+          done
+          exec ./op-node
     volumes:
-      - ~/.playground/devnet/:/artifacts
+      - ~/.playground/devnet:/artifacts
       - ~/.playground/devnet/jwtsecret:/data/jwtsecret
       - ~/.playground/devnet/rollup.json:/data/rollup.json
     env_file:
