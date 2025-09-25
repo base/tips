@@ -33,7 +33,7 @@ pub struct SimulatorNodeConfig {
     #[arg(
         long,
         env = "TIPS_SIMULATOR_KAFKA_TOPIC",
-        default_value = "mempool-events"
+        default_value = "tips-audit"
     )]
     pub kafka_topic: String,
 

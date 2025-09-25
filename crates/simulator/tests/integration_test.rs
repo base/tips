@@ -43,13 +43,13 @@ fn test_simulation_request_creation() {
 fn test_mempool_simulator_config() {
     let config = MempoolListenerConfig {
         kafka_brokers: vec!["localhost:9092".to_string()],
-        kafka_topic: "mempool-events".to_string(),
+        kafka_topic: "tips-audit".to_string(),
         kafka_group_id: "tips-simulator".to_string(),
         database_url: "postgresql://user:pass@localhost:5432/tips".to_string(),
     };
 
     assert_eq!(config.kafka_brokers, vec!["localhost:9092"]);
-    assert_eq!(config.kafka_topic, "mempool-events");
+    assert_eq!(config.kafka_topic, "tips-audit");
     assert_eq!(config.kafka_group_id, "tips-simulator");
     assert_eq!(
         config.database_url,
