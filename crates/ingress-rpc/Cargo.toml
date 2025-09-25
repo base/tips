@@ -31,3 +31,4 @@ serde.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 backon.workspace = true
+op-revm.workspace = true

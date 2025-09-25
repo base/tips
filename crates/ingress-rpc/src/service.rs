@@ -1,18 +1,18 @@
-use alloy_consensus::Typed2718;
-use alloy_consensus::constants::KECCAK_EMPTY;
-use alloy_consensus::{Transaction, transaction::SignerRecoverable};
+use alloy_consensus::{
+    Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::SignerRecoverable,
+};
 use alloy_primitives::{Address, B256, Bytes, U256, address};
-use alloy_provider::network::eip2718::Decodable2718;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
 use anyhow::Result;
-use jsonrpsee::types::ErrorObject;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
+    types::ErrorObject,
 };
 use op_alloy_consensus::OpTxEnvelope;
-use op_alloy_network::Optimism;
+use op_alloy_network::{Optimism, eip2718::Encodable2718};
+use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_rpc_eth_types::EthApiError;
 use tracing::{info, warn};
 
@@ -102,7 +102,8 @@ impl<Queue> IngressService<Queue> {
         }
 
         // error if tx nonce is not the latest
-        if envelope.nonce() != account.nonce - 1 {
+        // https://github.com/paradigmxyz/reth/blob/a047a055ab996f85a399f5cfb2fe15e350356546/crates/transaction-pool/src/validate/eth.rs#L611
+        if envelope.nonce() < account.nonce {
             return Err(anyhow::anyhow!("Nonce is not the latest"));
         }
 
@@ -111,7 +112,17 @@ impl<Queue> IngressService<Queue> {
             return Err(anyhow::anyhow!("Insufficient funds"));
         }
 
-        // TODO: op-checks (l1 block info, l1 balance > execution + DA fee)
+        // op-checks to see if sender can cover L1 gas cost
+        // from: https://github.com/paradigmxyz/reth/blob/6aa73f14808491aae77fc7c6eb4f0aa63bef7e6e/crates/optimism/txpool/src/validator.rs#L219
+        let mut l1_block_info = L1BlockInfo::default();
+        let tx = envelope.clone().try_into_pooled()?;
+        let encoded = tx.encoded_2718();
+
+        let cost_addition = l1_block_info.calculate_tx_l1_cost(&encoded, OpSpecId::ISTHMUS);
+        let cost = tx.value().saturating_add(cost_addition);
+        if cost > account.balance {
+            return Err(anyhow::anyhow!("Insufficient funds to cover L1 gas cost"));
+        }
         Ok(())
     }
 }

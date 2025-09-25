@@ -62,3 +62,4 @@ bytes = { version = "1.8.0", features = ["serde"] }
 
 # tips-ingress
 backon = "1.5.2"
+op-revm = { version = "10.1.0", default-features = false }
