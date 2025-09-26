@@ -92,8 +92,11 @@ services:
       "
 
   simulator-cl:
-    image: base-node-reth
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7
     container_name: tips-simulator-cl
+    depends_on:
+      simulator:
+        condition: service_healthy
     profiles:
       - simulator
     ports:
@@ -102,24 +105,7 @@ services:
       - "19222:9222/udp" # P2P UDP
       - "17300:7300" # metrics
       - "16060:6060" # pprof
-    command:
-      - bash
-      - -c
-      - |
-          # builder-playground's op-node generates a new ENR for each run
-          export OP_NODE_P2P_BOOTNODES=$(grep 'enr=' /artifacts/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')
-          
-          # Derived from op-node-entrypoint
-          echo "Writing JWT secret to $${OP_NODE_L2_ENGINE_AUTH}"
-          cat /data/jwtsecret > "$${OP_NODE_L2_ENGINE_AUTH}"
-          eval "OP_NODE_L2_ENGINE_HTTP=\$${OP_NODE_L2_ENGINE_RPC/ws/http}"
-          until [ "$(curl -s -w '%{http_code}' -o /dev/null "$${OP_NODE_L2_ENGINE_HTTP}")" -eq 401 ]; do
-            echo "waiting for execution client to be ready"
-            sleep 5
-          done
-          exec ./op-node
     volumes:
-      - ~/.playground/devnet:/artifacts
       - ~/.playground/devnet/jwtsecret:/data/jwtsecret
       - ~/.playground/devnet/rollup.json:/data/rollup.json
     environment:
@@ -144,8 +130,8 @@ services:
       
       # ENGINE CONFIGURATION
       OP_NODE_L2_ENGINE_KIND: reth
-      OP_NODE_L2_ENGINE_RPC: ws://simulator:4444
-      OP_NODE_L2_ENGINE_AUTH: /tmp/jwtsecret
+      OP_NODE_L2_ENGINE_RPC: http://simulator:4444
+      OP_NODE_L2_ENGINE_AUTH: /data/jwtsecret
       
       # P2P CONFIGURATION
       OP_NODE_P2P_LISTEN_IP: 0.0.0.0
@@ -155,6 +141,8 @@ services:
       OP_NODE_P2P_ADVERTISE_IP: host.docker.internal
       OP_NODE_P2P_ADVERTISE_TCP: "19222"
       OP_NODE_P2P_ADVERTISE_UDP: "19222"
+      # Only connect to the sequencer in playground mode
+      OP_NODE_P2P_NO_DISCOVERY: "true"
       
       # RPC CONFIGURATION
       OP_NODE_RPC_ADDR: 0.0.0.0
@@ -168,3 +156,5 @@ services:
       OP_NODE_METRICS_ADDR: 0.0.0.0
       OP_NODE_METRICS_PORT: "7300"
       STATSD_ADDRESS: "172.17.0.1"
+    env_file:
+      - .env.playground
