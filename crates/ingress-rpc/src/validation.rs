@@ -9,6 +9,7 @@ use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use tracing::warn;
 
 /// Account info for a given address
 pub struct AccountInfo {
@@ -63,7 +64,9 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
                 return Ok(l1_block_info);
             }
         }
-        Err(anyhow::anyhow!("Failed to fetch L1 block info"))
+        // TODO: we should return an error here when we have a proper mempool node
+        warn!("Failed to fetch L1 block info");
+        Ok(L1BlockInfo::default())
     }
 }
 
@@ -218,7 +221,7 @@ mod tests {
             gas_limit: 21000,
             max_fee_per_gas: 20000000000u128,
             max_priority_fee_per_gas: 1000000000u128,
-            to: Address::random().into(),
+            to: Address::random(),
             value: U256::from(10000000000000u128),
             authorization_list: Default::default(),
             access_list: Default::default(),
@@ -284,7 +287,7 @@ mod tests {
             gas_limit: 21000,
             max_fee_per_gas: 20000000000u128,
             max_priority_fee_per_gas: 1000000000u128,
-            to: Address::random().into(),
+            to: Address::random(),
             value: U256::from(10000000000000u128),
             access_list: Default::default(),
             input: bytes!("").clone(),
