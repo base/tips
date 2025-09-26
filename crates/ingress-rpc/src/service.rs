@@ -108,17 +108,24 @@ impl<Queue> IngressService<Queue> {
             return Err(anyhow::anyhow!("Nonce is not the latest"));
         }
 
+        // For EIP-1559 transactions: `max_fee_per_gas * gas_limit + tx_value`.
+        // ref: https://github.com/paradigmxyz/reth/blob/main/crates/transaction-pool/src/traits.rs#L1186
+        let max_fee = txn
+            .max_fee_per_gas()
+            .saturating_mul(txn.gas_limit() as u128);
+        let txn_cost = txn.value().saturating_add(U256::from(max_fee));
+
         // error if execution cost costs more than balance
-        if txn.value() > account.balance {
+        if txn_cost > account.balance {
             return Err(anyhow::anyhow!("Insufficient funds"));
         }
 
         // op-checks to see if sender can cover L1 gas cost
         // from: https://github.com/paradigmxyz/reth/blob/6aa73f14808491aae77fc7c6eb4f0aa63bef7e6e/crates/optimism/txpool/src/validator.rs#L219
         let mut l1_block_info = L1BlockInfo::default();
-        let cost_addition = l1_block_info.calculate_tx_l1_cost(data, OpSpecId::ISTHMUS);
-        let cost = txn.value().saturating_add(cost_addition);
-        if cost > account.balance {
+        let l1_cost_addition = l1_block_info.calculate_tx_l1_cost(data, OpSpecId::ISTHMUS);
+        let l1_cost = txn_cost.saturating_add(l1_cost_addition);
+        if l1_cost > account.balance {
             return Err(anyhow::anyhow!("Insufficient funds to cover L1 gas cost"));
         }
         Ok(())
