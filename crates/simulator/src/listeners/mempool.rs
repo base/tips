@@ -1,5 +1,4 @@
-use crate::engine::SimulationEngine;
-use crate::publisher::SimulationPublisher;
+use crate::core::BundleSimulator;
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationTask, SimulationWorkerPool};
 use alloy_primitives::B256;
@@ -31,11 +30,10 @@ pub struct MempoolListenerConfig {
 }
 
 /// Mempool event listener that processes events and queues simulations
-pub struct MempoolEventListener<Node, E, P>
+pub struct MempoolEventListener<Node, B>
 where
     Node: FullNodeComponents,
-    E: SimulationEngine,
-    P: SimulationPublisher,
+    B: BundleSimulator + 'static,
 {
     /// State provider factory for getting current block info
     provider: Arc<Node::Provider>,
@@ -44,20 +42,19 @@ where
     /// Kafka topic name
     topic: String,
     /// Shared simulation worker pool
-    worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
+    worker_pool: Arc<SimulationWorkerPool<B>>,
 }
 
-impl<Node, E, P> MempoolEventListener<Node, E, P>
+impl<Node, B> MempoolEventListener<Node, B>
 where
     Node: FullNodeComponents,
-    E: SimulationEngine + Clone + 'static,
-    P: SimulationPublisher + Clone + 'static,
+    B: BundleSimulator + 'static,
 {
     /// Create a new mempool event listener
     pub fn new(
         provider: Arc<Node::Provider>,
         config: MempoolListenerConfig,
-        worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
+        worker_pool: Arc<SimulationWorkerPool<B>>,
     ) -> Result<Self> {
         let consumer: StreamConsumer = ClientConfig::new()
             .set("group.id", &config.kafka_group_id)
@@ -86,8 +83,7 @@ where
     /// Run the mempool event listener
     pub async fn run(self) -> Result<()>
     where
-        E: 'static,
-        P: 'static,
+        B: 'static,
     {
         info!(
             topic = %self.topic,

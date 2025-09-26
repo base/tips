@@ -1,13 +1,20 @@
 use crate::engine::SimulationEngine;
 use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
+use async_trait::async_trait;
 use eyre::Result;
-use reth_provider::StateProviderFactory;
 use tracing::{error, info};
 
-/// Core bundle simulator that provides shared simulation logic
-/// Used by both mempool event simulators and ExEx event simulators
-pub struct BundleSimulator<E, P>
+/// Clean trait for bundle simulation without exposing Reth's complex types
+#[async_trait]
+pub trait BundleSimulator: Send + Sync {
+    /// Simulate a bundle execution
+    async fn simulate(&self, request: &SimulationRequest) -> Result<()>;
+}
+
+/// Production bundle simulator for Reth
+/// This is the Reth-specific implementation
+pub struct RethBundleSimulator<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
@@ -16,34 +23,28 @@ where
     publisher: P,
 }
 
-impl<E, P> BundleSimulator<E, P>
+impl<E, P> RethBundleSimulator<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
 {
     pub fn new(engine: E, publisher: P) -> Self {
-        Self { engine, publisher }
+        Self { 
+            engine, 
+            publisher,
+        }
     }
+}
 
-    /// Process a simulation request by creating state provider from factory
-    /// Convenience method that handles state provider creation
-    pub async fn simulate<F>(
-        &self,
-        request: &SimulationRequest,
-        state_provider_factory: &F,
-    ) -> Result<()>
-    where
-        F: StateProviderFactory,
-    {
-        // Get state provider for the block
-        // FIXME: We probably want to get the state provider once per block rather than once per
-        // bundle for each block.
-        let state_provider = state_provider_factory
-            .state_by_block_hash(request.block_hash)
-            .map_err(|e| eyre::eyre!("Failed to get state provider: {}", e))?;
-
-        // Run the simulation
-        match self.engine.simulate_bundle(request, &state_provider).await {
+#[async_trait]
+impl<E, P> BundleSimulator for RethBundleSimulator<E, P>
+where
+    E: SimulationEngine + 'static,
+    P: SimulationPublisher + 'static,
+{
+    async fn simulate(&self, request: &SimulationRequest) -> Result<()> {
+        // Run the simulation - engine will get its own state provider
+        match self.engine.simulate_bundle(request).await {
             Ok(result) => {
                 info!(
                     bundle_id = %request.bundle_id,

@@ -1,8 +1,5 @@
 use crate::core::BundleSimulator;
-use crate::engine::SimulationEngine;
-use crate::publisher::SimulationPublisher;
 use crate::types::SimulationRequest;
-use reth_provider::StateProviderFactory;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -15,16 +12,12 @@ pub struct SimulationTask {
 }
 
 /// Generic simulation worker pool that can be shared across different simulators
-pub struct SimulationWorkerPool<E, P, S>
+pub struct SimulationWorkerPool<B>
 where
-    E: SimulationEngine,
-    P: SimulationPublisher,
-    S: StateProviderFactory,
+    B: BundleSimulator,
 {
     /// Core bundle simulator
-    simulator: Arc<BundleSimulator<E, P>>,
-    /// State provider factory
-    state_provider_factory: Arc<S>,
+    simulator: Arc<B>,
     /// Channel for sending simulation requests to workers
     simulation_tx: mpsc::Sender<SimulationTask>,
     /// Channel for receiving simulation requests in workers
@@ -37,23 +30,19 @@ where
     max_concurrent: usize,
 }
 
-impl<E, P, S> SimulationWorkerPool<E, P, S>
+impl<B> SimulationWorkerPool<B>
 where
-    E: SimulationEngine + Clone + 'static,
-    P: SimulationPublisher + Clone + 'static,
-    S: reth_provider::StateProviderFactory + Send + Sync + 'static,
+    B: BundleSimulator + 'static,
 {
     /// Create a new simulation worker pool
     pub fn new(
-        simulator: Arc<BundleSimulator<E, P>>,
-        state_provider_factory: Arc<S>,
+        simulator: Arc<B>,
         max_concurrent_simulations: usize,
     ) -> Arc<Self> {
         let (simulation_tx, simulation_rx) = mpsc::channel(1000);
 
         Arc::new(Self {
             simulator,
-            state_provider_factory,
             simulation_tx,
             simulation_rx: Arc::new(tokio::sync::Mutex::new(simulation_rx)),
             latest_block: AtomicU64::new(0),
@@ -145,7 +134,7 @@ where
             // Execute the simulation
             match pool
                 .simulator
-                .simulate(&task.request, pool.state_provider_factory.as_ref())
+                .simulate(&task.request)
                 .await
             {
                 Ok(_) => {

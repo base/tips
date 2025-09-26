@@ -1,5 +1,4 @@
-use crate::engine::SimulationEngine;
-use crate::publisher::SimulationPublisher;
+use crate::core::BundleSimulator;
 use crate::types::SimulationRequest;
 use crate::worker_pool::{SimulationTask, SimulationWorkerPool};
 
@@ -62,11 +61,10 @@ where
 
 /// ExEx event listener that processes chain events and queues bundle simulations
 /// Processes chain events (commits, reorgs, reverts) and queues simulation tasks
-pub struct ExExEventListener<Node, E, P, D>
+pub struct ExExEventListener<Node, B, D>
 where
     Node: FullNodeComponents,
-    E: SimulationEngine + Clone + 'static,
-    P: SimulationPublisher + Clone + 'static,
+    B: BundleSimulator + 'static,
     D: tips_datastore::BundleDatastore,
 {
     /// The execution extension context
@@ -74,21 +72,20 @@ where
     /// Datastore for fetching bundles from mempool
     datastore: Arc<D>,
     /// Shared simulation worker pool
-    worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
+    worker_pool: Arc<SimulationWorkerPool<B>>,
 }
 
-impl<Node, E, P, D> ExExEventListener<Node, E, P, D>
+impl<Node, B, D> ExExEventListener<Node, B, D>
 where
     Node: FullNodeComponents,
-    E: SimulationEngine + Clone + 'static,
-    P: SimulationPublisher + Clone + 'static,
+    B: BundleSimulator + 'static,
     D: tips_datastore::BundleDatastore + 'static,
 {
     /// Create a new ExEx event listener
     pub fn new(
         ctx: ExExContext<Node>,
         datastore: Arc<D>,
-        worker_pool: Arc<SimulationWorkerPool<E, P, Node::Provider>>,
+        worker_pool: Arc<SimulationWorkerPool<B>>,
     ) -> Self {
         Self {
             ctx,
@@ -190,12 +187,12 @@ where
     }
 
     /// Process a single block for potential bundle simulations
-    async fn process_block<B>(
+    async fn process_block<Block>(
         &mut self,
-        block: (&B256, &reth_primitives::RecoveredBlock<B>),
+        block: (&B256, &reth_primitives::RecoveredBlock<Block>),
     ) -> Result<()>
     where
-        B: reth_node_api::Block,
+        Block: reth_node_api::Block,
     {
         let (block_hash, sealed_block) = block;
         let block_number = sealed_block.number();

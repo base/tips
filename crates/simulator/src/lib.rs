@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 pub use config::SimulatorNodeConfig;
-pub use core::BundleSimulator;
+pub use core::{BundleSimulator, RethBundleSimulator};
 pub use engine::{RethSimulationEngine, SimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
 pub use publisher::{SimulationPublisher, TipsSimulationPublisher};
@@ -24,15 +24,14 @@ pub use worker_pool::SimulationWorkerPool;
 
 // Type aliases for concrete implementations
 pub type TipsBundleSimulator<Node> =
-    BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
+    RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
 pub type TipsExExEventListener<Node> = ExExEventListener<
     Node,
-    RethSimulationEngine<Node>,
-    TipsSimulationPublisher,
+    TipsBundleSimulator<Node>,
     tips_datastore::PostgresDatastore,
 >;
 pub type TipsMempoolEventListener<Node> =
-    MempoolEventListener<Node, RethSimulationEngine<Node>, TipsSimulationPublisher>;
+    MempoolEventListener<Node, TipsBundleSimulator<Node>>;
 
 // Initialization functions
 
@@ -43,7 +42,7 @@ where
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
     datastore: Arc<tips_datastore::PostgresDatastore>,
-    simulator: BundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>,
+    simulator: RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>,
 }
 
 /// Initialize common listener components (database, publisher, engine, core simulator)
@@ -81,7 +80,7 @@ where
     let engine = RethSimulationEngine::new(Arc::clone(&provider), evm_config);
     info!("Simulation engine initialized");
 
-    let simulator = BundleSimulator::new(engine, publisher);
+    let simulator = RethBundleSimulator::new(engine, publisher);
     info!("Core bundle simulator initialized");
 
     Ok(CommonListenerComponents {
@@ -119,7 +118,6 @@ where
 
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
-        Arc::clone(&provider),
         config.max_concurrent_simulations,
     );
 
@@ -160,7 +158,6 @@ where
 
     let worker_pool = SimulationWorkerPool::new(
         Arc::new(common_components.simulator),
-        Arc::clone(&provider),
         max_concurrent_simulations,
     );
 
@@ -183,9 +180,7 @@ where
     Node: FullNodeComponents,
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
-    worker_pool: Arc<
-        SimulationWorkerPool<RethSimulationEngine<Node>, TipsSimulationPublisher, Node::Provider>,
-    >,
+    worker_pool: Arc<SimulationWorkerPool<TipsBundleSimulator<Node>>>,
     exex_listener: TipsExExEventListener<Node>,
     mempool_listener: TipsMempoolEventListener<Node>,
 }
@@ -222,7 +217,6 @@ where
 
         let shared_worker_pool = SimulationWorkerPool::new(
             Arc::new(common_components.simulator),
-            Arc::clone(&provider),
             max_concurrent_simulations,
         );
 
