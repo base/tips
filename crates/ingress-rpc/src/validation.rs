@@ -37,6 +37,7 @@ pub async fn validate_tx(
     account: AccountInfo,
     txn: &Recovered<OpTxEnvelope>,
     data: &[u8],
+    l1_block_info: &mut L1BlockInfo,
 ) -> RpcResult<B256> {
     // skip eip4844 transactions
     if txn.is_eip4844() {
@@ -94,15 +95,13 @@ pub async fn validate_tx(
 
     // op-checks to see if sender can cover L1 gas cost
     // from: https://github.com/paradigmxyz/reth/blob/6aa73f14808491aae77fc7c6eb4f0aa63bef7e6e/crates/optimism/txpool/src/validator.rs#L219
-    let mut l1_block_info = L1BlockInfo::default();
     let l1_cost_addition = l1_block_info.calculate_tx_l1_cost(data, OpSpecId::ISTHMUS);
     let l1_cost = txn_cost.saturating_add(l1_cost_addition);
     if l1_cost > account.balance {
         let obj = ErrorObject::owned(11, "Insufficient funds for L1 gas", Some(2));
-        return Err(EthApiError::InvalidTransaction(
-            RpcInvalidTransactionError::other(obj)
-        )
-        .into_rpc_err());
+        return Err(
+            EthApiError::InvalidTransaction(RpcInvalidTransactionError::other(obj)).into_rpc_err(),
+        );
     }
     Ok(txn.tx_hash())
 }
@@ -111,8 +110,8 @@ pub async fn validate_tx(
 mod tests {
     use super::*;
     use alloy_consensus::SignableTransaction;
-    use alloy_consensus::{TxEip1559, TxEip7702};
     use alloy_consensus::{Transaction, constants::KECCAK_EMPTY, transaction::SignerRecoverable};
+    use alloy_consensus::{TxEip1559, TxEip7702};
     use alloy_primitives::{bytes, keccak256};
     use alloy_signer_local::PrivateKeySigner;
     use op_alloy_network::TxSignerSync;
@@ -134,6 +133,10 @@ mod tests {
         }
     }
 
+    fn create_l1_block_info() -> L1BlockInfo {
+        L1BlockInfo::default()
+    }
+
     #[tokio::test]
     async fn test_valid_tx() {
         // Create a sample EIP-1559 transaction
@@ -151,12 +154,17 @@ mod tests {
         };
 
         let account = create_account(0, U256::from(1000000000000000000u128));
+        let mut l1_block_info = create_l1_block_info();
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
-        assert!(validate_tx(account, &recovered_tx, &data).await.is_ok());
+        assert!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -176,12 +184,17 @@ mod tests {
         };
 
         let account = create_7702_account();
+        let mut l1_block_info = create_l1_block_info();
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip7702(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
-        assert!(validate_tx(account, &recovered_tx, &data).await.is_ok());
+        assert!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -206,6 +219,7 @@ mod tests {
         };
 
         let account = create_account(0, U256::from(1000000000000000000u128));
+        let mut l1_block_info = create_l1_block_info();
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
@@ -214,7 +228,7 @@ mod tests {
 
         let obj = ErrorObject::owned(11, "Interop transactions are not supported", Some(2));
         assert_eq!(
-            validate_tx(account, &recovered_tx, &data).await,
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
             Err(RpcInvalidTransactionError::other(obj).into_rpc_err())
         );
     }
@@ -237,16 +251,20 @@ mod tests {
 
         // account is 7702
         let account = create_7702_account();
+        let mut l1_block_info = create_l1_block_info();
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
 
-        assert_eq!(validate_tx(account, &recovered_tx, &data).await, Err(EthApiError::InvalidTransaction(
-            RpcInvalidTransactionError::AuthorizationListInvalidFields,
-        )
-        .into_rpc_err()));
+        assert_eq!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
+            Err(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::AuthorizationListInvalidFields,
+            )
+            .into_rpc_err())
+        );
     }
 
     #[tokio::test]
@@ -265,7 +283,8 @@ mod tests {
         };
 
         let account = create_account(1, U256::from(1000000000000000000u128));
-        
+        let mut l1_block_info = create_l1_block_info();
+
         let nonce = account.nonce;
         let tx_nonce = tx.nonce();
 
@@ -273,12 +292,16 @@ mod tests {
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
-        assert_eq!(validate_tx(account, &recovered_tx, &data).await, Err(EthApiError::InvalidTransaction(
-            RpcInvalidTransactionError::NonceTooLow {
-                tx: tx_nonce,
-                state: nonce,
-            })
-            .into_rpc_err()));
+        assert_eq!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
+            Err(
+                EthApiError::InvalidTransaction(RpcInvalidTransactionError::NonceTooLow {
+                    tx: tx_nonce,
+                    state: nonce,
+                })
+                .into_rpc_err()
+            )
+        );
     }
 
     #[tokio::test]
@@ -297,15 +320,19 @@ mod tests {
         };
 
         let account = create_account(0, U256::from(1000000u128));
+        let mut l1_block_info = create_l1_block_info();
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
-        assert_eq!(validate_tx(account, &recovered_tx, &data).await, Err(EthApiError::InvalidTransaction(
-            RpcInvalidTransactionError::InsufficientFundsForTransfer,
-        )
-        .into_rpc_err()));
+        assert_eq!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
+            Err(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::InsufficientFundsForTransfer,
+            )
+            .into_rpc_err())
+        );
     }
 
     #[tokio::test]
@@ -315,24 +342,31 @@ mod tests {
             chain_id: 1,
             nonce: 0,
             gas_limit: 21000,
-            max_fee_per_gas: 20000000000u128,
-            max_priority_fee_per_gas: 1000000000u128,
+            max_fee_per_gas: 200000u128,
+            max_priority_fee_per_gas: 100000u128,
             to: Address::random().into(),
-            value: U256::from(10000000000000u128),
+            value: U256::from(1000000u128),
             access_list: Default::default(),
             input: bytes!("").clone(),
         };
 
-        let account = create_account(0, U256::from(1000000u128));
+        // fund the account with enough funds to cover the txn cost but not enough to cover the l1 cost
+        let account = create_account(0, U256::from(4201000000u128));
+        let mut l1_block_info = create_l1_block_info();
+        l1_block_info.tx_l1_cost = Some(U256::from(1000000u128));
 
         let data = tx.input().to_vec();
         let signature = signer.sign_transaction_sync(&mut tx).unwrap();
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
-        assert_eq!(validate_tx(account, &recovered_tx, &data).await, Err(EthApiError::InvalidTransaction(
-            RpcInvalidTransactionError::InsufficientFundsForTransfer,
-        )
-        .into_rpc_err()));
-    }
 
+        let obj = ErrorObject::owned(11, "Insufficient funds for L1 gas", Some(2));
+        assert_eq!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
+            Err(
+                EthApiError::InvalidTransaction(RpcInvalidTransactionError::other(obj),)
+                    .into_rpc_err()
+            )
+        );
+    }
 }

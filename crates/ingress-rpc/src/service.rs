@@ -10,6 +10,7 @@ use jsonrpsee::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
+use op_revm::l1block::L1BlockInfo;
 use reth_rpc_eth_types::EthApiError;
 use tracing::{info, warn};
 
@@ -80,12 +81,14 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
+        // TODO: implement provider to fetch l1 block info
+        let mut l1_block_info = L1BlockInfo::default();
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
-        validate_tx(account, &transaction, &data)
+        validate_tx(account, &transaction, &data, &mut l1_block_info)
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
 
