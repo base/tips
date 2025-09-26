@@ -44,7 +44,7 @@ stop-all profile="default":
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose --profile {{ profile }} down && docker compose --profile {{ profile }} rm && rm -rf data/
 
 # Start every service running in docker, useful for demos
-start-all profile="default": (stop-all profile) ensure-base-node-image
+start-all profile="default": (stop-all profile)
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose --profile {{ profile }} build && docker compose --profile {{ profile }} up -d 
 
 # Stop only the specified service without stopping the other services or removing the data directories
@@ -78,14 +78,6 @@ start-except programs: stop-all
     
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
-# Ensure the base-node-reth Docker image exists, building it if necessary
-ensure-base-node-image:
-    #!/bin/bash
-    if ! docker image inspect base-node-reth >/dev/null 2>&1; then
-        echo "base-node-reth image not found, building it..."
-        ./docker/build-base-node-image.sh reth
-    fi
-
 ### RUN SERVICES ###
 deps-reset:
     COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
@@ -113,3 +105,8 @@ simulator-playground:
 
 ui:
     cd ui && yarn dev
+
+playground-env:
+    echo "OP_NODE_P2P_BOOTNODES=$(grep 'enr=' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')" > .env.playground
+
+start-playground: playground-env (start-all "simulator")
