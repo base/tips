@@ -8,6 +8,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
 use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
+use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
 pub struct AccountInfo {
@@ -54,7 +55,7 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
             let txs = block.transactions.clone();
             let first_tx = txs.first_transaction();
             if let Some(first_tx) = first_tx {
-                let l1_block_info = reth_optimism_evm::extract_l1_info_from_tx(&first_tx.clone())?;
+                let l1_block_info = extract_l1_info_from_tx(&first_tx.clone())?;
                 return Ok(l1_block_info);
             }
         }

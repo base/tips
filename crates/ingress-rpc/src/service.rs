@@ -80,7 +80,6 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        // TODO: implement provider to fetch l1 block info
         let mut l1_block_info = self
             .provider
             .fetch_l1_block_info()
