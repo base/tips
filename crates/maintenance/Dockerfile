@@ -1,5 +1,13 @@
 FROM rust:1-bookworm AS base
 
+# Add dependencies for building reth-mdbx-sys (needed by workspace dependencies)
+RUN apt-get update && apt-get install -y \
+    clang \
+    libclang-dev \
+    llvm-dev \
+    pkg-config && \
+    rm -rf /var/lib/apt/lists/*
+
 RUN cargo install cargo-chef --locked
 WORKDIR /app
 
