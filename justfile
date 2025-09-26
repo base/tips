@@ -40,12 +40,12 @@ sync-env:
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
 
-stop-all:
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && rm -rf data/
+stop-all profile="default":
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose --profile {{ profile }} down && docker compose --profile {{ profile }} rm && rm -rf data/
 
 # Start every service running in docker, useful for demos
-start-all: stop-all
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
+start-all profile="default": (stop-all profile)
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose --profile {{ profile }} build && docker compose --profile {{ profile }} up -d 
 
 # Stop only the specified service without stopping the other services or removing the data directories
 stop-only program:
@@ -101,7 +101,12 @@ simulator:
     cargo run --bin tips-simulator node
 
 simulator-playground:
-    cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator
+    RUST_LOG=debug cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator --authrpc.port=8554
 
 ui:
     cd ui && yarn dev
+
+playground-env:
+    echo "OP_NODE_P2P_BOOTNODES=$(grep 'enr=' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')" > .env.playground
+
+start-playground: playground-env (start-all "simulator")
