@@ -54,11 +54,14 @@ services:
       dockerfile: crates/simulator/Dockerfile
     container_name: tips-simulator
     ports:
-      - "2222:2222"
-      - "4444:4444"
+      # Listen on the loopback interface to fail fast if the ports are already in use by op-rbuilder
+      - "127.0.0.1:2222:2222"
+      - "127.0.0.1:4444:4444"
     volumes:
       - ${TIPS_SIMULATOR_DATADIR}:/data
       - ${TIPS_SIMULATOR_BUILDER_PLAYGROUND_DIR}:/playground
     env_file:
       - .env.docker
     restart: unless-stopped
+    profiles:
+      - simulator

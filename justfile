@@ -47,10 +47,18 @@ stop-all:
 start-all: stop-all
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
 
+# Stop only the specified service without stopping the other services or removing the data directories
+stop-only program:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down {{ program }}
+
+# Start only the specified service without stopping the other services or removing the data directories
+start-only program:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d {{ program }}
+
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
 start-except programs: stop-all
     #!/bin/bash
-    all_services=(postgres kafka kafka-setup minio minio-setup ingress-rpc ingres-writer audit maintenance ui simulator)
+    all_services=(postgres kafka kafka-setup minio minio-setup ingress-rpc ingres-writer audit maintenance ui)
     exclude_services=({{ programs }})
     
     # Create result array with services not in exclude list
