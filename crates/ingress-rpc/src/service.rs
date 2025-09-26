@@ -1,4 +1,4 @@
-use crate::validation::{AccountInfoLookup, validate_tx};
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
 use alloy_consensus::transaction::SignerRecoverable;
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
@@ -10,7 +10,6 @@ use jsonrpsee::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
-use op_revm::l1block::L1BlockInfo;
 use reth_rpc_eth_types::EthApiError;
 use tracing::{info, warn};
 
@@ -82,35 +81,11 @@ where
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
         // TODO: implement provider to fetch l1 block info
-        let mut l1_block_info = L1BlockInfo::default();
-
-        let block_number = self
+        let mut l1_block_info = self
             .provider
-            .get_block_number()
+            .fetch_l1_block_info()
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
-        let block = self
-            .provider
-            .get_block_by_number(block_number.into())
-            .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
-        if let Some(block) = block {
-            let txs = block.transactions.clone();
-            let first_tx = txs.first_transaction();
-            if let Some(first_tx) = first_tx {
-                if let Ok(info) = reth_optimism_evm::extract_l1_info_from_tx(&first_tx.clone()) {
-                    l1_block_info = info;
-                }
-            }
-
-            /*for tx in block.transactions.txns() {
-                let recovered_tx = tx.clone().into_recovered().clone_inner();
-                if let Ok(info) = reth_optimism_evm::extract_l1_info_from_tx(&recovered_tx) {
-                    l1_block_info = info;
-                    break;
-                }
-            }*/
-        }
 
         let account = self
             .provider

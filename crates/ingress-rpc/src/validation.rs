@@ -33,6 +33,35 @@ impl AccountInfoLookup for RootProvider<Optimism> {
     }
 }
 
+#[async_trait]
+pub trait L1BlockInfoLookup: Send + Sync {
+    async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo>;
+}
+
+#[async_trait]
+impl L1BlockInfoLookup for RootProvider<Optimism> {
+    async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo> {
+        let block_number = self
+            .get_block_number()
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+        let block = self
+            .get_block_by_number(block_number.into())
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+
+        if let Some(block) = block {
+            let txs = block.transactions.clone();
+            let first_tx = txs.first_transaction();
+            if let Some(first_tx) = first_tx {
+                let l1_block_info = reth_optimism_evm::extract_l1_info_from_tx(&first_tx.clone())?;
+                return Ok(l1_block_info);
+            }
+        }
+        Err(anyhow::anyhow!("Failed to fetch L1 block info"))
+    }
+}
+
 pub async fn validate_tx(
     account: AccountInfo,
     txn: &Recovered<OpTxEnvelope>,
