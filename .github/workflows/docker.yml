@@ -19,5 +19,12 @@ jobs:
           egress-policy: audit
 
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      
+      - name: Load environment variables
+        uses: xom9ikk/dotenv@v2
+        with:
+          path: .
+          mode: example
+      
       - run: cp .env.example .env.docker
       - run: docker compose -f docker-compose.tips.yml build

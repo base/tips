@@ -1,0 +1,73 @@
+[package]
+name = "tips-simulator"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "tips-simulator"
+path = "src/main.rs"
+
+[dependencies]
+# Workspace dependencies
+tips-datastore.workspace = true
+tips-audit.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+async-trait.workspace = true
+dotenvy.workspace = true
+chrono.workspace = true
+eyre.workspace = true
+futures-util.workspace = true
+
+# Alloy for Ethereum types
+alloy-primitives.workspace = true
+alloy-rpc-types.workspace = true
+alloy-consensus.workspace = true
+alloy-rpc-types-mev.workspace = true
+alloy-eips.workspace = true
+op-alloy-consensus.workspace = true
+
+# Reth
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-exex = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-provider = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-execution-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-node-builder = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-node-ethereum = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0", features = ["serde", "serde-bincode-compat"] }
+reth-optimism-chainspec = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-cli-commands = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+
+# Additional dependencies for simulation
+std-semaphore = "0.1"
+tokio-util = { version = "0.7", features = ["time"] }
+hex = "0.4"
+rdkafka.workspace = true
+revm-primitives = { version = "3.1.1", default-features = false }
+shellexpand = "3.1"
+rand = "0.8"
+secp256k1 = "0.30"
+serde_yaml = "0.9"
+reth-network = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-network-peers = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+url = "2.5"
+
+[dev-dependencies]
+tokio-test = "0.4.4"
+testcontainers.workspace = true
+testcontainers-modules.workspace = true

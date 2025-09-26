@@ -47,6 +47,14 @@ stop-all:
 start-all: stop-all
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
 
+# Stop only the specified service without stopping the other services or removing the data directories
+stop-only program:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down {{ program }}
+
+# Start only the specified service without stopping the other services or removing the data directories
+start-only program:
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d {{ program }}
+
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
 start-except programs: stop-all
     #!/bin/bash
@@ -88,6 +96,12 @@ maintenance:
 
 ingress-writer:
     cargo run --bin tips-ingress-writer
+
+simulator:
+    cargo run --bin tips-simulator node
+
+simulator-playground:
+    cargo run --bin tips-simulator node --builder.playground --datadir ~/.playground/devnet/tips-simulator
 
 ui:
     cd ui && yarn dev

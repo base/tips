@@ -1,6 +1,6 @@
 FROM rust:1-bookworm AS base
 
-# Add dependencies for building reth-mdbx-sys (needed by workspace dependencies)
+# Add dependencies for building reth-mdbx-sys
 RUN apt-get update && apt-get install -y \
     clang \
     libclang-dev \
@@ -27,8 +27,8 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build --bin tips-audit && \
-    cp target/debug/tips-audit /tmp/tips-audit
+    cargo build --bin tips-simulator && \
+    cp target/debug/tips-simulator /tmp/tips-simulator
 
 FROM debian:bookworm
 
@@ -36,8 +36,7 @@ RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/
 
 WORKDIR /app
 
-COPY --from=builder /tmp/tips-audit /app/tips-audit
+COPY --from=builder /tmp/tips-simulator /app/tips-simulator
 
-EXPOSE 3001
+CMD ["/app/tips-simulator", "node", "--datadir", "/data", "--http.addr", "0.0.0.0", "--builder.playground", "/playground"]
 
-CMD ["/app/tips-audit"]
