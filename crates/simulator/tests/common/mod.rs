@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 /// Common test utilities and infrastructure for simulator testing
+
 pub mod builders;
 pub mod fixtures;
 pub mod mock_bundle_simulator;
@@ -81,78 +84,6 @@ pub mod assertions {
         );
     }
 
-    /// Assert that a simulation result is a failure
-    pub fn assert_simulation_failure(result: &SimulationResult) {
-        assert!(!result.success, "Expected failed simulation");
-        assert!(
-            result.gas_used.is_none(),
-            "Failed simulation should not have gas_used"
-        );
-        assert!(
-            result.error_reason.is_some(),
-            "Failed simulation should have error reason"
-        );
-    }
 
-    /// Assert state diff contains expected changes
-    pub fn assert_state_diff_contains(
-        result: &SimulationResult,
-        address: Address,
-        slot: U256,
-        expected_value: U256,
-    ) {
-        let storage = result
-            .state_diff
-            .get(&address)
-            .expect("Address not found in state diff");
-        let value = storage.get(&slot).expect("Storage slot not found");
-        assert_eq!(*value, expected_value, "Unexpected storage value");
-    }
 }
 
-/// Test timing utilities
-pub mod timing {
-    use std::time::{Duration, Instant};
-
-    /// Measure execution time of an async operation
-    pub async fn measure_async<F, T>(f: F) -> (T, Duration)
-    where
-        F: std::future::Future<Output = T>,
-    {
-        let start = Instant::now();
-        let result = f.await;
-        (result, start.elapsed())
-    }
-
-    /// Assert that an operation completes within a timeout
-    pub async fn assert_completes_within<F, T>(f: F, timeout: Duration) -> T
-    where
-        F: std::future::Future<Output = T>,
-    {
-        tokio::time::timeout(timeout, f)
-            .await
-            .expect("Operation timed out")
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_create_test_bundle() {
-        let bundle = create_test_bundle(3, 18_000_000);
-        assert_eq!(bundle.txs.len(), 3);
-        assert_eq!(bundle.block_number, 18_000_000);
-    }
-
-    #[test]
-    fn test_create_success_result() {
-        let bundle_id = Uuid::new_v4();
-        let result = create_success_result(bundle_id, 150_000);
-
-        assertions::assert_simulation_success(&result);
-        assert_eq!(result.bundle_id, bundle_id);
-        assert_eq!(result.gas_used, Some(150_000));
-    }
-}

@@ -12,9 +12,9 @@ pub trait BundleSimulator: Send + Sync {
     async fn simulate(&self, request: &SimulationRequest) -> Result<()>;
 }
 
-/// Production bundle simulator for Reth
-/// This is the Reth-specific implementation
-pub struct RethBundleSimulator<E, P>
+/// Production bundle simulator implementation
+/// Wires the engine and publisher together for bundle simulation
+pub struct BundleSimulatorImpl<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
@@ -23,7 +23,7 @@ where
     publisher: P,
 }
 
-impl<E, P> RethBundleSimulator<E, P>
+impl<E, P> BundleSimulatorImpl<E, P>
 where
     E: SimulationEngine,
     P: SimulationPublisher,
@@ -34,7 +34,7 @@ where
 }
 
 #[async_trait]
-impl<E, P> BundleSimulator for RethBundleSimulator<E, P>
+impl<E, P> BundleSimulator for BundleSimulatorImpl<E, P>
 where
     E: SimulationEngine + 'static,
     P: SimulationPublisher + 'static,

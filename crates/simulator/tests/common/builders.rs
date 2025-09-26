@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 /// Test data builders for creating complex test scenarios
+
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types_mev::EthSendBundle;
 use std::collections::HashMap;
@@ -277,51 +280,3 @@ impl ScenarioBuilder {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_bundle_builder() {
-        let bundle = TestBundleBuilder::new()
-            .with_simple_transaction(&[0x01, 0x02])
-            .with_simple_transaction(&[0x03, 0x04])
-            .with_block_number(18_500_000)
-            .with_timestamps(1000, 2000)
-            .build();
-
-        assert_eq!(bundle.txs.len(), 2);
-        assert_eq!(bundle.block_number, 18_500_000);
-        assert_eq!(bundle.min_timestamp, Some(1000));
-        assert_eq!(bundle.max_timestamp, Some(2000));
-    }
-
-    #[test]
-    fn test_result_builder() {
-        let bundle_id = Uuid::new_v4();
-        let result = SimulationResultBuilder::successful()
-            .with_ids(Uuid::new_v4(), bundle_id)
-            .with_gas_used(200_000)
-            .with_state_change(Address::random(), U256::from(1), U256::from(100))
-            .build();
-
-        assert!(result.success);
-        assert_eq!(result.bundle_id, bundle_id);
-        assert_eq!(result.gas_used, Some(200_000));
-        assert!(!result.state_diff.is_empty());
-    }
-
-    #[test]
-    fn test_scenario_builder() {
-        let requests = ScenarioBuilder::new()
-            .with_block(19_000_000, B256::random())
-            .add_simple_bundle(2)
-            .add_simple_bundle(3)
-            .build_requests();
-
-        assert_eq!(requests.len(), 2);
-        assert_eq!(requests[0].block_number, 19_000_000);
-        assert_eq!(requests[0].bundle.txs.len(), 2);
-        assert_eq!(requests[1].bundle.txs.len(), 3);
-    }
-}

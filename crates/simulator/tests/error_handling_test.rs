@@ -1,8 +1,10 @@
 /// Unit tests for error handling scenarios
-use crate::common::builders::*;
-use crate::common::fixtures::*;
-use crate::common::mock_bundle_simulator::MockBundleSimulator;
-use crate::common::mocks::*;
+mod common;
+
+use common::builders::*;
+use common::fixtures::*;
+use common::mock_bundle_simulator::MockBundleSimulator;
+use common::mocks::*;
 use tips_simulator::{core::BundleSimulator, SimulationError};
 
 #[tokio::test]

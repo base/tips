@@ -1,4 +1,7 @@
+#![allow(dead_code)]
+
 /// Reusable mock implementations for testing
+
 use alloy_primitives::{Address, U256};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -139,32 +142,5 @@ impl SimulationPublisher for MockSimulationPublisher {
 
         self.published.lock().unwrap().push(result);
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::common;
-
-    #[tokio::test]
-    async fn test_mock_simulation_engine() {
-        let engine = MockSimulationEngine::new();
-        let _request = common::create_test_request(common::create_test_bundle(1, 18_000_000));
-
-        // Verify the engine is initialized correctly
-        assert_eq!(engine.simulation_count(), 0);
-    }
-
-    #[tokio::test]
-    async fn test_mock_publisher() {
-        let publisher = MockSimulationPublisher::new();
-        let result = common::create_success_result(Uuid::new_v4(), 100_000);
-
-        publisher.publish_result(result.clone()).await.unwrap();
-        assert_eq!(publisher.published_count(), 1);
-
-        let published = publisher.get_published();
-        assert_eq!(published[0].id, result.id);
     }
 }

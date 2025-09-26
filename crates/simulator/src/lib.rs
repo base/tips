@@ -15,7 +15,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 pub use config::SimulatorNodeConfig;
-pub use core::{BundleSimulator, RethBundleSimulator};
+pub use core::{BundleSimulator, BundleSimulatorImpl};
 pub use engine::{RethSimulationEngine, SimulationEngine};
 pub use listeners::{ExExEventListener, MempoolEventListener, MempoolListenerConfig};
 pub use publisher::{SimulationPublisher, TipsSimulationPublisher};
@@ -24,7 +24,7 @@ pub use worker_pool::SimulationWorkerPool;
 
 // Type aliases for concrete implementations
 pub type TipsBundleSimulator<Node> =
-    RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
+    BundleSimulatorImpl<RethSimulationEngine<Node>, TipsSimulationPublisher>;
 pub type TipsExExEventListener<Node> =
     ExExEventListener<Node, TipsBundleSimulator<Node>, tips_datastore::PostgresDatastore>;
 pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, TipsBundleSimulator<Node>>;
@@ -47,7 +47,7 @@ async fn init_dependencies<Node>(
     database_url: String,
     kafka_brokers: String,
     kafka_topic: String,
-) -> Result<ListenerDependencies<RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>>>
+) -> Result<ListenerDependencies<BundleSimulatorImpl<RethSimulationEngine<Node>, TipsSimulationPublisher>>>
 where
     Node: FullNodeComponents,
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
@@ -75,7 +75,7 @@ where
     let engine = RethSimulationEngine::new(Arc::clone(&provider), evm_config);
     info!("Simulation engine initialized");
 
-    let simulator = RethBundleSimulator::new(engine, publisher);
+    let simulator = BundleSimulatorImpl::new(engine, publisher);
     info!("Core bundle simulator initialized");
 
     Ok(ListenerDependencies {
