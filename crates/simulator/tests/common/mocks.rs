@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 /// Reusable mock implementations for testing
-
 use alloy_primitives::{Address, U256};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -43,7 +42,6 @@ impl MockSimulationEngine {
         *self.error.lock().unwrap() = Some(error);
         self
     }
-
 
     pub fn simulation_count(&self) -> usize {
         self.simulations.lock().unwrap().len()
@@ -129,7 +127,6 @@ impl MockSimulationPublisher {
     pub fn published_count(&self) -> usize {
         self.published.lock().unwrap().len()
     }
-
 }
 
 #[async_trait]

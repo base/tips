@@ -1,8 +1,8 @@
 /// Unit tests for the SimulationPublisher implementation
 mod common;
 
-use common::builders::*;
 use alloy_primitives::{Address, B256, U256};
+use common::builders::*;
 use std::collections::HashMap;
 
 // These tests focus on the logic that can be tested without requiring
@@ -12,16 +12,16 @@ use std::collections::HashMap;
 async fn test_state_diff_conversion_logic() {
     // Test the state diff conversion logic that TipsSimulationPublisher uses
     let mut original_state_diff = HashMap::new();
-    
+
     // Create test data with multiple accounts and storage slots
     for i in 0..3 {
         let addr = Address::random();
         let mut storage = HashMap::new();
-        
+
         for j in 0..5 {
             storage.insert(U256::from(i * 10 + j), U256::from((i + 1) * 100 + j));
         }
-        
+
         original_state_diff.insert(addr, storage);
     }
 
@@ -39,12 +39,12 @@ async fn test_state_diff_conversion_logic() {
 
     // Verify conversion
     assert_eq!(converted.len(), original_state_diff.len());
-    
+
     for (address, original_storage) in &original_state_diff {
         assert!(converted.contains_key(address));
         let converted_storage = &converted[address];
         assert_eq!(converted_storage.len(), original_storage.len());
-        
+
         for (key, value) in original_storage {
             let key_bytes = key.to_be_bytes::<32>();
             let storage_key = B256::from(key_bytes);
@@ -53,21 +53,20 @@ async fn test_state_diff_conversion_logic() {
     }
 }
 
-
 #[test]
 fn test_large_state_diff_handling() {
     // Test handling of large state diffs
     let mut large_state_diff = HashMap::new();
-    
+
     // Create a large state diff with many accounts and storage slots
     for i in 0..100 {
         let addr = Address::random();
         let mut storage = HashMap::new();
-        
+
         for j in 0..50 {
             storage.insert(U256::from(i * 1000 + j), U256::from(j * 12345));
         }
-        
+
         large_state_diff.insert(addr, storage);
     }
 
@@ -90,8 +89,6 @@ fn test_large_state_diff_handling() {
     }
 }
 
-
-
 #[test]
 fn test_execution_time_bounds() {
     // Test execution time edge cases
@@ -106,26 +103,28 @@ fn test_execution_time_bounds() {
         let result = SimulationResultBuilder::successful()
             .with_execution_time_us(execution_time)
             .build();
-        
-        assert_eq!(result.execution_time_us, execution_time, "Failed for: {}", description);
+
+        assert_eq!(
+            result.execution_time_us, execution_time,
+            "Failed for: {}",
+            description
+        );
     }
 }
-
-
 
 #[test]
 fn test_multiple_addresses_same_storage() {
     // Test multiple addresses with the same storage patterns
     let addresses = vec![Address::random(), Address::random(), Address::random()];
     let mut state_diff = HashMap::new();
-    
+
     for addr in &addresses {
         let mut storage = HashMap::new();
         storage.insert(U256::from(1), U256::from(100));
         storage.insert(U256::from(2), U256::from(200));
         state_diff.insert(*addr, storage);
     }
-    
+
     // Convert
     let mut converted = HashMap::new();
     for (address, storage) in &state_diff {
@@ -137,7 +136,7 @@ fn test_multiple_addresses_same_storage() {
         }
         converted.insert(*address, storage_map);
     }
-    
+
     assert_eq!(converted.len(), 3);
     for addr in &addresses {
         assert!(converted.contains_key(addr));

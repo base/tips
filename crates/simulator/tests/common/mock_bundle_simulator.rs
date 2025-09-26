@@ -19,8 +19,6 @@ impl MockBundleSimulator {
     pub fn new(engine: MockSimulationEngine, publisher: MockSimulationPublisher) -> Self {
         Self { engine, publisher }
     }
-
-
 }
 
 #[async_trait]
@@ -56,4 +54,3 @@ impl BundleSimulator for MockBundleSimulator {
         Ok(())
     }
 }
-

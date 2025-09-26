@@ -47,7 +47,9 @@ async fn init_dependencies<Node>(
     database_url: String,
     kafka_brokers: String,
     kafka_topic: String,
-) -> Result<ListenerDependencies<BundleSimulatorImpl<RethSimulationEngine<Node>, TipsSimulationPublisher>>>
+) -> Result<
+    ListenerDependencies<BundleSimulatorImpl<RethSimulationEngine<Node>, TipsSimulationPublisher>>,
+>
 where
     Node: FullNodeComponents,
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
@@ -128,10 +130,8 @@ where
         )
         .await?;
 
-        let shared_worker_pool = SimulationWorkerPool::new(
-            Arc::new(dependencies.simulator),
-            max_concurrent_simulations,
-        );
+        let shared_worker_pool =
+            SimulationWorkerPool::new(Arc::new(dependencies.simulator), max_concurrent_simulations);
 
         let exex_listener = ExExEventListener::new(
             exex_ctx,

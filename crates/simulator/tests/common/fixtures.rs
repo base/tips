@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 /// Test fixtures and pre-configured test data
-
 use alloy_primitives::Bytes;
 use alloy_rpc_types_mev::EthSendBundle;
 
@@ -63,7 +62,6 @@ pub mod transactions {
             0x50, 0x60, 0x70, 0x80,
         ])
     }
-
 }
 
 /// Pre-configured bundles for testing
@@ -89,7 +87,6 @@ pub mod bundles {
             .build()
     }
 
-
     /// Large bundle for stress testing
     pub fn large_bundle(num_txs: usize) -> EthSendBundle {
         let mut builder = TestBundleBuilder::new().with_block_number(blocks::BLOCK_18M);
@@ -101,7 +98,6 @@ pub mod bundles {
 
         builder.build()
     }
-
 }
 
 /// Test scenarios combining multiple fixtures
@@ -143,4 +139,3 @@ pub mod scenarios {
         }
     }
 }
-

@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 /// Common test utilities and infrastructure for simulator testing
-
 pub mod builders;
 pub mod fixtures;
 pub mod mock_bundle_simulator;
@@ -12,7 +11,6 @@ use alloy_rpc_types_mev::EthSendBundle;
 use std::collections::HashMap;
 use tips_simulator::types::{SimulationRequest, SimulationResult};
 use uuid::Uuid;
-
 
 /// Helper to create a simple test bundle
 pub fn create_test_bundle(num_txs: usize, block_number: u64) -> EthSendBundle {
@@ -83,7 +81,4 @@ pub mod assertions {
             "Successful simulation should not have error"
         );
     }
-
-
 }
-

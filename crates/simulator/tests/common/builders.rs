@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 /// Test data builders for creating complex test scenarios
-
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types_mev::EthSendBundle;
 use std::collections::HashMap;
@@ -50,8 +49,6 @@ impl TestBundleBuilder {
         self.max_timestamp = Some(max);
         self
     }
-
-
 
     pub fn build(self) -> EthSendBundle {
         EthSendBundle {
@@ -255,7 +252,6 @@ impl ScenarioBuilder {
         self
     }
 
-
     pub fn add_simple_bundle(mut self, num_txs: usize) -> Self {
         let mut builder = TestBundleBuilder::new().with_block_number(self.block_number);
 
@@ -279,4 +275,3 @@ impl ScenarioBuilder {
             .collect()
     }
 }
-

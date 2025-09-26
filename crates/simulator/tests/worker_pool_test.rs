@@ -9,7 +9,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tips_simulator::worker_pool::{SimulationTask, SimulationWorkerPool};
 
-
 #[tokio::test]
 async fn test_worker_pool_start_and_shutdown() {
     let engine = MockSimulationEngine::new();
@@ -17,15 +16,15 @@ async fn test_worker_pool_start_and_shutdown() {
     let simulator = Arc::new(MockBundleSimulator::new(engine, publisher));
 
     let pool = SimulationWorkerPool::new(simulator, 2);
-    
+
     // Start the pool
     let started = pool.start().await;
     assert!(started); // Should return true on first start
-    
+
     // Starting again should return false
     let started_again = pool.start().await;
     assert!(!started_again);
-    
+
     // Test shutdown - pool will shutdown when dropped
 }
 
@@ -40,12 +39,10 @@ async fn test_worker_pool_single_simulation() {
 
     // Queue a single simulation
     let bundle = bundles::single_tx_bundle();
-    let request = SimulationRequestBuilder::new()
-        .with_bundle(bundle)
-        .build();
-    
+    let request = SimulationRequestBuilder::new().with_bundle(bundle).build();
+
     let task = SimulationTask { request };
-    
+
     let queue_result = pool.queue_simulation(task).await;
     assert!(queue_result.is_ok());
 
@@ -73,7 +70,7 @@ async fn test_worker_pool_multiple_simulations() {
             .with_simple_transaction(&[i as u8, 0x01, 0x02])
             .with_block_number(18_000_000 + i as u64)
             .build();
-        
+
         let request = SimulationRequestBuilder::new()
             .with_bundle(bundle)
             .with_block(18_000_000 + i as u64, alloy_primitives::B256::random())
@@ -105,15 +102,13 @@ async fn test_worker_pool_concurrent_workers() {
     // Queue many simulations quickly
     let num_simulations = 20;
     let mut tasks = vec![];
-    
+
     for i in 0..num_simulations {
         let bundle = TestBundleBuilder::new()
             .with_simple_transaction(&[i as u8, 0x03, 0x04])
             .build();
-        
-        let request = SimulationRequestBuilder::new()
-            .with_bundle(bundle)
-            .build();
+
+        let request = SimulationRequestBuilder::new().with_bundle(bundle).build();
 
         tasks.push(SimulationTask { request });
     }
@@ -144,7 +139,9 @@ async fn test_worker_pool_simulation_failures() {
     for i in 0..5 {
         // Configure engine to fail odd-numbered simulations
         if i % 2 == 1 {
-            let _ = engine.clone().fail_next_with(tips_simulator::SimulationError::OutOfGas);
+            let _ = engine
+                .clone()
+                .fail_next_with(tips_simulator::SimulationError::OutOfGas);
         } else {
             let result = SimulationResultBuilder::successful()
                 .with_gas_used(100_000 + i * 10_000)
@@ -189,7 +186,7 @@ async fn test_worker_pool_publisher_failures() {
 
     let request = SimulationRequestBuilder::new().build();
     let task = SimulationTask { request };
-    
+
     pool.queue_simulation(task).await.unwrap();
 
     // Wait for processing
@@ -217,13 +214,17 @@ async fn test_worker_pool_block_cancellation() {
     let old_request = SimulationRequestBuilder::new()
         .with_block(old_block, alloy_primitives::B256::random())
         .build();
-    let old_task = SimulationTask { request: old_request };
-    
+    let old_task = SimulationTask {
+        request: old_request,
+    };
+
     // Queue simulation for new block
     let new_request = SimulationRequestBuilder::new()
         .with_block(new_block, alloy_primitives::B256::random())
         .build();
-    let new_task = SimulationTask { request: new_request };
+    let new_task = SimulationTask {
+        request: new_request,
+    };
 
     // Update latest block to the new block (should cancel old simulations)
     pool.update_latest_block(new_block);
@@ -253,15 +254,13 @@ async fn test_worker_pool_heavy_load() {
 
     // Queue a large number of simulations
     let num_simulations = 50;
-    
+
     for i in 0..num_simulations {
         let bundle = TestBundleBuilder::new()
             .with_simple_transaction(&[i as u8, 0x05, 0x06])
             .build();
-        
-        let request = SimulationRequestBuilder::new()
-            .with_bundle(bundle)
-            .build();
+
+        let request = SimulationRequestBuilder::new().with_bundle(bundle).build();
 
         let task = SimulationTask { request };
         pool.queue_simulation(task).await.unwrap();
@@ -365,7 +364,7 @@ async fn test_worker_pool_mixed_block_numbers() {
 
     // Queue simulations for various block numbers
     let block_numbers = vec![18_000_000, 18_000_005, 18_000_002, 18_000_008, 18_000_001];
-    
+
     for (i, block_num) in block_numbers.iter().enumerate() {
         let request = SimulationRequestBuilder::new()
             .with_block(*block_num, alloy_primitives::B256::random())
@@ -404,12 +403,12 @@ async fn test_worker_pool_rapid_block_updates() {
     // Rapidly update block numbers
     for i in 0..10 {
         pool.update_latest_block(18_000_000 + i);
-        
+
         // Queue a simulation for an older block (should be cancelled)
         let request = SimulationRequestBuilder::new()
             .with_block(18_000_000 + i - 1, alloy_primitives::B256::random())
             .build();
-        
+
         let task = SimulationTask { request };
         let _ = pool.queue_simulation(task).await;
     }
@@ -447,7 +446,7 @@ async fn test_worker_pool_simulation_timing() {
     // Wait for all to complete
     while engine.simulation_count() < 3 {
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         // Prevent infinite loop with timeout
         if start_time.elapsed() > Duration::from_secs(5) {
             break;
