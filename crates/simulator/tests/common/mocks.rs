@@ -3,8 +3,8 @@ use alloy_primitives::{Address, B256, U256};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tips_simulator::{SimulationEngine, SimulationPublisher, SimulationError, SimulationResult};
 use tips_simulator::types::SimulationRequest;
+use tips_simulator::{SimulationEngine, SimulationError, SimulationPublisher, SimulationResult};
 use uuid::Uuid;
 
 /// Mock simulation engine with configurable behavior
@@ -52,19 +52,22 @@ impl MockSimulationEngine {
 
 #[async_trait]
 impl SimulationEngine for MockSimulationEngine {
-    async fn simulate_bundle(
-        &self,
-        request: &SimulationRequest,
-    ) -> eyre::Result<SimulationResult> {
+    async fn simulate_bundle(&self, request: &SimulationRequest) -> eyre::Result<SimulationResult> {
         // Track the simulation
         self.simulations.lock().unwrap().push(request.clone());
 
         // Check if we should fail
         if *self.fail_next.lock().unwrap() {
             *self.fail_next.lock().unwrap() = false;
-            let error = self.error.lock().unwrap().take()
-                .unwrap_or(SimulationError::Unknown { message: "Mock failure".to_string() });
-            
+            let error = self
+                .error
+                .lock()
+                .unwrap()
+                .take()
+                .unwrap_or(SimulationError::Unknown {
+                    message: "Mock failure".to_string(),
+                });
+
             return Ok(SimulationResult::failure(
                 Uuid::new_v4(),
                 request.bundle_id,
@@ -153,10 +156,8 @@ mod tests {
     #[tokio::test]
     async fn test_mock_simulation_engine() {
         let engine = MockSimulationEngine::new();
-        let _request = common::create_test_request(
-            common::create_test_bundle(1, 18_000_000)
-        );
-        
+        let _request = common::create_test_request(common::create_test_bundle(1, 18_000_000));
+
         // Verify the engine is initialized correctly
         assert_eq!(engine.simulation_count(), 0);
     }
@@ -165,10 +166,10 @@ mod tests {
     async fn test_mock_publisher() {
         let publisher = MockSimulationPublisher::new();
         let result = common::create_success_result(Uuid::new_v4(), 100_000);
-        
+
         publisher.publish_result(result.clone()).await.unwrap();
         assert_eq!(publisher.published_count(), 1);
-        
+
         let published = publisher.get_published();
         assert_eq!(published[0].id, result.id);
     }

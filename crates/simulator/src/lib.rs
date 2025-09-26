@@ -25,13 +25,9 @@ pub use worker_pool::SimulationWorkerPool;
 // Type aliases for concrete implementations
 pub type TipsBundleSimulator<Node> =
     RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>;
-pub type TipsExExEventListener<Node> = ExExEventListener<
-    Node,
-    TipsBundleSimulator<Node>,
-    tips_datastore::PostgresDatastore,
->;
-pub type TipsMempoolEventListener<Node> =
-    MempoolEventListener<Node, TipsBundleSimulator<Node>>;
+pub type TipsExExEventListener<Node> =
+    ExExEventListener<Node, TipsBundleSimulator<Node>, tips_datastore::PostgresDatastore>;
+pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, TipsBundleSimulator<Node>>;
 
 // Initialization functions
 

@@ -35,10 +35,7 @@ where
     B: BundleSimulator + 'static,
 {
     /// Create a new simulation worker pool
-    pub fn new(
-        simulator: Arc<B>,
-        max_concurrent_simulations: usize,
-    ) -> Arc<Self> {
+    pub fn new(simulator: Arc<B>, max_concurrent_simulations: usize) -> Arc<Self> {
         let (simulation_tx, simulation_rx) = mpsc::channel(1000);
 
         Arc::new(Self {
@@ -132,11 +129,7 @@ where
             }
 
             // Execute the simulation
-            match pool
-                .simulator
-                .simulate(&task.request)
-                .await
-            {
+            match pool.simulator.simulate(&task.request).await {
                 Ok(_) => {
                     debug!(
                         worker_id,

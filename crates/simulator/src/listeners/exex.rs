@@ -136,7 +136,7 @@ where
                 );
 
                 // Process each block in the committed chain
-                for (_block_num, block) in new.blocks() {
+                for block in new.blocks().values() {
                     let block_hash = block.hash();
                     self.process_block((&block_hash, block)).await?;
                 }
@@ -156,7 +156,7 @@ where
                 );
 
                 // Process the new canonical chain
-                for (_block_num, block) in new.blocks() {
+                for block in new.blocks().values() {
                     let block_hash = block.hash();
                     self.process_block((&block_hash, block)).await?;
                 }

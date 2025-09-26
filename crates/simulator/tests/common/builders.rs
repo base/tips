@@ -159,8 +159,8 @@ impl SimulationResultBuilder {
         let mut builder = Self::new();
         builder.success = false;
         builder.gas_used = None;
-        builder.error = Some(SimulationError::Unknown { 
-            message: "Test failure".to_string() 
+        builder.error = Some(SimulationError::Unknown {
+            message: "Test failure".to_string(),
         });
         builder
     }
@@ -211,7 +211,11 @@ impl SimulationResultBuilder {
     }
 
     pub fn with_invalid_nonce(self, tx_index: usize, expected: u64, actual: u64) -> Self {
-        self.with_error(SimulationError::InvalidNonce { tx_index, expected, actual })
+        self.with_error(SimulationError::InvalidNonce {
+            tx_index,
+            expected,
+            actual,
+        })
     }
 
     pub fn build(self) -> SimulationResult {
@@ -232,8 +236,8 @@ impl SimulationResultBuilder {
                 self.block_number,
                 self.block_hash.unwrap_or_else(B256::random),
                 self.execution_time_us,
-                self.error.unwrap_or(SimulationError::Unknown { 
-                    message: "Unknown error".to_string() 
+                self.error.unwrap_or(SimulationError::Unknown {
+                    message: "Unknown error".to_string(),
                 }),
             )
         }
@@ -268,13 +272,12 @@ impl ScenarioBuilder {
     }
 
     pub fn add_simple_bundle(mut self, num_txs: usize) -> Self {
-        let mut builder = TestBundleBuilder::new()
-            .with_block_number(self.block_number);
-        
+        let mut builder = TestBundleBuilder::new().with_block_number(self.block_number);
+
         for i in 0..num_txs {
             builder = builder.with_simple_transaction(&[i as u8, 0x01, 0x02]);
         }
-        
+
         self.bundles.push(builder.build());
         self
     }

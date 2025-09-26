@@ -101,10 +101,7 @@ where
 #[async_trait]
 pub trait SimulationEngine: Send + Sync {
     /// Simulate a bundle execution
-    async fn simulate_bundle(
-        &self,
-        request: &SimulationRequest,
-    ) -> Result<SimulationResult>;
+    async fn simulate_bundle(&self, request: &SimulationRequest) -> Result<SimulationResult>;
 }
 
 #[derive(Clone)]
@@ -134,10 +131,7 @@ where
     Node: FullNodeComponents,
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
 {
-    async fn simulate_bundle(
-        &self,
-        request: &SimulationRequest,
-    ) -> Result<SimulationResult> {
+    async fn simulate_bundle(&self, request: &SimulationRequest) -> Result<SimulationResult> {
         let start_time = Instant::now();
         let simulation_id = Uuid::new_v4();
 

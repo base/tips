@@ -1,8 +1,8 @@
 /// Common test utilities and infrastructure for simulator testing
 pub mod builders;
 pub mod fixtures;
-pub mod mocks;
 pub mod mock_bundle_simulator;
+pub mod mocks;
 
 use alloy_primitives::{Address, Bytes, B256, U256};
 use alloy_rpc_types_mev::EthSendBundle;
@@ -62,10 +62,7 @@ pub fn create_test_request(bundle: EthSendBundle) -> SimulationRequest {
 }
 
 /// Helper to create a successful simulation result
-pub fn create_success_result(
-    bundle_id: Uuid,
-    gas_used: u64,
-) -> SimulationResult {
+pub fn create_success_result(bundle_id: Uuid, gas_used: u64) -> SimulationResult {
     let mut state_diff = HashMap::new();
     let address = Address::random();
     let mut storage = HashMap::new();
@@ -90,15 +87,27 @@ pub mod assertions {
     /// Assert that a simulation result is successful
     pub fn assert_simulation_success(result: &SimulationResult) {
         assert!(result.success, "Expected successful simulation");
-        assert!(result.gas_used.is_some(), "Successful simulation should have gas_used");
-        assert!(result.error_reason.is_none(), "Successful simulation should not have error");
+        assert!(
+            result.gas_used.is_some(),
+            "Successful simulation should have gas_used"
+        );
+        assert!(
+            result.error_reason.is_none(),
+            "Successful simulation should not have error"
+        );
     }
 
     /// Assert that a simulation result is a failure
     pub fn assert_simulation_failure(result: &SimulationResult) {
         assert!(!result.success, "Expected failed simulation");
-        assert!(result.gas_used.is_none(), "Failed simulation should not have gas_used");
-        assert!(result.error_reason.is_some(), "Failed simulation should have error reason");
+        assert!(
+            result.gas_used.is_none(),
+            "Failed simulation should not have gas_used"
+        );
+        assert!(
+            result.error_reason.is_some(),
+            "Failed simulation should have error reason"
+        );
     }
 
     /// Assert state diff contains expected changes
@@ -108,10 +117,11 @@ pub mod assertions {
         slot: U256,
         expected_value: U256,
     ) {
-        let storage = result.state_diff.get(&address)
+        let storage = result
+            .state_diff
+            .get(&address)
             .expect("Address not found in state diff");
-        let value = storage.get(&slot)
-            .expect("Storage slot not found");
+        let value = storage.get(&slot).expect("Storage slot not found");
         assert_eq!(*value, expected_value, "Unexpected storage value");
     }
 }
@@ -131,10 +141,7 @@ pub mod timing {
     }
 
     /// Assert that an operation completes within a timeout
-    pub async fn assert_completes_within<F, T>(
-        f: F,
-        timeout: Duration,
-    ) -> T
+    pub async fn assert_completes_within<F, T>(f: F, timeout: Duration) -> T
     where
         F: std::future::Future<Output = T>,
     {
@@ -159,7 +166,7 @@ mod tests {
     fn test_create_success_result() {
         let bundle_id = Uuid::new_v4();
         let result = create_success_result(bundle_id, 150_000);
-        
+
         assertions::assert_simulation_success(&result);
         assert_eq!(result.bundle_id, bundle_id);
         assert_eq!(result.gas_used, Some(150_000));

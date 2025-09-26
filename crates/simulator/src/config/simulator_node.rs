@@ -1,7 +1,4 @@
-use crate::{
-    listeners::MempoolListenerConfig,
-    types::ExExSimulationConfig,
-};
+use crate::{listeners::MempoolListenerConfig, types::ExExSimulationConfig};
 use anyhow::{anyhow, Result};
 use clap::Args;
 use std::path::PathBuf;
@@ -30,11 +27,7 @@ pub struct SimulatorNodeConfig {
     pub kafka_brokers: String,
 
     /// Kafka topic for mempool events
-    #[arg(
-        long,
-        env = "TIPS_SIMULATOR_KAFKA_TOPIC",
-        default_value = "tips-audit"
-    )]
+    #[arg(long, env = "TIPS_SIMULATOR_KAFKA_TOPIC", default_value = "tips-audit")]
     pub kafka_topic: String,
 
     /// Kafka consumer group ID
@@ -102,4 +95,3 @@ fn expand_path(s: &str) -> Result<PathBuf> {
         .parse()
         .map_err(|e| anyhow!("invalid path after expansion: {e}"))
 }
-

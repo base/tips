@@ -29,10 +29,7 @@ where
     P: SimulationPublisher,
 {
     pub fn new(engine: E, publisher: P) -> Self {
-        Self { 
-            engine, 
-            publisher,
-        }
+        Self { engine, publisher }
     }
 }
 

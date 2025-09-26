@@ -20,7 +20,7 @@
 
 use alloy_primitives::hex;
 use anyhow::{anyhow, Result};
-use clap::{CommandFactory, parser::ValueSource};
+use clap::{parser::ValueSource, CommandFactory};
 use core::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
     time::Duration,
@@ -351,4 +351,3 @@ fn resolve_trusted_peer_host() -> Host {
         Host::Ipv4(Ipv4Addr::LOCALHOST)
     }
 }
-

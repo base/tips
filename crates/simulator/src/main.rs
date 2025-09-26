@@ -27,8 +27,10 @@ fn main() -> eyre::Result<()> {
 
     cli.run(|builder, _| async move {
         // Keep the Base mempool private.
-        let mut rollup_args = RollupArgs::default();
-        rollup_args.disable_txpool_gossip = true;
+        let rollup_args = RollupArgs {
+            disable_txpool_gossip: true,
+            ..Default::default()
+        };
 
         let handle = builder
             .node(reth_optimism_node::OpNode::new(rollup_args))

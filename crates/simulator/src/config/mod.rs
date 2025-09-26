@@ -1,5 +1,5 @@
-mod simulator_node;
 pub mod playground;
+mod simulator_node;
 
 pub use playground::PlaygroundOptions;
 pub use simulator_node::SimulatorNodeConfig;
@@ -44,18 +44,10 @@ impl CliExt for Cli {
 }
 
 impl SimulatorNodeConfig {
-    pub fn into_parts(
-        self,
-        cli: Cli,
-    ) -> (Cli, ExExSimulationConfig, MempoolListenerConfig, u64) {
+    pub fn into_parts(self, cli: Cli) -> (Cli, ExExSimulationConfig, MempoolListenerConfig, u64) {
         let exex_config = (&self).into();
         let mempool_config = (&self).into();
-        (
-            cli,
-            exex_config,
-            mempool_config,
-            self.chain_block_time,
-        )
+        (cli, exex_config, mempool_config, self.chain_block_time)
     }
 }
 
