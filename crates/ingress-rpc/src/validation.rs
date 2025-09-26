@@ -7,6 +7,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use async_trait::async_trait;
 
 // from: https://github.com/alloy-rs/op-alloy/blob/main/crates/consensus/src/interop.rs#L9
 // reference: https://github.com/paradigmxyz/reth/blob/bdc59799d0651133d8b191bbad62746cb5036595/crates/optimism/txpool/src/supervisor/access_list.rs#L39
@@ -18,10 +19,12 @@ pub struct AccountInfo {
     pub code_hash: B256,
 }
 
-pub trait AccountInfoLookup {
+#[async_trait]
+pub trait AccountInfoLookup: Send + Sync {
     async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo>;
 }
 
+#[async_trait]
 impl AccountInfoLookup for RootProvider<Optimism> {
     async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo> {
         let account = self.get_account(address).await?;
@@ -33,10 +36,12 @@ impl AccountInfoLookup for RootProvider<Optimism> {
     }
 }
 
-pub trait TxValidation {
+#[async_trait]
+pub trait TxValidation: Send + Sync {
     async fn validate_tx(&self, txn: &Recovered<OpTxEnvelope>, data: &[u8]) -> RpcResult<B256>;
 }
 
+#[async_trait]
 impl TxValidation for RootProvider<Optimism> {
     async fn validate_tx(&self, txn: &Recovered<OpTxEnvelope>, data: &[u8]) -> RpcResult<B256> {
         let account = self.fetch_account_info(txn.signer()).await.map_err(|e| {
