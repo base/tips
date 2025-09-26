@@ -1,4 +1,4 @@
-use crate::validation::{AccountInfoLookup, validate_tx};
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
 use alloy_consensus::transaction::SignerRecoverable;
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
@@ -10,7 +10,6 @@ use jsonrpsee::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
-use op_revm::l1block::L1BlockInfo;
 use reth_rpc_eth_types::EthApiError;
 use tracing::{info, warn};
 
@@ -81,8 +80,12 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        // TODO: implement provider to fetch l1 block info
-        let mut l1_block_info = L1BlockInfo::default();
+        let mut l1_block_info = self
+            .provider
+            .fetch_l1_block_info()
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
