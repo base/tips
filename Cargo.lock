@@ -7103,6 +7103,7 @@ dependencies = [
  "op-revm",
  "rdkafka",
  "reth-rpc-eth-types",
+ "revm-context-interface",
  "serde",
  "serde_json",
  "tips-audit",
