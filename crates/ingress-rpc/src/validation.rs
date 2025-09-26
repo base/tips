@@ -10,17 +10,20 @@ use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 
+/// Account info for a given address
 pub struct AccountInfo {
     pub balance: U256,
     pub nonce: u64,
     pub code_hash: B256,
 }
 
+/// Interface for fetching account info for a given address
 #[async_trait]
 pub trait AccountInfoLookup: Send + Sync {
     async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo>;
 }
 
+/// Implementation of the `AccountInfoLookup` trait for the `RootProvider`
 #[async_trait]
 impl AccountInfoLookup for RootProvider<Optimism> {
     async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo> {
@@ -33,11 +36,13 @@ impl AccountInfoLookup for RootProvider<Optimism> {
     }
 }
 
+/// Interface for fetching L1 block info for a given block number
 #[async_trait]
 pub trait L1BlockInfoLookup: Send + Sync {
     async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo>;
 }
 
+/// Implementation of the `L1BlockInfoLookup` trait for the `RootProvider`
 #[async_trait]
 impl L1BlockInfoLookup for RootProvider<Optimism> {
     async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo> {
@@ -62,6 +67,13 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
     }
 }
 
+/// Helper function to validate a transaction. A valid transaction must satisfy the following criteria:
+/// - If the transaction is not EIP-4844
+/// - If the transaction is not a cross chain tx
+/// - If the transaction is a 7702 tx, then the account is a 7702 account
+/// - If the transaction's nonce is the latest
+/// - If the transaction's execution cost is less than the account's balance
+/// - If the transaction's L1 gas cost is less than the account's balance
 pub async fn validate_tx<T: Transaction>(
     account: AccountInfo,
     txn: &Recovered<T>,
