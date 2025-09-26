@@ -1,5 +1,5 @@
 /// Reusable mock implementations for testing
-use alloy_primitives::{Address, B256, U256};
+use alloy_primitives::{Address, U256};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -41,9 +41,6 @@ impl MockSimulationEngine {
         self
     }
 
-    pub fn get_simulations(&self) -> Vec<SimulationRequest> {
-        self.simulations.lock().unwrap().clone()
-    }
 
     pub fn simulation_count(&self) -> usize {
         self.simulations.lock().unwrap().len()
@@ -130,9 +127,6 @@ impl MockSimulationPublisher {
         self.published.lock().unwrap().len()
     }
 
-    pub fn clear_published(&self) {
-        self.published.lock().unwrap().clear();
-    }
 }
 
 #[async_trait]

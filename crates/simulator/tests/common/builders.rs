@@ -48,15 +48,7 @@ impl TestBundleBuilder {
         self
     }
 
-    pub fn with_reverting_tx(mut self, tx_hash: B256) -> Self {
-        self.reverting_tx_hashes.push(tx_hash);
-        self
-    }
 
-    pub fn with_replacement_uuid(mut self, uuid: String) -> Self {
-        self.replacement_uuid = Some(uuid);
-        self
-    }
 
     pub fn build(self) -> EthSendBundle {
         EthSendBundle {
@@ -171,12 +163,6 @@ impl SimulationResultBuilder {
         self
     }
 
-    pub fn with_block(mut self, number: u64, hash: B256) -> Self {
-        self.block_number = number;
-        self.block_hash = Some(hash);
-        self
-    }
-
     pub fn with_gas_used(mut self, gas: u64) -> Self {
         self.gas_used = Some(gas);
         self
@@ -266,10 +252,6 @@ impl ScenarioBuilder {
         self
     }
 
-    pub fn add_bundle(mut self, bundle: EthSendBundle) -> Self {
-        self.bundles.push(bundle);
-        self
-    }
 
     pub fn add_simple_bundle(mut self, num_txs: usize) -> Self {
         let mut builder = TestBundleBuilder::new().with_block_number(self.block_number);

@@ -10,22 +10,6 @@ use std::collections::HashMap;
 use tips_simulator::types::{SimulationRequest, SimulationResult};
 use uuid::Uuid;
 
-/// Test configuration that can be shared across tests
-pub struct TestConfig {
-    pub default_block_number: u64,
-    pub default_gas_limit: u64,
-    pub simulation_timeout_ms: u64,
-}
-
-impl Default for TestConfig {
-    fn default() -> Self {
-        Self {
-            default_block_number: 18_000_000,
-            default_gas_limit: 30_000_000,
-            simulation_timeout_ms: 5000,
-        }
-    }
-}
 
 /// Helper to create a simple test bundle
 pub fn create_test_bundle(num_txs: usize, block_number: u64) -> EthSendBundle {

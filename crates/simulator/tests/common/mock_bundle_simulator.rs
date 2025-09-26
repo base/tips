@@ -18,13 +18,7 @@ impl MockBundleSimulator {
         Self { engine, publisher }
     }
 
-    pub fn engine(&self) -> &MockSimulationEngine {
-        &self.engine
-    }
 
-    pub fn publisher(&self) -> &MockSimulationPublisher {
-        &self.publisher
-    }
 }
 
 #[async_trait]

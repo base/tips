@@ -1,7 +1,6 @@
 /// Test fixtures and pre-configured test data
 use alloy_primitives::Bytes;
 use alloy_rpc_types_mev::EthSendBundle;
-use std::sync::LazyLock;
 
 /// Common test addresses
 pub mod addresses {
@@ -15,11 +14,6 @@ pub mod addresses {
     });
     pub static BOB: LazyLock<Address> = LazyLock::new(|| {
         "0x0000000000000000000000000000000000000002"
-            .parse()
-            .unwrap()
-    });
-    pub static CHARLIE: LazyLock<Address> = LazyLock::new(|| {
-        "0x0000000000000000000000000000000000000003"
             .parse()
             .unwrap()
     });
@@ -41,12 +35,8 @@ pub mod blocks {
     use std::sync::LazyLock;
 
     pub const BLOCK_18M: u64 = 18_000_000;
-    pub const BLOCK_18M_PLUS_1: u64 = 18_000_001;
-    pub const BLOCK_18M_PLUS_2: u64 = 18_000_002;
 
     pub static HASH_18M: LazyLock<B256> = LazyLock::new(|| B256::from_slice(&[1u8; 32]));
-    pub static HASH_18M_PLUS_1: LazyLock<B256> = LazyLock::new(|| B256::from_slice(&[2u8; 32]));
-    pub static HASH_18M_PLUS_2: LazyLock<B256> = LazyLock::new(|| B256::from_slice(&[3u8; 32]));
 }
 
 /// Pre-built transaction fixtures
@@ -71,13 +61,6 @@ pub mod transactions {
         ])
     }
 
-    /// Transaction that will revert (mock data)
-    pub fn reverting_tx() -> Bytes {
-        Bytes::from(vec![
-            0x02, // EIP-1559 tx type
-            0xFF, 0xFF, 0xFF, 0xFF, // Mock reverting transaction
-        ])
-    }
 }
 
 /// Pre-configured bundles for testing
@@ -103,14 +86,6 @@ pub mod bundles {
             .build()
     }
 
-    /// Bundle with reverting transaction
-    pub fn reverting_bundle() -> EthSendBundle {
-        TestBundleBuilder::new()
-            .with_transaction(transactions::simple_transfer())
-            .with_transaction(transactions::reverting_tx())
-            .with_block_number(blocks::BLOCK_18M)
-            .build()
-    }
 
     /// Large bundle for stress testing
     pub fn large_bundle(num_txs: usize) -> EthSendBundle {
@@ -124,14 +99,6 @@ pub mod bundles {
         builder.build()
     }
 
-    /// Bundle with specific timing constraints
-    pub fn time_constrained_bundle() -> EthSendBundle {
-        TestBundleBuilder::new()
-            .with_transaction(transactions::simple_transfer())
-            .with_block_number(blocks::BLOCK_18M)
-            .with_timestamps(1625097600, 1625097700) // 100 second window
-            .build()
-    }
 }
 
 /// Test scenarios combining multiple fixtures
