@@ -83,6 +83,25 @@ where
 
         // TODO: implement provider to fetch l1 block info
         let mut l1_block_info = L1BlockInfo::default();
+
+        let block_number = self
+            .provider
+            .get_block_number()
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+        let block = self
+            .provider
+            .get_block_by_number(block_number.into())
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+        if let Some(block) = block {
+            let body = block
+                .into_full_block(block.transactions.into_transactions_vec())
+                .into_block_body_unchecked();
+            let l1_block_info = reth_optimism_evm::extract_l1_info(&body);
+        }
+
+
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
