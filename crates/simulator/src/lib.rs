@@ -31,24 +31,23 @@ pub type TipsMempoolEventListener<Node> = MempoolEventListener<Node, TipsBundleS
 
 // Initialization functions
 
-/// Common initialization components shared across listeners
-struct CommonListenerComponents<Node>
+/// Dependencies shared across listeners
+struct ListenerDependencies<B>
 where
-    Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
+    B: BundleSimulator,
 {
     datastore: Arc<tips_datastore::PostgresDatastore>,
-    simulator: RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>,
+    simulator: B,
 }
 
-/// Initialize common listener components (database, publisher, engine, core simulator)
-async fn init_common_components<Node>(
+/// Initialize listener dependencies (database, publisher, engine, core simulator)
+async fn init_dependencies<Node>(
     provider: Arc<Node::Provider>,
     evm_config: Node::Evm,
     database_url: String,
     kafka_brokers: String,
     kafka_topic: String,
-) -> Result<CommonListenerComponents<Node>>
+) -> Result<ListenerDependencies<RethBundleSimulator<RethSimulationEngine<Node>, TipsSimulationPublisher>>>
 where
     Node: FullNodeComponents,
     <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
@@ -79,92 +78,10 @@ where
     let simulator = RethBundleSimulator::new(engine, publisher);
     info!("Core bundle simulator initialized");
 
-    Ok(CommonListenerComponents {
+    Ok(ListenerDependencies {
         datastore,
         simulator,
     })
-}
-
-/// Initialize ExEx event listener (ExEx) that processes committed blocks
-///
-/// Note: The worker pool is created but NOT started.
-pub async fn init_exex_event_listener<Node>(
-    ctx: ExExContext<Node>,
-    config: ExExSimulationConfig,
-    kafka_brokers: String,
-    kafka_topic: String,
-) -> Result<TipsExExEventListener<Node>>
-where
-    Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
-{
-    info!("Initializing ExEx event listener");
-
-    let provider = Arc::new(ctx.components.provider().clone());
-    let evm_config = ctx.components.evm_config().clone();
-
-    let common_components = init_common_components(
-        Arc::clone(&provider),
-        evm_config,
-        config.database_url.clone(),
-        kafka_brokers,
-        kafka_topic,
-    )
-    .await?;
-
-    let worker_pool = SimulationWorkerPool::new(
-        Arc::new(common_components.simulator),
-        config.max_concurrent_simulations,
-    );
-
-    let consensus_listener = ExExEventListener::new(ctx, common_components.datastore, worker_pool);
-
-    info!(
-        max_concurrent = config.max_concurrent_simulations,
-        "ExEx event listener initialized successfully"
-    );
-
-    Ok(consensus_listener)
-}
-
-/// Initialize mempool event listener that processes mempool transactions
-///
-/// Note: The worker pool is created but NOT started.
-pub async fn init_mempool_event_listener<Node>(
-    ctx: Arc<ExExContext<Node>>,
-    provider: Arc<Node::Provider>,
-    config: MempoolListenerConfig,
-    max_concurrent_simulations: usize,
-) -> Result<TipsMempoolEventListener<Node>>
-where
-    Node: FullNodeComponents,
-    <Node as FullNodeComponents>::Evm: ConfigureEvm<NextBlockEnvCtx = OpNextBlockEnvAttributes>,
-{
-    info!("Initializing mempool event listener");
-
-    let evm_config = ctx.components.evm_config().clone();
-    let common_components = init_common_components(
-        Arc::clone(&provider),
-        evm_config,
-        config.database_url.clone(),
-        config.kafka_brokers.join(","),
-        config.kafka_topic.clone(),
-    )
-    .await?;
-
-    let worker_pool = SimulationWorkerPool::new(
-        Arc::new(common_components.simulator),
-        max_concurrent_simulations,
-    );
-
-    let mempool_listener = MempoolEventListener::new(Arc::clone(&provider), config, worker_pool)?;
-
-    info!(
-        max_concurrent = max_concurrent_simulations,
-        "Mempool event listener initialized successfully"
-    );
-
-    Ok(mempool_listener)
 }
 
 /// Encapsulates both event listeners with their shared worker pool
@@ -202,7 +119,7 @@ where
         let provider = Arc::new(exex_ctx.components.provider().clone());
         let evm_config = exex_ctx.components.evm_config().clone();
 
-        let common_components = init_common_components(
+        let dependencies = init_dependencies(
             Arc::clone(&provider),
             evm_config,
             exex_config.database_url.clone(),
@@ -212,13 +129,13 @@ where
         .await?;
 
         let shared_worker_pool = SimulationWorkerPool::new(
-            Arc::new(common_components.simulator),
+            Arc::new(dependencies.simulator),
             max_concurrent_simulations,
         );
 
         let exex_listener = ExExEventListener::new(
             exex_ctx,
-            common_components.datastore,
+            dependencies.datastore,
             Arc::clone(&shared_worker_pool),
         );
 
