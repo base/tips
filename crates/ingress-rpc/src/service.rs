@@ -95,12 +95,22 @@ where
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
         if let Some(block) = block {
-            let body = block
-                .into_full_block(block.transactions.into_transactions_vec())
-                .into_block_body_unchecked();
-            let l1_block_info = reth_optimism_evm::extract_l1_info(&body);
-        }
+            let txs = block.transactions.clone();
+            let first_tx = txs.first_transaction();
+            if let Some(first_tx) = first_tx {
+                if let Ok(info) = reth_optimism_evm::extract_l1_info_from_tx(&first_tx.clone()) {
+                    l1_block_info = info;
+                }
+            }
 
+            /*for tx in block.transactions.txns() {
+                let recovered_tx = tx.clone().into_recovered().clone_inner();
+                if let Ok(info) = reth_optimism_evm::extract_l1_info_from_tx(&recovered_tx) {
+                    l1_block_info = info;
+                    break;
+                }
+            }*/
+        }
 
         let account = self
             .provider
