@@ -40,12 +40,12 @@ sync-env:
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
 
-stop-all:
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && rm -rf data/
+stop-all profile="default":
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose --profile {{ profile }} down && docker compose --profile {{ profile }} rm && rm -rf data/
 
 # Start every service running in docker, useful for demos
-start-all: stop-all
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
+start-all profile="default": (stop-all profile) ensure-base-node-image
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose --profile {{ profile }} build && docker compose --profile {{ profile }} up -d 
 
 # Stop only the specified service without stopping the other services or removing the data directories
 stop-only program:
@@ -77,6 +77,14 @@ start-except programs: stop-all
     done
     
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
+
+# Ensure the base-node-reth Docker image exists, building it if necessary
+ensure-base-node-image:
+    #!/bin/bash
+    if ! docker image inspect base-node-reth >/dev/null 2>&1; then
+        echo "base-node-reth image not found, building it..."
+        ./docker/build-base-node-image.sh reth
+    fi
 
 ### RUN SERVICES ###
 deps-reset:
