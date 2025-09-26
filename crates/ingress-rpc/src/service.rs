@@ -1,4 +1,4 @@
-use crate::validation::TxValidation;
+use crate::validation::{AccountInfoLookup, validate_tx};
 use alloy_consensus::transaction::SignerRecoverable;
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
@@ -80,8 +80,12 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        self.provider
-            .validate_tx(&transaction, &data)
+        let account = self
+            .provider
+            .fetch_account_info(transaction.signer())
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+        validate_tx(account, &transaction, &data)
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
 

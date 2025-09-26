@@ -64,3 +64,4 @@ bytes = { version = "1.8.0", features = ["serde"] }
 backon = "1.5.2"
 op-revm = { version = "10.1.0", default-features = false }
 revm-context-interface = "10.2.0"
+alloy-signer-local = "1.0.36"
