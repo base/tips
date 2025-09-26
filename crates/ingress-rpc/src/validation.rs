@@ -4,7 +4,6 @@ use alloy_provider::{Provider, RootProvider};
 use anyhow::Result;
 use async_trait::async_trait;
 use jsonrpsee::{core::RpcResult, types::ErrorObject};
-use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
 use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
@@ -63,12 +62,12 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
     }
 }
 
-pub async fn validate_tx(
+pub async fn validate_tx<T: Transaction>(
     account: AccountInfo,
-    txn: &Recovered<OpTxEnvelope>,
+    txn: &Recovered<T>,
     data: &[u8],
     l1_block_info: &mut L1BlockInfo,
-) -> RpcResult<B256> {
+) -> RpcResult<()> {
     // skip eip4844 transactions
     if txn.is_eip4844() {
         let obj = ErrorObject::owned(11, "EIP-4844 transactions are not supported", Some(2));
@@ -133,7 +132,7 @@ pub async fn validate_tx(
             EthApiError::InvalidTransaction(RpcInvalidTransactionError::other(obj)).into_rpc_err(),
         );
     }
-    Ok(txn.tx_hash())
+    Ok(())
 }
 
 #[cfg(test)]
@@ -141,9 +140,10 @@ mod tests {
     use super::*;
     use alloy_consensus::SignableTransaction;
     use alloy_consensus::{Transaction, constants::KECCAK_EMPTY, transaction::SignerRecoverable};
-    use alloy_consensus::{TxEip1559, TxEip7702};
+    use alloy_consensus::{TxEip1559, TxEip4844, TxEip7702};
     use alloy_primitives::{bytes, keccak256};
     use alloy_signer_local::PrivateKeySigner;
+    use op_alloy_consensus::OpTxEnvelope;
     use op_alloy_network::TxSignerSync;
     use revm_context_interface::transaction::{AccessList, AccessListItem};
 
@@ -257,6 +257,39 @@ mod tests {
         let recovered_tx = envelope.try_into_recovered().unwrap();
 
         let obj = ErrorObject::owned(11, "Interop transactions are not supported", Some(2));
+        assert_eq!(
+            validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
+            Err(RpcInvalidTransactionError::other(obj).into_rpc_err())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_eip4844_tx() {
+        let signer = PrivateKeySigner::random();
+        let mut tx = TxEip4844 {
+            chain_id: 1,
+            nonce: 0,
+            gas_limit: 21000,
+            max_fee_per_gas: 20000000000u128,
+            max_priority_fee_per_gas: 1000000000u128,
+            to: Address::random().into(),
+            value: U256::from(10000000000000u128),
+            access_list: Default::default(),
+            input: bytes!("").clone(),
+            blob_versioned_hashes: Default::default(),
+            max_fee_per_blob_gas: 20000000000u128,
+        };
+
+        let account = create_account(0, U256::from(1000000000000000000u128));
+        let mut l1_block_info = create_l1_block_info();
+
+        let data = tx.input().to_vec();
+        let signature = signer.sign_transaction_sync(&mut tx).unwrap();
+        let recovered_tx = tx
+            .into_signed(signature)
+            .try_into_recovered()
+            .expect("failed to recover tx");
+        let obj = ErrorObject::owned(11, "EIP-4844 transactions are not supported", Some(2));
         assert_eq!(
             validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
             Err(RpcInvalidTransactionError::other(obj).into_rpc_err())
