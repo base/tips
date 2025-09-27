@@ -1,11 +1,12 @@
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
 use alloy_consensus::transaction::SignerRecoverable;
 use alloy_primitives::{B256, Bytes};
-use alloy_provider::network::eip2718::Decodable2718;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
+    types::ErrorObject,
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
@@ -75,10 +76,25 @@ where
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
         let transaction = envelope
+            .clone()
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        // TODO: Validation and simulation
+        let mut l1_block_info = self
+            .provider
+            .fetch_l1_block_info()
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+
+        let account = self
+            .provider
+            .fetch_account_info(transaction.signer())
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+        validate_tx(account, &transaction, &data, &mut l1_block_info)
+            .await
+            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+
         // TODO: parallelize DB and mempool setup
 
         let bundle = EthSendBundle {
