@@ -53,6 +53,7 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
         let block = self
             .get_block_by_number(block_number.into())
+            .full()
             .await
             .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
 
@@ -64,9 +65,8 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
                 return Ok(l1_block_info);
             }
         }
-        // TODO: we should return an error here when we have a proper mempool node
         warn!("Failed to fetch L1 block info");
-        Ok(L1BlockInfo::default())
+        Err(anyhow::anyhow!("Failed to fetch L1 block info"))
     }
 }
 
