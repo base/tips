@@ -59,6 +59,9 @@ services:
     env_file:
       - .env.docker
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: [ "CMD-SHELL", "[ \"$(curl -s -w '%{http_code}' -o /dev/null \"localhost:4444\")\" = \"401\" ]" ]
       interval: 10s

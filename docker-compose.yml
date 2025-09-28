@@ -106,8 +106,8 @@ services:
       - "17300:7300" # metrics
       - "16060:6060" # pprof
     volumes:
-      - ~/.playground/devnet/jwtsecret:/data/jwtsecret
-      - ~/.playground/devnet/rollup.json:/data/rollup.json
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+      - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
     environment:
       # NETWORK CONFIGURATION
       OP_NODE_NETWORK: ""
@@ -119,7 +119,7 @@ services:
       OP_RETH_SEQUENCER_HTTP: http://host.docker.internal:8547
       
       # SYNC CONFIGURATION
-      OP_NODE_SYNCMODE: execution-layer
+      OP_NODE_SYNCMODE: consensus-layer
       OP_NODE_ROLLUP_LOAD_PROTOCOL_VERSIONS: "true"
       
       # L1 CONFIGURATION
