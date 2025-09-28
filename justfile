@@ -107,6 +107,8 @@ ui:
     cd ui && yarn dev
 
 playground-env:
-    echo "OP_NODE_P2P_BOOTNODES=$(grep 'enr=' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*enr=\([^ ]*\).*/\1/p')" > .env.playground
+    echo "BUILDER_PLAYGROUND_HOST_IP=$(docker run --rm alpine nslookup host.docker.internal | awk '/Address: / && $2 !~ /:/ {print $2; exit}')" > .env.playground
+    echo "BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)" >> .env.playground
+    echo "OP_NODE_P2P_STATIC=/ip4/\$BUILDER_PLAYGROUND_HOST_IP/tcp/9003/p2p/\$BUILDER_PLAYGROUND_PEER_ID" >> .env.playground
 
 start-playground: playground-env (start-all "simulator")
