@@ -1,14 +1,14 @@
 use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
-use anyhow::Result;
 use async_trait::async_trait;
-use jsonrpsee::{core::RpcResult, types::ErrorObject};
+use jsonrpsee::core::RpcResult;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
 use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
+use reth_errors::RethError;
 use reth_optimism_evm::extract_l1_info_from_tx;
-use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
+use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
 use tracing::warn;
 
 /// Account info for a given address
@@ -21,14 +21,17 @@ pub struct AccountInfo {
 /// Interface for fetching account info for a given address
 #[async_trait]
 pub trait AccountInfoLookup: Send + Sync {
-    async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo>;
+    async fn fetch_account_info(&self, address: Address) -> RpcResult<AccountInfo>;
 }
 
 /// Implementation of the `AccountInfoLookup` trait for the `RootProvider`
 #[async_trait]
 impl AccountInfoLookup for RootProvider<Optimism> {
-    async fn fetch_account_info(&self, address: Address) -> Result<AccountInfo> {
-        let account = self.get_account(address).await?;
+    async fn fetch_account_info(&self, address: Address) -> RpcResult<AccountInfo> {
+        let account = self
+            .get_account(address)
+            .await
+            .map_err(|_| EthApiError::Signing(SignError::NoAccount))?;
         Ok(AccountInfo {
             balance: account.balance,
             nonce: account.nonce,
@@ -40,33 +43,34 @@ impl AccountInfoLookup for RootProvider<Optimism> {
 /// Interface for fetching L1 block info for a given block number
 #[async_trait]
 pub trait L1BlockInfoLookup: Send + Sync {
-    async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo>;
+    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo>;
 }
 
 /// Implementation of the `L1BlockInfoLookup` trait for the `RootProvider`
 #[async_trait]
 impl L1BlockInfoLookup for RootProvider<Optimism> {
-    async fn fetch_l1_block_info(&self) -> Result<L1BlockInfo> {
+    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo> {
         let block_number = self
             .get_block_number()
             .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+            .map_err(|_| EthApiError::InternalEthError.into_rpc_err())?;
         let block = self
             .get_block_by_number(block_number.into())
             .full()
             .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+            .map_err(|_| EthApiError::HeaderNotFound(block_number.into()).into_rpc_err())?;
 
         if let Some(block) = block {
             let txs = block.transactions.clone();
             let first_tx = txs.first_transaction();
             if let Some(first_tx) = first_tx {
-                let l1_block_info = extract_l1_info_from_tx(&first_tx.clone())?;
+                let l1_block_info = extract_l1_info_from_tx(&first_tx.clone())
+                    .map_err(|e| EthApiError::Internal(RethError::msg(e.to_string())))?;
                 return Ok(l1_block_info);
             }
         }
-        warn!("Failed to fetch L1 block info");
-        Err(anyhow::anyhow!("Failed to fetch L1 block info"))
+        warn!(message = "Failed to fetch L1 block info");
+        Err(EthApiError::InternalEthError.into_rpc_err())
     }
 }
 
@@ -85,8 +89,8 @@ pub async fn validate_tx<T: Transaction>(
 ) -> RpcResult<()> {
     // skip eip4844 transactions
     if txn.is_eip4844() {
-        let obj = ErrorObject::owned(11, "EIP-4844 transactions are not supported", Some(2));
-        return Err(RpcInvalidTransactionError::other(obj).into_rpc_err());
+        warn!(message = "EIP-4844 transactions are not supported");
+        return Err(RpcInvalidTransactionError::TxTypeNotSupported.into_rpc_err());
     }
 
     // from: https://github.com/paradigmxyz/reth/blob/3b0d98f3464b504d96154b787a860b2488a61b3e/crates/optimism/txpool/src/supervisor/client.rs#L76-L84
@@ -97,8 +101,8 @@ pub async fn validate_tx<T: Transaction>(
             .iter()
             .filter(|entry| entry.address == CROSS_L2_INBOX_ADDRESS);
         if inbox_entries.count() > 0 {
-            let obj = ErrorObject::owned(11, "Interop transactions are not supported", Some(2));
-            return Err(RpcInvalidTransactionError::other(obj).into_rpc_err());
+            warn!(message = "Interop transactions are not supported");
+            return Err(RpcInvalidTransactionError::TxTypeNotSupported.into_rpc_err());
         }
     }
 
@@ -110,7 +114,7 @@ pub async fn validate_tx<T: Transaction>(
         .into_rpc_err());
     }
 
-    // error if tx nonce is not the latest
+    // error if tx nonce is not equal to or greater than the latest on chain
     // https://github.com/paradigmxyz/reth/blob/a047a055ab996f85a399f5cfb2fe15e350356546/crates/transaction-pool/src/validate/eth.rs#L611
     if txn.nonce() < account.nonce {
         return Err(
@@ -131,6 +135,7 @@ pub async fn validate_tx<T: Transaction>(
 
     // error if execution cost costs more than balance
     if txn_cost > account.balance {
+        warn!(message = "Insufficient funds for transfer");
         return Err(EthApiError::InvalidTransaction(
             RpcInvalidTransactionError::InsufficientFundsForTransfer,
         )
@@ -142,10 +147,11 @@ pub async fn validate_tx<T: Transaction>(
     let l1_cost_addition = l1_block_info.calculate_tx_l1_cost(data, OpSpecId::ISTHMUS);
     let l1_cost = txn_cost.saturating_add(l1_cost_addition);
     if l1_cost > account.balance {
-        let obj = ErrorObject::owned(11, "Insufficient funds for L1 gas", Some(2));
-        return Err(
-            EthApiError::InvalidTransaction(RpcInvalidTransactionError::other(obj)).into_rpc_err(),
-        );
+        warn!(message = "Insufficient funds for L1 gas");
+        return Err(EthApiError::InvalidTransaction(
+            RpcInvalidTransactionError::InsufficientFundsForTransfer,
+        )
+        .into_rpc_err());
     }
     Ok(())
 }
@@ -271,10 +277,9 @@ mod tests {
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
 
-        let obj = ErrorObject::owned(11, "Interop transactions are not supported", Some(2));
         assert_eq!(
             validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
-            Err(RpcInvalidTransactionError::other(obj).into_rpc_err())
+            Err(RpcInvalidTransactionError::TxTypeNotSupported.into_rpc_err())
         );
     }
 
@@ -304,10 +309,9 @@ mod tests {
             .into_signed(signature)
             .try_into_recovered()
             .expect("failed to recover tx");
-        let obj = ErrorObject::owned(11, "EIP-4844 transactions are not supported", Some(2));
         assert_eq!(
             validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
-            Err(RpcInvalidTransactionError::other(obj).into_rpc_err())
+            Err(RpcInvalidTransactionError::TxTypeNotSupported.into_rpc_err())
         );
     }
 
@@ -438,13 +442,12 @@ mod tests {
         let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
         let recovered_tx = envelope.try_into_recovered().unwrap();
 
-        let obj = ErrorObject::owned(11, "Insufficient funds for L1 gas", Some(2));
         assert_eq!(
             validate_tx(account, &recovered_tx, &data, &mut l1_block_info).await,
-            Err(
-                EthApiError::InvalidTransaction(RpcInvalidTransactionError::other(obj),)
-                    .into_rpc_err()
+            Err(EthApiError::InvalidTransaction(
+                RpcInvalidTransactionError::InsufficientFundsForTransfer
             )
+            .into_rpc_err())
         );
     }
 }

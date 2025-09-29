@@ -6,7 +6,6 @@ use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
-    types::ErrorObject,
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
@@ -80,20 +79,12 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        let mut l1_block_info = self
-            .provider
-            .fetch_l1_block_info()
-            .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
-
+        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
-            .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
-        validate_tx(account, &transaction, &data, &mut l1_block_info)
-            .await
-            .map_err(|e| ErrorObject::owned(11, e.to_string(), Some(2)))?;
+            .await?;
+        validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
 
         // TODO: parallelize DB and mempool setup
 

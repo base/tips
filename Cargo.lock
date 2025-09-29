@@ -7404,6 +7404,7 @@ dependencies = [
  "op-alloy-network",
  "op-revm",
  "rdkafka",
+ "reth-errors",
  "reth-optimism-evm",
  "reth-rpc-eth-types",
  "revm-context-interface",

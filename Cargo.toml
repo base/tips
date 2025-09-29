@@ -13,6 +13,7 @@ tips-ingress-writer = { path = "crates/ingress-writer" }
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
+reth-errors = { git = "https://github.com/paradigmxyz/reth", tag = "v1.7.0" }
 
 # alloy
 alloy-primitives = { version = "1.3.1", default-features = false, features = [
