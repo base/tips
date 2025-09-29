@@ -58,18 +58,16 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
             .get_block_by_number(block_number.into())
             .full()
             .await
-            .map_err(|_| EthApiError::HeaderNotFound(block_number.into()).into_rpc_err())?;
+            .map_err(|_| EthApiError::InternalEthError.into_rpc_err())?
+            .ok_or_else(|| EthApiError::HeaderNotFound(block_number.into()).into_rpc_err())?;
 
-        if let Some(block) = block {
-            let txs = block.transactions.clone();
-            let first_tx = txs.first_transaction();
-            if let Some(first_tx) = first_tx {
-                let l1_block_info = extract_l1_info_from_tx(&first_tx.clone())
-                    .map_err(|e| EthApiError::Internal(RethError::msg(e.to_string())))?;
-                return Ok(l1_block_info);
-            }
-        }
-        Err(EthApiError::Internal(RethError::msg("Failed to fetch L1 block info")).into_rpc_err())
+        let txs = block.transactions.clone();
+        let first_tx = txs.first_transaction().ok_or_else(|| {
+            EthApiError::Internal(RethError::msg("No full transactions found")).into_rpc_err()
+        })?;
+
+        Ok(extract_l1_info_from_tx(&first_tx.clone())
+            .map_err(|e| EthApiError::Internal(RethError::msg(e.to_string())))?)
     }
 }
 
