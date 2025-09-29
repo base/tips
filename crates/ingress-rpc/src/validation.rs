@@ -69,8 +69,7 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
                 return Ok(l1_block_info);
             }
         }
-        warn!(message = "Failed to fetch L1 block info");
-        Err(EthApiError::InternalEthError.into_rpc_err())
+        Err(EthApiError::Internal(RethError::msg("Failed to fetch L1 block info")).into_rpc_err())
     }
 }
 
