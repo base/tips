@@ -2,6 +2,10 @@ use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
+use opentelemetry::{global, KeyValue};
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use opentelemetry_otlp::WithExportConfig;
+use anyhow::Context as _;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::fs;
@@ -9,6 +13,11 @@ use std::net::IpAddr;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
+use opentelemetry_sdk::Resource;
+use opentelemetry::trace::TracerProvider;
+use tracing_subscriber::filter::Targets;
+use tracing_subscriber::filter::LevelFilter;
+use tracing_opentelemetry::OpenTelemetryLayer;
 
 mod queue;
 mod service;
@@ -57,6 +66,11 @@ struct Config {
         default_value = "10800"
     )]
     send_transaction_default_lifetime_seconds: u64,
+    #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(long, env = "TIPS_INGRESS_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
+    tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]
@@ -93,6 +107,36 @@ async fn main() -> anyhow::Result<()> {
         port = config.port,
         mempool_url = %config.mempool_url
     );
+
+    // from https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
+    if config.tracing_enabled {
+        global::set_text_map_propagator(TraceContextPropagator::new());
+        let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_tonic()
+            .with_endpoint(&config.tracing_otlp_endpoint)
+            .build()
+            .context("Failed to create OTLP exporter")?;
+        let provider_builder = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_batch_exporter(otlp_exporter)
+            .with_resource(
+                Resource::builder_empty()
+                    .with_attributes([
+                        KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
+                        KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                    ])
+                    .build(),
+            );
+            let provider = provider_builder.build();
+            let tracer = provider.tracer(env!("CARGO_PKG_NAME"));
+            
+            let trace_filter = Targets::new()
+                .with_default(LevelFilter::OFF)
+                .with_target("tips_ingress_rpc", LevelFilter::TRACE);
+
+            tracing::subscriber::set_global_default(
+                tracing_subscriber::registry().with(trace_filter).with(OpenTelemetryLayer::new(tracer)),
+            )?;
+    }
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
