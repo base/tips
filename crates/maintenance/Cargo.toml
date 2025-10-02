@@ -10,7 +10,7 @@ path = "src/main.rs"
 [dependencies]
 tips-datastore.workspace = true
 tips-audit.workspace = true
-tips-tracing.workspace = true
+tips-common.workspace = true
 alloy-provider.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true

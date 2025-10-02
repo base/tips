@@ -9,8 +9,8 @@ use rdkafka::{
     producer::FutureProducer,
 };
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
+use tips_common::init_tracing;
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
-use tips_tracing::init_tracing;
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;

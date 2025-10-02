@@ -7542,11 +7542,24 @@ dependencies = [
  "serde_json",
  "testcontainers",
  "testcontainers-modules",
- "tips-tracing",
+ "tips-common",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
  "uuid",
+]
+
+[[package]]
+name = "tips-common"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
@@ -7595,8 +7608,8 @@ dependencies = [
  "serde",
  "serde_json",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
- "tips-tracing",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
@@ -7616,8 +7629,8 @@ dependencies = [
  "rdkafka",
  "serde_json",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
- "tips-tracing",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
@@ -7638,25 +7651,12 @@ dependencies = [
  "rdkafka",
  "serde_json",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
- "tips-tracing",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
  "url",
-]
-
-[[package]]
-name = "tips-tracing"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber 0.3.20",
 ]
 
 [[package]]

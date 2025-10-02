@@ -7,7 +7,7 @@ use rdkafka::consumer::Consumer;
 use tips_audit::{
     create_kafka_consumer, KafkaMempoolArchiver, KafkaMempoolReader, S3MempoolEventReaderWriter,
 };
-use tips_tracing::init_tracing;
+use tips_common::init_tracing;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
