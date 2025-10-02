@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 tips-datastore.workspace = true
 tips-audit.workspace=true
+tips-tracing.workspace = true
 alloy-rpc-types-mev.workspace = true
 tokio.workspace = true
 tracing.workspace = true

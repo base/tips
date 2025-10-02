@@ -11,9 +11,12 @@ use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::sync::Arc;
-use tips_audit::KafkaBundleEventPublisher;
-use tips_datastore::PostgresDatastore;
-use tracing::{info, warn};
+use std::time::Duration;
+use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
+use tips_datastore::{BundleDatastore, PostgresDatastore};
+use tips_tracing::init_tracing;
+use tokio::time::sleep;
+use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -47,7 +50,6 @@ pub struct Args {
     pub flashblocks_ws: Url,
 
     #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
-<<<<<<< HEAD
     pub log_level: String,
 
     #[arg(long, env = "TIPS_MAINTENANCE_FINALIZATION_DEPTH", default_value = "4")]
@@ -62,15 +64,20 @@ pub struct Args {
 
     #[arg(long, env = "TIPS_MAINTENANCE_INTERVAL_MS", default_value = "2000")]
     pub maintenance_interval_ms: u64,
-=======
-    log_level: String,
 
-    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_ENABLED", default_value = "false")]
-    tracing_enabled: bool,
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_ENABLED",
+        default_value = "false"
+    )]
+    pub tracing_enabled: bool,
 
-    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
-    tracing_otlp_endpoint: String,
->>>>>>> 2d07e64 (spike add to other services)
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    pub tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]

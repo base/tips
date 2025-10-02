@@ -11,6 +11,7 @@ use rdkafka::{
 use std::fs;
 use tips_audit::{BundleEvent, BundleEventPublisher, KafkaBundleEventPublisher};
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
+use tips_tracing::init_tracing;
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -37,10 +38,18 @@ struct Args {
     #[arg(long, env = "TIPS_INGRESS_WRITER_LOG_LEVEL", default_value = "info")]
     log_level: String,
 
-    #[arg(long, env = "TIPS_INGRESS_WRITER_TRACING_ENABLED", default_value = "false")]
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_WRITER_TRACING_ENABLED",
+        default_value = "false"
+    )]
     tracing_enabled: bool,
 
-    #[arg(long, env = "TIPS_INGRESS_WRITER_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_WRITER_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
     tracing_otlp_endpoint: String,
 }
 

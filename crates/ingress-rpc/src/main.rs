@@ -6,8 +6,8 @@ use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::net::IpAddr;
-use tracing::{info, warn};
 use tips_tracing::init_tracing;
+use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 

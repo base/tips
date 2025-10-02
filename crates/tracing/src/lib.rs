@@ -1,11 +1,15 @@
 use anyhow::Context;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::{filter::{LevelFilter, Targets}, layer::SubscriberExt};
-use opentelemetry::trace::TracerProvider;
+use tracing_subscriber::{
+    filter::{LevelFilter, Targets},
+    layer::SubscriberExt,
+};
 
+// from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
 pub fn init_tracing(
     service_name: String,
     service_version: String,

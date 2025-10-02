@@ -7,6 +7,7 @@ use rdkafka::consumer::Consumer;
 use tips_audit::{
     KafkaMempoolArchiver, KafkaMempoolReader, S3EventReaderWriter, create_kafka_consumer,
 };
+use tips_tracing::init_tracing;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -45,6 +46,16 @@ struct Args {
 
     #[arg(long, env = "TIPS_AUDIT_S3_SECRET_ACCESS_KEY")]
     s3_secret_access_key: Option<String>,
+
+    #[arg(long, env = "TIPS_AUDIT_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(
+        long,
+        env = "TIPS_AUDIT_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]
@@ -87,7 +98,7 @@ async fn main() -> Result<()> {
         init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
-            args.tracing_otlp_endpoint,
+            args.tracing_otlp_endpoint.clone(),
         )?;
     }
     

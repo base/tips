@@ -15,6 +15,7 @@ path = "src/main.rs"
 tips-datastore.workspace = true
 tips-audit.workspace = true
 op-alloy-consensus.workspace = true
+tips-tracing.workspace = true
 alloy-provider.workspace = true
 alloy-primitives.workspace = true
 alloy-rpc-types.workspace = true
