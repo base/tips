@@ -1,23 +1,13 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
-use anyhow::Context as _;
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
-use opentelemetry::trace::TracerProvider;
-use opentelemetry::{KeyValue, global};
-use opentelemetry_otlp::SpanExporter;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::propagation::TraceContextPropagator;
-use opentelemetry_sdk::trace::SdkTracerProvider;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::net::IpAddr;
 use tracing::{info, warn};
-use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::filter::Targets;
+use tips_tracing::init_tracing;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -114,35 +104,11 @@ async fn main() -> anyhow::Result<()> {
         mempool_url = %config.mempool_url
     );
 
-    // from https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
     if config.tracing_enabled {
-        global::set_text_map_propagator(TraceContextPropagator::new());
-        let otlp_exporter = SpanExporter::builder()
-            .with_tonic()
-            .with_endpoint(&config.tracing_otlp_endpoint)
-            .build()
-            .context("Failed to create OTLP exporter")?;
-        let provider_builder = SdkTracerProvider::builder()
-            .with_batch_exporter(otlp_exporter)
-            .with_resource(
-                Resource::builder_empty()
-                    .with_attributes([
-                        KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
-                        KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                    ])
-                    .build(),
-            );
-        let provider = provider_builder.build();
-        let tracer = provider.tracer(env!("CARGO_PKG_NAME"));
-
-        let trace_filter = Targets::new()
-            .with_default(LevelFilter::OFF)
-            .with_target(env!("CARGO_PKG_NAME"), LevelFilter::TRACE);
-
-        tracing::subscriber::set_global_default(
-            tracing_subscriber::registry()
-                .with(trace_filter)
-                .with(OpenTelemetryLayer::new(tracer)),
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            config.tracing_otlp_endpoint,
         )?;
     }
 
