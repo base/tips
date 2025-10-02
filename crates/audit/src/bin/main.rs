@@ -87,6 +87,14 @@ async fn main() -> Result<()> {
         "Starting audit archiver"
     );
 
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint,
+        )?;
+    }
+
     let consumer = create_kafka_consumer(&args.kafka_brokers, &args.kafka_group_id)?;
     consumer.subscribe(&[&args.kafka_topic])?;
 
