@@ -5,6 +5,7 @@ use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::net::IpAddr;
+use tips_common::init_tracing;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -56,6 +57,16 @@ struct Config {
 
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     log_level: String,
+
+    #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]
@@ -92,6 +103,14 @@ async fn main() -> anyhow::Result<()> {
         port = config.port,
         mempool_url = %config.mempool_url
     );
+
+    if config.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            config.tracing_otlp_endpoint,
+        )?;
+    }
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()

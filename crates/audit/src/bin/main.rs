@@ -7,6 +7,7 @@ use rdkafka::consumer::Consumer;
 use tips_audit::{
     create_kafka_consumer, KafkaMempoolArchiver, KafkaMempoolReader, S3MempoolEventReaderWriter,
 };
+use tips_common::init_tracing;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -48,6 +49,16 @@ struct Args {
 
     #[arg(long, env = "TIPS_AUDIT_S3_SECRET_ACCESS_KEY")]
     s3_secret_access_key: Option<String>,
+
+    #[arg(long, env = "TIPS_AUDIT_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(
+        long,
+        env = "TIPS_AUDIT_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]
@@ -86,6 +97,14 @@ async fn main() -> Result<()> {
         s3_bucket = %args.s3_bucket,
         "Starting audit archiver"
     );
+
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint.clone(),
+        )?;
+    }
 
     let consumer = create_kafka_consumer(&args.kafka_brokers, &args.kafka_group_id)?;
     consumer.subscribe(&[&args.kafka_topic])?;

@@ -8,6 +8,7 @@ use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::time::Duration;
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
+use tips_common::init_tracing;
 use tips_datastore::{BundleDatastore, PostgresDatastore};
 use tokio::time::sleep;
 use tracing::{error, info, warn};
@@ -38,6 +39,20 @@ struct Args {
 
     #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
     log_level: String,
+
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_ENABLED",
+        default_value = "false"
+    )]
+    tracing_enabled: bool,
+
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    tracing_otlp_endpoint: String,
 }
 
 #[tokio::main]
@@ -70,6 +85,14 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting maintenance service");
+
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint,
+        )?;
+    }
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()

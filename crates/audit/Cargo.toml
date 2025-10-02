@@ -8,6 +8,7 @@ name = "tips-audit"
 path = "src/bin/main.rs"
 
 [dependencies]
+tips-common = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }

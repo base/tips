@@ -9,6 +9,7 @@ use rdkafka::{
     producer::FutureProducer,
 };
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
+use tips_common::init_tracing;
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
@@ -35,6 +36,20 @@ struct Args {
 
     #[arg(long, env = "TIPS_INGRESS_WRITER_LOG_LEVEL", default_value = "info")]
     log_level: String,
+
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_WRITER_TRACING_ENABLED",
+        default_value = "false"
+    )]
+    tracing_enabled: bool,
+
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_WRITER_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
+    tracing_otlp_endpoint: String,
 }
 
 /// IngressWriter consumes bundles sent from the Ingress service and writes them to the datastore
@@ -128,6 +143,14 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(&args.log_level)
         .init();
+
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint,
+        )?;
+    }
 
     let mut config = ClientConfig::new();
     config
