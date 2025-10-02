@@ -10,8 +10,8 @@ use rdkafka::{
 };
 use std::fs;
 use tips_audit::{BundleEvent, BundleEventPublisher, KafkaBundleEventPublisher};
+use tips_common::init_tracing;
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
-use tips_tracing::init_tracing;
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
