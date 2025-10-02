@@ -135,26 +135,88 @@ build-rbuilder remote="https://github.com/base/op-rbuilder" ref="tips-prototype"
     #!/bin/bash
     set -euo pipefail
     
+    REMOTE="{{ remote }}"
+    REF="{{ ref }}"
+    JUSTFILE="{{ justfile() }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
+    
     TEMP_DIR=$(mktemp -d)
     trap "rm -rf $TEMP_DIR" EXIT
     
-    echo "Cloning {{ remote }} ({{ ref }})..."
-    git clone --depth 1 --branch {{ ref }} {{ remote }} $TEMP_DIR/op-rbuilder
+    echo "Cloning $REMOTE ($REF)..."
+    git clone --depth 1 --branch "$REF" "$REMOTE" $TEMP_DIR/op-rbuilder
+    
+    # Get the git revision from the cloned repo
+    GIT_REV=$(cd $TEMP_DIR/op-rbuilder && git rev-parse --short HEAD)
+    
+    just --justfile "$JUSTFILE" --working-directory "$JUSTFILE_DIR" _build-rbuilder-common $TEMP_DIR "$REF" "$GIT_REV"
+
+# Build op-rbuilder docker image from a local checkout
+#
+# The local checkout is copied to a temp directory so the original is not modified.
+build-rbuilder-local local_path tag="local":
+    #!/bin/bash
+    set -euo pipefail
+    
+    TAG="{{ tag }}"
+    JUSTFILE="{{ justfile() }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
+    
+    # Expand path to absolute
+    LOCAL_PATH=$(cd {{ local_path }} && pwd)
+    
+    if [ ! -d "$LOCAL_PATH" ]; then
+        echo "Error: Directory $LOCAL_PATH does not exist"
+        exit 1
+    fi
+    
+    # Get git revision and check if working tree is dirty
+    cd "$LOCAL_PATH"
+    GIT_REV=$(git rev-parse --short HEAD)
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "Warning: Working tree has uncommitted changes"
+        GIT_REV="${GIT_REV}-dirty"
+    fi
+    
+    TEMP_DIR=$(mktemp -d)
+    trap "rm -rf $TEMP_DIR" EXIT
+    
+    echo "Copying local checkout from $LOCAL_PATH (excluding generated files)..."
+    mkdir -p "$TEMP_DIR/op-rbuilder"
+    rsync -a \
+        --exclude='target/' \
+        --exclude='.git/' \
+        --exclude='node_modules/' \
+        --exclude='*.log' \
+        --exclude='.DS_Store' \
+        "$LOCAL_PATH/" "$TEMP_DIR/op-rbuilder/"
+    
+    just --justfile "$JUSTFILE" --working-directory "$JUSTFILE_DIR" _build-rbuilder-common $TEMP_DIR "$TAG" "$GIT_REV"
+
+# Internal helper for building op-rbuilder docker images
+_build-rbuilder-common temp_dir tag revision:
+    #!/bin/bash
+    set -euo pipefail
+    
+    TEMP_DIR="{{ temp_dir }}"
+    TAG="{{ tag }}"
+    REVISION="{{ revision }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
     
     echo "Setting up tips-datastore..."
-    cd {{ justfile_directory() }}
+    cd "$JUSTFILE_DIR"
     
     # Copy tips-datastore and its workspace Cargo.toml into the op-rbuilder directory
     # so they're included in the Docker build context
-    mkdir -p $TEMP_DIR/op-rbuilder/tips/crates
-    cp Cargo.toml $TEMP_DIR/op-rbuilder/tips/
-    cp -r crates/datastore $TEMP_DIR/op-rbuilder/tips/crates/
+    mkdir -p "$TEMP_DIR/op-rbuilder/tips/crates"
+    cp Cargo.toml "$TEMP_DIR/op-rbuilder/tips/"
+    cp -r crates/datastore "$TEMP_DIR/op-rbuilder/tips/crates/"
 
     # Copy sqlx offline data into the datastore crate for compile-time query verification
-    cp -r .sqlx $TEMP_DIR/op-rbuilder/tips/crates/datastore/
+    cp -r .sqlx "$TEMP_DIR/op-rbuilder/tips/crates/datastore/"
     
     echo "Updating workspace configuration..."
-    cd $TEMP_DIR/op-rbuilder
+    cd "$TEMP_DIR/op-rbuilder"
     
     # Modify Dockerfile to set SQLX_OFFLINE=true in the cargo build RUN command
     # This tells sqlx to use the offline .sqlx data instead of trying to connect to a database
@@ -185,11 +247,14 @@ build-rbuilder remote="https://github.com/base/op-rbuilder" ref="tips-prototype"
     done
     rm -f /tmp/tips-workspace-deps.txt
     
-    echo "Building docker image..."
-    docker build -t tips-builder:{{ ref }} .
+    echo "Building docker image (revision: $REVISION)..."
+    docker build -t "tips-builder:$TAG" .
+    
+    # Tag with git revision
+    docker tag "tips-builder:$TAG" "tips-builder:$REVISION"
     
     # Tag as latest for convenience
-    docker tag tips-builder:{{ ref }} tips-builder:latest
+    docker tag "tips-builder:$TAG" tips-builder:latest
     
-    echo "✓ Built tips-builder:{{ ref }}"
+    echo "✓ Built tips-builder:$TAG (revision: $REVISION)"
     docker images | grep tips-builder
