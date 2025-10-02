@@ -7586,9 +7586,6 @@ dependencies = [
  "op-alloy-consensus 0.20.0",
  "op-alloy-network",
  "op-revm",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
  "rdkafka",
  "reth-errors",
  "reth-optimism-evm",
@@ -7598,9 +7595,9 @@ dependencies = [
  "serde_json",
  "tips-audit",
  "tips-datastore",
+ "tips-tracing",
  "tokio",
  "tracing",
- "tracing-opentelemetry",
  "tracing-subscriber 0.3.20",
  "url",
 ]
@@ -7644,6 +7641,19 @@ dependencies = [
  "tracing",
  "tracing-subscriber 0.3.20",
  "url",
+]
+
+[[package]]
+name = "tips-tracing"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry_sdk",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
