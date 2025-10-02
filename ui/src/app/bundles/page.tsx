@@ -92,17 +92,9 @@ export default function BundlesPage() {
                           className={`px-2 py-1 rounded font-medium ${
                             bundle.state === "Ready"
                               ? "bg-blue-100 text-blue-600"
-                              : bundle.state === "BundleLimit"
-                                ? "bg-yellow-100 text-yellow-600"
-                                : bundle.state === "AccountLimits"
-                                  ? "bg-orange-100 text-orange-600"
-                                  : bundle.state === "GlobalLimits"
-                                    ? "bg-red-100 text-red-600"
-                                    : bundle.state === "IncludedInFlashblock"
-                                      ? "bg-purple-100 text-purple-600"
-                                      : bundle.state === "IncludedInBlock"
-                                        ? "bg-green-100 text-green-600"
-                                        : "bg-gray-100 text-gray-600"
+                              : bundle.state === "IncludedByBuilder"
+                                ? "bg-green-100 text-green-600"
+                                : "bg-gray-100 text-gray-600"
                           }`}
                         >
                           {bundle.state}
