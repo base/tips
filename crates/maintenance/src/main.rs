@@ -47,6 +47,7 @@ pub struct Args {
     pub flashblocks_ws: Url,
 
     #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
+<<<<<<< HEAD
     pub log_level: String,
 
     #[arg(long, env = "TIPS_MAINTENANCE_FINALIZATION_DEPTH", default_value = "4")]
@@ -61,6 +62,15 @@ pub struct Args {
 
     #[arg(long, env = "TIPS_MAINTENANCE_INTERVAL_MS", default_value = "2000")]
     pub maintenance_interval_ms: u64,
+=======
+    log_level: String,
+
+    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
+    tracing_otlp_endpoint: String,
+>>>>>>> 2d07e64 (spike add to other services)
 }
 
 #[tokio::main]
@@ -93,6 +103,14 @@ async fn main() -> Result<()> {
         .init();
 
     info!("Starting maintenance service");
+
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint,
+        )?;
+    }
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()

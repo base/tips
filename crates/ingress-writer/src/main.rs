@@ -36,6 +36,12 @@ struct Args {
 
     #[arg(long, env = "TIPS_INGRESS_WRITER_LOG_LEVEL", default_value = "info")]
     log_level: String,
+
+    #[arg(long, env = "TIPS_INGRESS_WRITER_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    #[arg(long, env = "TIPS_INGRESS_WRITER_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
+    tracing_otlp_endpoint: String,
 }
 
 /// IngressWriter consumes bundles sent from the Ingress service and writes them to the datastore
@@ -132,6 +138,22 @@ async fn main() -> Result<()> {
 
     let config = load_kafka_config_from_file(&args.kafka_properties_file)?;
     let kafka_producer: FutureProducer = config.create()?;
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint,
+        )?;
+    }
+
+    let mut config = ClientConfig::new();
+    config
+        .set("group.id", &args.kafka_group_id)
+        .set("bootstrap.servers", &args.kafka_brokers)
+        .set("auto.offset.reset", "earliest")
+        .set("enable.partition.eof", "false")
+        .set("session.timeout.ms", "6000")
+        .set("enable.auto.commit", "true");
 
     let publisher = KafkaBundleEventPublisher::new(kafka_producer, args.audit_topic.clone());
     let consumer = config.create()?;
