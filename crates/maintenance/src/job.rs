@@ -80,9 +80,7 @@ impl<S: BundleDatastore, P: Provider<Optimism>, K: BundleEventPublisher> Mainten
                 block_number: latest_block.header.number,
                 block_hash: latest_block.header.hash,
             };
-            self.store
-                .commit_block_info(vec![block_update.clone()])
-                .await?;
+            self.store.commit_block_info(vec![block_update]).await?;
             self.store
                 .finalize_blocks_before(latest_block.header.number + 1)
                 .await?;
