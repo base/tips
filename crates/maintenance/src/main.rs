@@ -9,6 +9,7 @@ use rdkafka::producer::FutureProducer;
 use std::time::Duration;
 use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
 use tips_datastore::{BundleDatastore, PostgresDatastore};
+use tips_tracing::init_tracing;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -39,10 +40,18 @@ struct Args {
     #[arg(long, env = "TIPS_MAINTENANCE_LOG_LEVEL", default_value = "info")]
     log_level: String,
 
-    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_ENABLED", default_value = "false")]
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_ENABLED",
+        default_value = "false"
+    )]
     tracing_enabled: bool,
 
-    #[arg(long, env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT", default_value = "http://localhost:4317")]
+    #[arg(
+        long,
+        env = "TIPS_MAINTENANCE_TRACING_OTLP_ENDPOINT",
+        default_value = "http://localhost:4317"
+    )]
     tracing_otlp_endpoint: String,
 }
 
