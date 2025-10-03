@@ -8,6 +8,8 @@ services:
       - "8080:8080"
     env_file:
       - .env.docker
+    volumes:
+      - ./docker/ingress-kafka-properties:/app/docker/ingress-kafka-properties:ro
     restart: unless-stopped
 
   audit:
