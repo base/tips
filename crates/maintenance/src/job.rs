@@ -69,7 +69,7 @@ impl<S: BundleDatastore, P: Provider<Optimism>, K: BundleEventPublisher> Mainten
                         )))
                         .full()
                         .await?
-                        .ok_or_else(|| anyhow::anyhow!("Failed to get block {}", block_num))?;
+                        .ok_or_else(|| anyhow::anyhow!("Failed to get block {block_num}"))?;
 
                     self.on_new_block(block).await?;
                 }
