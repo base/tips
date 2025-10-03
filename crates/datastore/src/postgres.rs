@@ -88,13 +88,6 @@ pub struct BundleWithMetadata {
     pub state: BundleState,
 }
 
-/// Bundle with its latest simulation
-#[derive(Debug, Clone)]
-pub struct BundleWithLatestSimulation {
-    pub bundle_with_metadata: BundleWithMetadata,
-    pub latest_simulation: Simulation,
-}
-
 /// State diff type: maps account addresses to storage slot mappings
 pub type StateDiff = HashMap<Address, HashMap<StorageKey, StorageValue>>;
 
@@ -463,7 +456,7 @@ impl BundleDatastore for PostgresDatastore {
     async fn select_bundles_with_latest_simulation(
         &self,
         filter: BundleFilter,
-    ) -> Result<Vec<BundleWithLatestSimulation>> {
+    ) -> Result<Vec<(BundleWithMetadata, Simulation)>> {
         let base_fee = filter.base_fee.unwrap_or(0);
         let block_number = filter.block_number.unwrap_or(0) as i64;
 
@@ -562,10 +555,7 @@ impl BundleDatastore for PostgresDatastore {
             };
             let simulation = self.row_to_simulation(simulation_row)?;
 
-            results.push(BundleWithLatestSimulation {
-                bundle_with_metadata,
-                latest_simulation: simulation,
-            });
+            results.push((bundle_with_metadata, simulation));
         }
 
         Ok(results)

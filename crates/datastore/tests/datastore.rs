@@ -503,8 +503,7 @@ async fn multiple_simulations_latest_selection() -> eyre::Result<()> {
     // Should return exactly one bundle
     assert_eq!(results.len(), 1, "Should return exactly one bundle");
 
-    let bundle_with_sim = &results[0];
-    let latest_sim = &bundle_with_sim.latest_simulation;
+    let (_bundle_meta, latest_sim) = &results[0];
 
     // Verify it's the latest simulation (highest block number)
     let expected_latest_block = base_block + 4; // Last iteration was i=4
@@ -637,26 +636,26 @@ async fn select_bundles_with_latest_simulation() -> eyre::Result<()> {
     // Verify the results contain the correct bundles and latest simulations
     let bundle1_result = results
         .iter()
-        .find(|r| r.bundle_with_metadata.bundle.block_number == 100);
+        .find(|(bundle_meta, _)| bundle_meta.bundle.block_number == 100);
     let bundle2_result = results
         .iter()
-        .find(|r| r.bundle_with_metadata.bundle.block_number == 200);
+        .find(|(bundle_meta, _)| bundle_meta.bundle.block_number == 200);
 
     assert!(bundle1_result.is_some(), "Bundle1 should be in results");
     assert!(bundle2_result.is_some(), "Bundle2 should be in results");
 
-    let bundle1_result = bundle1_result.unwrap();
-    let bundle2_result = bundle2_result.unwrap();
+    let (_bundle1_meta, sim1) = bundle1_result.unwrap();
+    let (_bundle2_meta, sim2) = bundle2_result.unwrap();
 
     // Check that bundle1 has the latest simulation (block 18500001)
-    assert_eq!(bundle1_result.latest_simulation.id, latest_sim1_id);
-    assert_eq!(bundle1_result.latest_simulation.block_number, 18500001);
-    assert_eq!(bundle1_result.latest_simulation.gas_used, 22000);
+    assert_eq!(sim1.id, latest_sim1_id);
+    assert_eq!(sim1.block_number, 18500001);
+    assert_eq!(sim1.gas_used, 22000);
 
     // Check that bundle2 has its simulation
-    assert_eq!(bundle2_result.latest_simulation.id, sim2_id);
-    assert_eq!(bundle2_result.latest_simulation.block_number, 18500002);
-    assert_eq!(bundle2_result.latest_simulation.gas_used, 19000);
+    assert_eq!(sim2.id, sim2_id);
+    assert_eq!(sim2.block_number, 18500002);
+    assert_eq!(sim2.gas_used, 19000);
 
     Ok(())
 }
@@ -720,10 +719,8 @@ async fn select_bundles_with_latest_simulation_filtered() -> eyre::Result<()> {
         1,
         "Should return 1 bundle valid for block 200"
     );
-    assert_eq!(
-        filtered_results[0].bundle_with_metadata.bundle.block_number,
-        200
-    );
+    let (bundle_meta, _sim) = &filtered_results[0];
+    assert_eq!(bundle_meta.bundle.block_number, 200);
 
     // Test filtering by timestamp
     let timestamp_filter = BundleFilter::new().valid_for_timestamp(1200);
@@ -738,13 +735,8 @@ async fn select_bundles_with_latest_simulation_filtered() -> eyre::Result<()> {
         1,
         "Should return 1 bundle valid for timestamp 1200"
     );
-    assert_eq!(
-        timestamp_results[0]
-            .bundle_with_metadata
-            .bundle
-            .block_number,
-        100
-    );
+    let (bundle_meta, _sim) = &timestamp_results[0];
+    assert_eq!(bundle_meta.bundle.block_number, 100);
 
     Ok(())
 }
