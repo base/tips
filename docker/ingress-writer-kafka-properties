@@ -1,0 +1,8 @@
+# Kafka configuration properties for ingress writer service
+bootstrap.servers=host.docker.internal:9094
+message.timeout.ms=5000
+group.id=local-writer
+auto.offset.reset=earliest
+enable.partition.eof=false
+session.timeout.ms=6000
+enable.auto.commit=true

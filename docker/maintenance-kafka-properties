@@ -1,0 +1,3 @@
+# Kafka configuration properties for maintenance service
+bootstrap.servers=host.docker.internal:9094
+message.timeout.ms=5000

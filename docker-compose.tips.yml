@@ -8,6 +8,8 @@ services:
       - "8080:8080"
     env_file:
       - .env.docker
+    volumes:
+      - ./docker/ingress-kafka-properties:/app/docker/ingress-kafka-properties:ro
     restart: unless-stopped
 
   audit:
@@ -17,6 +19,8 @@ services:
     container_name: tips-audit
     env_file:
       - .env.docker
+    volumes:
+      - ./docker/audit-kafka-properties:/app/docker/audit-kafka-properties:ro
     restart: unless-stopped
 
   maintenance:
@@ -26,6 +30,8 @@ services:
     container_name: tips-maintenance
     env_file:
       - .env.docker
+    volumes:
+      - ./docker/maintenance-kafka-properties:/app/docker/maintenance-kafka-properties:ro
     restart: unless-stopped
 
   ui:
@@ -46,4 +52,6 @@ services:
     container_name: tips-ingress-writer
     env_file:
       - .env.docker
+    volumes:
+      - ./docker/ingress-writer-kafka-properties:/app/docker/ingress-writer-kafka-properties:ro
     restart: unless-stopped

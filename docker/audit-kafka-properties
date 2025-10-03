@@ -1,0 +1,10 @@
+# Kafka configuration properties for audit service
+bootstrap.servers=host.docker.internal:9094
+message.timeout.ms=5000
+group.id=local-audit
+enable.partition.eof=false
+session.timeout.ms=6000
+enable.auto.commit=false
+auto.offset.reset=earliest
+fetch.wait.max.ms=100
+fetch.min.bytes=1
