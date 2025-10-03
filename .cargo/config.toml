@@ -1,2 +1,2 @@
-[target.'cfg(all())']
-rustflags = ["-D", "warnings"]
+[alias]
+clippy-ci = "clippy -- -D warnings"
