@@ -109,13 +109,55 @@ ui:
 playground-env: sync-env
     #!/bin/bash
     set -euo pipefail
-    BUILDER_PLAYGROUND_HOST_IP=$(docker run --rm alpine nslookup host.docker.internal | awk '/Address: / && $2 !~ /:/ {print $2; exit}')
-    BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)
+    
+    # Check if the op-node log file exists
+    OP_NODE_LOG="$HOME/.playground/devnet/logs/op-node.log"
+    if [ ! -f "$OP_NODE_LOG" ]; then
+        echo "Error: Builder Playground op-node log not found at $OP_NODE_LOG"
+        echo ""
+        echo "This recipe requires the Builder Playground to be running."
+        echo "Please ensure:"
+        echo "  1. The Builder Playground is installed and running"
+        echo "  2. The op-node service has started and created its log file"
+        echo ""
+        echo "For more information, see: https://github.com/base-org/builder-playground"
+        exit 1
+    fi
+    
+    # Try to get the host IP for host.docker.internal
+    echo "Resolving host.docker.internal IP address..."
+    if ! BUILDER_PLAYGROUND_HOST_IP=$(docker run --rm alpine nslookup host.docker.internal 2>/dev/null | awk '/Address: / && $2 !~ /:/ {print $2; exit}'); then
+        echo "Error: Failed to resolve host.docker.internal"
+        echo "Docker must be running to use this recipe."
+        exit 1
+    fi
+    
+    if [ -z "$BUILDER_PLAYGROUND_HOST_IP" ]; then
+        echo "Error: Could not determine IP address for host.docker.internal"
+        echo "This may indicate an issue with your Docker installation."
+        exit 1
+    fi
+    
+    # Extract the peer ID from the op-node log
+    echo "Extracting Builder Playground peer ID from op-node logs..."
+    BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' "$OP_NODE_LOG" | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)
+    
+    if [ -z "$BUILDER_PLAYGROUND_PEER_ID" ]; then
+        echo "Error: Could not extract peer ID from $OP_NODE_LOG"
+        echo "The op-node may not have fully started yet."
+        echo ""
+        echo "Please wait for the op-node to complete startup and try again."
+        exit 1
+    fi
+    
+    # Append the configuration to .env.docker
     echo "" >> .env.docker
     echo "# Builder Playground P2P Configuration" >> .env.docker
     echo "BUILDER_PLAYGROUND_HOST_IP=${BUILDER_PLAYGROUND_HOST_IP}" >> .env.docker
     echo "BUILDER_PLAYGROUND_PEER_ID=${BUILDER_PLAYGROUND_PEER_ID}" >> .env.docker
     echo "OP_NODE_P2P_STATIC=/ip4/${BUILDER_PLAYGROUND_HOST_IP}/tcp/9003/p2p/${BUILDER_PLAYGROUND_PEER_ID}" >> .env.docker
+    
+    echo "✓ Builder Playground environment configured successfully"
 
 # Start builder stack (builder-cl + builder, simulator-cl + simulator)
 start-builder: playground-env (start-all "builder")
