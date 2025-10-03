@@ -43,7 +43,7 @@ struct Config {
     #[arg(
         long,
         env = "TIPS_INGRESS_KAFKA_INGRESS_TOPIC",
-        default_value = "tips-ingress-rpc"
+        default_value = "tips-ingress"
     )]
     ingress_topic: String,
 
@@ -99,18 +99,7 @@ async fn main() -> anyhow::Result<()> {
         .network::<Optimism>()
         .connect_http(config.mempool_url);
 
-    let kafka_properties = fs::read_to_string(&config.ingress_kafka_properties)?;
-    let mut client_config = ClientConfig::new();
-
-    for line in kafka_properties.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if let Some((key, value)) = line.split_once('=') {
-            client_config.set(key.trim(), value.trim());
-        }
-    }
+    let client_config = load_kafka_config_from_file(&config.ingress_kafka_properties)?;
 
     let queue_producer: FutureProducer = client_config.create()?;
 
@@ -135,4 +124,23 @@ async fn main() -> anyhow::Result<()> {
 
     handle.stopped().await;
     Ok(())
+}
+
+fn load_kafka_config_from_file(properties_file_path: &str) -> anyhow::Result<ClientConfig> {
+    let kafka_properties = fs::read_to_string(properties_file_path)?;
+    info!("Kafka properties:\n{}", kafka_properties);
+
+    let mut client_config = ClientConfig::new();
+
+    for line in kafka_properties.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if let Some((key, value)) = line.split_once('=') {
+            client_config.set(key.trim(), value.trim());
+        }
+    }
+
+    Ok(client_config)
 }
