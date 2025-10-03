@@ -24,11 +24,7 @@ struct Args {
     #[arg(long, env = "TIPS_INGRESS_WRITER_KAFKA_PROPERTIES_FILE")]
     kafka_properties_file: String,
 
-    #[arg(
-        long,
-        env = "TIPS_INGRESS_KAFKA_TOPIC",
-        default_value = "tips-ingress"
-    )]
+    #[arg(long, env = "TIPS_INGRESS_KAFKA_TOPIC", default_value = "tips-ingress")]
     ingress_topic: String,
 
     #[arg(
@@ -143,7 +139,12 @@ async fn main() -> Result<()> {
     let bundle_store = PostgresDatastore::connect(args.database_url).await?;
     bundle_store.run_migrations().await?;
 
-    let writer = IngressWriter::new(consumer, args.ingress_topic.clone(), bundle_store, publisher)?;
+    let writer = IngressWriter::new(
+        consumer,
+        args.ingress_topic.clone(),
+        bundle_store,
+        publisher,
+    )?;
 
     info!(
         "Ingress Writer service started, consuming from topic: {}",
