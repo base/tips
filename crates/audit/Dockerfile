@@ -1,6 +1,6 @@
 FROM rust:1-bookworm AS base
 
-RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config
+RUN apt-get update && apt-get -y upgrade && apt-get install -y libclang-dev pkg-config libsasl2-dev libssl-dev
 
 RUN cargo install cargo-chef --locked
 WORKDIR /app
