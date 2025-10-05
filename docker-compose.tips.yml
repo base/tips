@@ -2,7 +2,9 @@ services:
   ingress-rpc:
     build:
       context: .
-      dockerfile: crates/ingress-rpc/Dockerfile
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-ingress-rpc"
     container_name: tips-ingress-rpc
     ports:
       - "8080:8080"
@@ -15,7 +17,9 @@ services:
   audit:
     build:
       context: .
-      dockerfile: crates/audit/Dockerfile
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-audit"
     container_name: tips-audit
     env_file:
       - .env.docker
@@ -26,7 +30,9 @@ services:
   maintenance:
     build:
       context: .
-      dockerfile: crates/maintenance/Dockerfile
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-maintenance"
     container_name: tips-maintenance
     env_file:
       - .env.docker
@@ -48,7 +54,9 @@ services:
   ingress-writer:
     build:
       context: .
-      dockerfile: crates/ingress-writer/Dockerfile
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-ingress-writer"
     container_name: tips-ingress-writer
     env_file:
       - .env.docker

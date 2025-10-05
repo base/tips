@@ -61,7 +61,7 @@ testcontainers-modules = { version = "0.11.2", features = ["postgres", "kafka", 
 jsonrpsee = { version = "0.26.0", features = ["server", "macros"] }
 
 # Kafka and S3 dependencies
-rdkafka = { version = "0.37.0", features = ["libz-static", "ssl-vendored", "sasl"] }
+rdkafka = { version = "0.37.0", features = ["libz-static", "ssl-vendored"] }
 aws-config = "1.1.7"
 aws-sdk-s3 = "1.106.0"
 aws-credential-types = "1.1.7"
