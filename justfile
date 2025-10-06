@@ -140,7 +140,7 @@ playground-env: sync-env
     
     # Extract the peer ID from the op-node log
     echo "Extracting Builder Playground peer ID from op-node logs..."
-    BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' "$OP_NODE_LOG" | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)
+    BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' "$OP_NODE_LOG" | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1 || true)
     
     if [ -z "$BUILDER_PLAYGROUND_PEER_ID" ]; then
         echo "Error: Could not extract peer ID from $OP_NODE_LOG"

@@ -26,6 +26,7 @@ pub enum BundleState {
 
 #[derive(sqlx::FromRow, Debug)]
 struct BundleRow {
+    id: Uuid,
     senders: Option<Vec<String>>,
     minimum_base_fee: Option<i64>,
     txn_hashes: Option<Vec<String>>,
@@ -81,6 +82,7 @@ impl BundleFilter {
 /// Extended bundle data that includes the original bundle plus extracted metadata
 #[derive(Debug, Clone)]
 pub struct BundleWithMetadata {
+    pub id: Uuid,
     pub bundle: EthSendBundle,
     pub txn_hashes: Vec<TxHash>,
     pub senders: Vec<Address>,
@@ -197,6 +199,7 @@ impl PostgresDatastore {
             .collect();
 
         Ok(BundleWithMetadata {
+            id: row.id,
             bundle,
             txn_hashes: parsed_txn_hashes?,
             senders: parsed_senders?,
@@ -305,9 +308,9 @@ impl BundleDatastore for PostgresDatastore {
     async fn get_bundle(&self, id: Uuid) -> Result<Option<BundleWithMetadata>> {
         let result = sqlx::query_as::<_, BundleRow>(
             r#"
-            SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
+            SELECT id, senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes,
                    dropping_tx_hashes, block_number, min_timestamp, max_timestamp, "state"
-            FROM bundles 
+            FROM bundles
             WHERE id = $1
             "#,
         )
@@ -345,9 +348,9 @@ impl BundleDatastore for PostgresDatastore {
 
         let rows = sqlx::query_as::<_, BundleRow>(
             r#"
-            SELECT senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes, 
+            SELECT id, senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes,
                    dropping_tx_hashes, block_number, min_timestamp, max_timestamp, "state"
-            FROM bundles 
+            FROM bundles
             WHERE minimum_base_fee >= $1
               AND (block_number = $2 OR block_number IS NULL OR block_number = 0 OR $2 = 0)
               AND (min_timestamp <= $3 OR min_timestamp IS NULL)
@@ -480,9 +483,9 @@ impl BundleDatastore for PostgresDatastore {
                     ROW_NUMBER() OVER (PARTITION BY s.bundle_id ORDER BY s.block_number DESC) as rn
                 FROM simulations s
             )
-            SELECT 
-                b.senders, b.minimum_base_fee, b.txn_hashes, b.txs, 
-                b.reverting_tx_hashes, b.dropping_tx_hashes, 
+            SELECT
+                b.id, b.senders, b.minimum_base_fee, b.txn_hashes, b.txs,
+                b.reverting_tx_hashes, b.dropping_tx_hashes,
                 b.block_number, b.min_timestamp, b.max_timestamp, b."state",
                 ls.sim_id, ls.bundle_id as sim_bundle_id, ls.sim_block_number,
                 ls.block_hash, ls.execution_time_us, ls.gas_used, ls.state_diff
@@ -498,6 +501,7 @@ impl BundleDatastore for PostgresDatastore {
         #[derive(sqlx::FromRow)]
         struct BundleWithSimulationRow {
             // Bundle fields
+            id: Uuid,
             senders: Option<Vec<String>>,
             minimum_base_fee: Option<i64>,
             txn_hashes: Option<Vec<String>>,
@@ -530,6 +534,7 @@ impl BundleDatastore for PostgresDatastore {
         for row in rows {
             // Convert bundle part
             let bundle_row = BundleRow {
+                id: row.id,
                 senders: row.senders,
                 minimum_base_fee: row.minimum_base_fee,
                 txn_hashes: row.txn_hashes,
