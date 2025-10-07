@@ -112,11 +112,11 @@ services:
       # ENGINE CONFIGURATION (simulator-specific)
       OP_NODE_L2_ENGINE_RPC: http://simulator:4444
 
-  builder-cl:
+  shadow-builder-cl:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7
-    container_name: tips-builder-cl
+    container_name: tips-shadow-builder-cl
     depends_on:
-      builder:
+      shadow-builder:
         condition: service_started
     profiles:
       - builder
@@ -130,18 +130,18 @@ services:
     env_file:
       - .env.docker
     environment:
-      # ENGINE CONFIGURATION (builder-specific, playground mode uses 4444)
-      OP_NODE_L2_ENGINE_RPC: http://builder:4444
-      # Enable sequencer mode so builder-cl generates payload attributes
+      # ENGINE CONFIGURATION (shadow-builder-specific, playground mode uses 4444)
+      OP_NODE_L2_ENGINE_RPC: http://shadow-builder:4444
+      # Enable sequencer mode so shadow-builder-cl generates payload attributes
       # Using placeholder key so shadow builder blocks will be rejected by network
       OP_NODE_SEQUENCER_ENABLED: "true"
       OP_NODE_SEQUENCER_L1_CONFS: "0"
       OP_NODE_VERIFIER_L1_CONFS: "0"
       OP_NODE_P2P_SEQUENCER_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
 
-  builder:
-    image: tips-builder:latest
-    container_name: tips-builder
+  shadow-builder:
+    image: op-rbuilder:latest
+    container_name: tips-shadow-builder
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,7 +154,7 @@ services:
       - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
       - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
       - ~/.playground/devnet:/playground
-    command: ["node", "--datadir", "/playground/tips-builder"]
+    command: ["node", "--datadir", "/playground/tips-shadow-builder"]
     env_file:
       - .env.docker
     extra_hosts:

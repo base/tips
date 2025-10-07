@@ -159,7 +159,7 @@ playground-env: sync-env
     
     echo "✓ Builder Playground environment configured successfully"
 
-# Start builder stack (builder-cl + builder, simulator-cl + simulator)
+# Start shadow builder stack (shadow-builder-cl + shadow-builder, simulator-cl + simulator)
 start-builder: playground-env (start-all "builder")
 
 ### BUILDER COMMANDS ###
@@ -290,13 +290,13 @@ _build-rbuilder-common temp_dir tag revision:
     rm -f /tmp/tips-workspace-deps.txt
     
     echo "Building docker image (revision: $REVISION)..."
-    docker build -t "tips-builder:$TAG" .
-    
+    docker build -t "op-rbuilder:$TAG" .
+
     # Tag with git revision
-    docker tag "tips-builder:$TAG" "tips-builder:$REVISION"
-    
+    docker tag "op-rbuilder:$TAG" "op-rbuilder:$REVISION"
+
     # Tag as latest for convenience
-    docker tag "tips-builder:$TAG" tips-builder:latest
-    
-    echo "✓ Built tips-builder:$TAG (revision: $REVISION)"
-    docker images | grep tips-builder
+    docker tag "op-rbuilder:$TAG" op-rbuilder:latest
+
+    echo "✓ Built op-rbuilder:$TAG (revision: $REVISION)"
+    docker images | grep op-rbuilder

@@ -38,19 +38,21 @@ A Reth-based execution client that:
 - Syncs from production sequencer via an op-node instance (simulator-cl)
 - Used by the block builder stack to throttle transactions based on resource consumption
 
-## 🏗️ Block Builder Stack
+## 🏗️ Shadow Builder Stack
 
-The block builder stack enables production-ready block building with TIPS bundle integration. It consists of:
+The shadow builder stack enables production-ready block building with TIPS bundle integration. It consists of:
 
-**builder-cl**: An op-node instance running in sequencer mode that:
+**shadow-builder-cl**: An op-node instance running in sequencer mode that:
 - Syncs from production sequencer via P2P
 - Drives block building through Engine API calls
+- Uses a placeholder sequencer key so built blocks will be rejected by the network
 - Does not submit blocks to L1 (shadow sequencer mode)
 
-**builder**: A modified op-rbuilder instance that:
-- Receives Engine API calls from builder-cl
+**shadow-builder**: A modified op-rbuilder instance that:
+- Receives Engine API calls from shadow-builder-cl
 - Queries TIPS datastore for bundles with resource usage estimates from the simulator
 - Builds blocks including eligible bundles while respecting resource constraints
+- Runs in parallel with the production builder for testing and validation
 
 **Prerequisites**:
 - [builder-playground](https://github.com/flashbots/builder-playground) running locally with the `niran:authorize-signers` branch
@@ -61,8 +63,8 @@ The block builder stack enables production-ready block building with TIPS bundle
 # Build op-rbuilder (optionally from a specific branch)
 just build-rbuilder
 
-# Start the builder stack (requires builder-playground running)
+# Start the shadow builder stack (requires builder-playground running)
 just start-builder
 ```
 
-The builder-cl syncs from the production sequencer via P2P while op-rbuilder builds blocks with TIPS bundles. Built blocks are not submitted to L1, making this safe for testing and development.
+The shadow-builder-cl syncs from the production sequencer via P2P while shadow-builder builds blocks with TIPS bundles in parallel with the production builder. The shadow builder's blocks are never broadcast to the network due to the invalid sequencer key, and there is no batcher service to submit them to L1, making this safe for testing and validation without affecting production.
