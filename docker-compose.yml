@@ -132,6 +132,12 @@ services:
     environment:
       # ENGINE CONFIGURATION (builder-specific, playground mode uses 4444)
       OP_NODE_L2_ENGINE_RPC: http://builder:4444
+      # Enable sequencer mode so builder-cl generates payload attributes
+      # Using placeholder key so shadow builder blocks will be rejected by network
+      OP_NODE_SEQUENCER_ENABLED: "true"
+      OP_NODE_SEQUENCER_L1_CONFS: "0"
+      OP_NODE_VERIFIER_L1_CONFS: "0"
+      OP_NODE_P2P_SEQUENCER_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
 
   builder:
     image: tips-builder:latest
