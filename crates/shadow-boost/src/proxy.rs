@@ -146,29 +146,42 @@ impl ShadowBuilderProxy {
                         .unwrap()
                         .as_secs();
 
-                    let timestamp = current_timestamp.max(info.timestamp + 2);
+                    let block_age_seconds = current_timestamp.saturating_sub(info.timestamp);
 
-                    info!(
-                        timestamp,
-                        gas_limit = info.gas_limit,
-                        ?info.eip_1559_params,
-                        "Created synthetic payload attributes from last newPayload"
-                    );
+                    if block_age_seconds > 30 {
+                        info!(
+                            last_block_timestamp = info.timestamp,
+                            block_age_seconds,
+                            "Skipping synthetic attributes - block is too old (likely historical P2P sync)"
+                        );
+                        None
+                    } else {
+                        let timestamp = info.timestamp + 2;
 
-                    Some(OpPayloadAttributes {
-                        payload_attributes: PayloadAttributes {
+                        info!(
                             timestamp,
-                            prev_randao: info.prev_randao,
-                            suggested_fee_recipient: info.fee_recipient,
-                            withdrawals: Some(vec![]),
-                            parent_beacon_block_root: Some(B256::ZERO),
-                        },
-                        transactions: None,
-                        no_tx_pool: Some(false),
-                        gas_limit: Some(info.gas_limit),
-                        eip_1559_params: info.eip_1559_params,
-                        min_base_fee: None,
-                    })
+                            gas_limit = info.gas_limit,
+                            ?info.eip_1559_params,
+                            last_block_timestamp = info.timestamp,
+                            block_age_seconds,
+                            "Created synthetic payload attributes from last newPayload"
+                        );
+
+                        Some(OpPayloadAttributes {
+                            payload_attributes: PayloadAttributes {
+                                timestamp,
+                                prev_randao: info.prev_randao,
+                                suggested_fee_recipient: info.fee_recipient,
+                                withdrawals: Some(vec![]),
+                                parent_beacon_block_root: Some(B256::ZERO),
+                            },
+                            transactions: None,
+                            no_tx_pool: Some(false),
+                            gas_limit: Some(info.gas_limit),
+                            eip_1559_params: info.eip_1559_params,
+                            min_base_fee: None,
+                        })
+                    }
                 } else {
                     warn!("No payload attributes and no previous newPayload - cannot build shadow block yet");
                     None
@@ -176,7 +189,13 @@ impl ShadowBuilderProxy {
             }
         };
 
-        info!("Sending FCU with modified attributes to shadow builder");
+        let should_skip_build = modified_attrs.is_none() && !has_original_attrs;
+
+        if should_skip_build {
+            info!("Forwarding FCU without attributes to shadow builder (no building, just chain state update)");
+        } else {
+            info!("Sending FCU with modified attributes to shadow builder");
+        }
 
         let client = self.builder_client.read().await;
         let response: ForkchoiceUpdated = ClientT::request(
@@ -216,7 +235,7 @@ impl ShadowBuilderProxy {
                     Err(_) => warn!(%payload_id, timeout_ms, "Timeout fetching shadow block"),
                 }
             });
-        } else {
+        } else if !should_skip_build {
             warn!(
                 injected_attrs,
                 "Shadow builder FCU returned Valid but no payload_id - block building may not have started"
@@ -305,14 +324,15 @@ impl ShadowBuilderProxy {
             Some(alloy_primitives::B64::from_slice(params_bytes))
         } else {
             Some(alloy_primitives::B64::from_slice(&[
-                0x00, 0x00, 0x00, 0x08,
-                0x00, 0x00, 0x00, 0x08,
+                0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08,
             ]))
         };
 
         let is_duplicate = {
             let last_info = self.last_payload_info.read().await;
-            last_info.as_ref().map_or(false, |info| info.last_block_hash == block_hash)
+            last_info
+                .as_ref()
+                .is_some_and(|info| info.last_block_hash == block_hash)
         };
 
         if is_duplicate {
