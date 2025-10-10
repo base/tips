@@ -69,3 +69,24 @@ services:
       retries: 10
     profiles:
       - builder
+
+  shadow-boost:
+    build:
+      context: .
+      dockerfile: crates/shadow-boost/Dockerfile
+    image: shadow-boost:latest
+    container_name: tips-shadow-boost
+    depends_on:
+      shadow-builder:
+        condition: service_started
+    profiles:
+      - builder
+    ports:
+      - "8554:8554" # Engine API proxy
+    volumes:
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+    environment:
+      BUILDER_URL: http://shadow-builder:4444
+      BUILDER_JWT_SECRET: /data/jwtsecret
+      LISTEN_ADDR: 0.0.0.0:8554
+      TIMEOUT_MS: "2000"

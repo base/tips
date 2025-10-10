@@ -116,7 +116,7 @@ services:
     image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7
     container_name: tips-shadow-builder-cl
     depends_on:
-      shadow-builder:
+      shadow-boost:
         condition: service_started
     profiles:
       - builder
@@ -130,14 +130,8 @@ services:
     env_file:
       - .env.docker
     environment:
-      # ENGINE CONFIGURATION (shadow-builder-specific, playground mode uses 4444)
-      OP_NODE_L2_ENGINE_RPC: http://shadow-builder:4444
-      # Enable sequencer mode so shadow-builder-cl generates payload attributes
-      # Using placeholder key so shadow builder blocks will be rejected by network
-      OP_NODE_SEQUENCER_ENABLED: "true"
-      OP_NODE_SEQUENCER_L1_CONFS: "0"
-      OP_NODE_VERIFIER_L1_CONFS: "0"
-      OP_NODE_P2P_SEQUENCER_KEY: "0000000000000000000000000000000000000000000000000000000000000001"
+      OP_NODE_L2_ENGINE_RPC: http://shadow-boost:8554
+
 
   shadow-builder:
     image: op-rbuilder:latest

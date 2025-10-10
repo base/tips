@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer", "crates/simulator"]
+members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer", "crates/simulator", "crates/shadow-boost"]
 resolver = "2"
 
 [workspace.dependencies]
