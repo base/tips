@@ -36,7 +36,12 @@ pub fn build_rpc_module(proxy: ShadowBuilderProxy) -> RpcModule<ShadowBuilderPro
 
     module
         .register_async_method("engine_newPayloadV4", |params, context, _| async move {
-            let (payload, versioned_hashes, parent_beacon_block_root, _blob_versioned_hashes): (_, _, _, Vec<B256>) = params.parse()?;
+            let (payload, versioned_hashes, parent_beacon_block_root, _blob_versioned_hashes): (
+                _,
+                _,
+                _,
+                Vec<B256>,
+            ) = params.parse()?;
             context
                 .handle_new_payload(payload, versioned_hashes, parent_beacon_block_root)
                 .await
