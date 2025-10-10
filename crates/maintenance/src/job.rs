@@ -142,33 +142,36 @@ impl<S: BundleDatastore, P: Provider<Optimism>, K: BundleEventPublisher> Mainten
         loop {
             tokio::select! {
                 _ = maintenance_interval.tick() => {
+                    info!(message = "starting maintenance");
                     match self.periodic_maintenance().await {
                         Ok(_) => {
-                            info!("Periodic maintenance completed");
+                            info!(message = "Periodic maintenance completed");
                         },
                         Err(err) => {
-                            error!("Error in periodic maintenance: {:?}", err);
+                            error!(message = "Error in periodic maintenance", error = %err);
                         }
 
                     }
                 }
                 _ = execution_interval.tick() => {
+                    info!(message = "starting execution run");
                     match self.execute().await {
                         Ok(_) => {
-                            info!("Successfully executed maintenance run");
+                            info!(message = "Successfully executed maintenance run");
                         }
                         Err(e) => {
-                            error!("Error executing maintenance run: {:?}", e);
+                            error!(message = "Error executing maintenance run", error = %e);
                         }
                     }
                 }
                 Some(flashblock) = fb_rx.recv() => {
+                    info!(message = "starting flashblock processing");
                     match self.process_flashblock(flashblock).await {
                         Ok(_) => {
-                            info!("Successfully processed flashblock");
+                            info!(message = "Successfully processed flashblock");
                         }
                         Err(e) => {
-                            error!("Error processing flashblock: {:?}", e);
+                            error!(message = "Error processing flashblock", error = %e);
                         }
                     }
                 }
