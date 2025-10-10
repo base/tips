@@ -1,4 +1,5 @@
 use crate::proxy::ShadowBuilderProxy;
+use alloy_primitives::B256;
 use alloy_rpc_types_engine::PayloadId;
 use jsonrpsee::{
     core::client::ClientT,
@@ -34,6 +35,15 @@ pub fn build_rpc_module(proxy: ShadowBuilderProxy) -> RpcModule<ShadowBuilderPro
         .unwrap();
 
     module
+        .register_async_method("engine_newPayloadV4", |params, context, _| async move {
+            let (payload, versioned_hashes, parent_beacon_block_root, _blob_versioned_hashes): (_, _, _, Vec<B256>) = params.parse()?;
+            context
+                .handle_new_payload(payload, versioned_hashes, parent_beacon_block_root)
+                .await
+        })
+        .unwrap();
+
+    module
         .register_async_method("engine_getPayloadV3", |params, _context, _| async move {
             let (payload_id,): (PayloadId,) = params.parse()?;
             warn!(%payload_id, "op-node called getPayload unexpectedly (should never happen in non-sequencer mode)");
@@ -62,7 +72,6 @@ fn add_passthrough_methods(module: &mut RpcModule<ShadowBuilderProxy>) {
         "engine_forkchoiceUpdatedV4",
         "engine_newPayloadV1",
         "engine_newPayloadV2",
-        "engine_newPayloadV4",
         "engine_getPayloadV1",
         "engine_getPayloadV2",
         "engine_getPayloadV4",
@@ -77,17 +86,25 @@ fn add_passthrough_methods(module: &mut RpcModule<ShadowBuilderProxy>) {
             .register_async_method(method, move |params: Params<'static>, context, _| {
                 let method = method_name.clone();
                 async move {
-                    info!(method, "Proxying method to builder");
                     let mut params_vec = Vec::new();
                     let mut seq = params.sequence();
                     while let Ok(Some(value)) = seq.optional_next::<Value>() {
                         params_vec.push(value);
                     }
+
+                    info!(
+                        method,
+                        params_count = params_vec.len(),
+                        "Proxying method to shadow builder"
+                    );
+
                     let client = context.builder_client.read().await;
-                    let result: Value = client
-                        .request(&method, params_vec)
-                        .await
-                        .map_err(|e| ErrorObjectOwned::owned(-32603, e.to_string(), None::<()>))?;
+                    let result: Value = client.request(&method, params_vec).await.map_err(|e| {
+                        warn!(method, error = %e, "Shadow builder method call failed");
+                        ErrorObjectOwned::owned(-32603, e.to_string(), None::<()>)
+                    })?;
+
+                    info!(method, "Shadow builder method call succeeded");
                     Ok::<Value, ErrorObjectOwned>(result)
                 }
             })
