@@ -54,6 +54,8 @@ impl<S: BundleDatastore, P: Provider<Optimism>, K: BundleEventPublisher> Mainten
             .await?
             .ok_or_else(|| anyhow::anyhow!("Failed to get latest block"))?;
 
+        info!(message = "Executing up to latest block", ?latest_block);
+
         let block_info = self.store.get_current_block_info().await?;
 
         if let Some(current_block_info) = block_info {
@@ -62,6 +64,8 @@ impl<S: BundleDatastore, P: Provider<Optimism>, K: BundleEventPublisher> Mainten
                 for block_num in
                     (current_block_info.latest_block_number + 1)..=latest_block.header.number
                 {
+                    info!(message = "Fetching block number", ?latest_block);
+
                     let block = self
                         .node
                         .get_block(BlockId::Number(alloy_rpc_types::BlockNumberOrTag::Number(
