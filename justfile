@@ -40,12 +40,12 @@ sync-env:
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
 
-stop-all profile="default":
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose --profile {{ profile }} down && docker compose --profile {{ profile }} rm && rm -rf data/
+stop-all profiles="default":
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && export COMPOSE_PROFILES={{ profiles }} && docker compose down && docker compose rm && rm -rf data/
 
 # Start every service running in docker, useful for demos
-start-all profile="default": (stop-all profile)
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose --profile {{ profile }} build && docker compose --profile {{ profile }} up -d 
+start-all profiles="default": (stop-all profiles)
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && export COMPOSE_PROFILES={{ profiles }} && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d 
 
 # Stop only the specified service without stopping the other services or removing the data directories
 stop-only program:
@@ -106,9 +106,197 @@ simulator-playground:
 ui:
     cd ui && yarn dev
 
-playground-env:
-    echo "BUILDER_PLAYGROUND_HOST_IP=$(docker run --rm alpine nslookup host.docker.internal | awk '/Address: / && $2 !~ /:/ {print $2; exit}')" > .env.playground
-    echo "BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)" >> .env.playground
-    echo "OP_NODE_P2P_STATIC=/ip4/\$BUILDER_PLAYGROUND_HOST_IP/tcp/9003/p2p/\$BUILDER_PLAYGROUND_PEER_ID" >> .env.playground
+playground-env: sync-env
+    #!/bin/bash
+    set -euo pipefail
+    
+    # Check if the op-node log file exists
+    OP_NODE_LOG="$HOME/.playground/devnet/logs/op-node.log"
+    if [ ! -f "$OP_NODE_LOG" ]; then
+        echo "Error: Builder Playground op-node log not found at $OP_NODE_LOG"
+        echo ""
+        echo "This recipe requires the Builder Playground to be running."
+        echo "Please ensure:"
+        echo "  1. The Builder Playground is installed and running"
+        echo "  2. The op-node service has started and created its log file"
+        echo ""
+        echo "For more information, see: https://github.com/base-org/builder-playground"
+        exit 1
+    fi
+    
+    # Try to get the host IP for host.docker.internal
+    echo "Resolving host.docker.internal IP address..."
+    if ! BUILDER_PLAYGROUND_HOST_IP=$(docker run --rm alpine nslookup host.docker.internal 2>/dev/null | awk '/Address: / && $2 !~ /:/ {print $2; exit}'); then
+        echo "Error: Failed to resolve host.docker.internal"
+        echo "Docker must be running to use this recipe."
+        exit 1
+    fi
+    
+    if [ -z "$BUILDER_PLAYGROUND_HOST_IP" ]; then
+        echo "Error: Could not determine IP address for host.docker.internal"
+        echo "This may indicate an issue with your Docker installation."
+        exit 1
+    fi
+    
+    # Extract the peer ID from the op-node log
+    echo "Extracting Builder Playground peer ID from op-node logs..."
+    BUILDER_PLAYGROUND_PEER_ID=$(grep 'started p2p host' "$OP_NODE_LOG" | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1 || true)
+    
+    if [ -z "$BUILDER_PLAYGROUND_PEER_ID" ]; then
+        echo "Error: Could not extract peer ID from $OP_NODE_LOG"
+        echo "The op-node may not have fully started yet."
+        echo ""
+        echo "Please wait for the op-node to complete startup and try again."
+        exit 1
+    fi
+    
+    # Append the configuration to .env.docker
+    echo "" >> .env.docker
+    echo "# Builder Playground P2P Configuration" >> .env.docker
+    echo "BUILDER_PLAYGROUND_HOST_IP=${BUILDER_PLAYGROUND_HOST_IP}" >> .env.docker
+    echo "BUILDER_PLAYGROUND_PEER_ID=${BUILDER_PLAYGROUND_PEER_ID}" >> .env.docker
+    echo "OP_NODE_P2P_STATIC=/ip4/${BUILDER_PLAYGROUND_HOST_IP}/tcp/9003/p2p/${BUILDER_PLAYGROUND_PEER_ID}" >> .env.docker
+    
+    echo "✓ Builder Playground environment configured successfully"
 
-start-playground: playground-env (start-all "simulator")
+# Start shadow builder stack (shadow-builder-cl + shadow-builder, simulator-cl + simulator)
+start-builder: playground-env (start-all "builder")
+
+### BUILDER COMMANDS ###
+
+# Build op-rbuilder docker image from a given remote/branch/tag
+#
+# This command integrates the tips-datastore crate into op-rbuilder for building.
+# The complexity arises because:
+# 1. op-rbuilder references tips-datastore as a sibling directory (../tips/crates/datastore)
+# 2. tips-datastore uses workspace dependencies from the TIPS workspace
+# 3. Docker build context only includes the op-rbuilder directory
+#
+# Solution: Copy tips-datastore into the build context and merge workspace dependencies
+build-rbuilder remote="https://github.com/base/op-rbuilder" ref="tips-prototype":
+    #!/bin/bash
+    set -euo pipefail
+    
+    REMOTE="{{ remote }}"
+    REF="{{ ref }}"
+    JUSTFILE="{{ justfile() }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
+    
+    TEMP_DIR=$(mktemp -d)
+    trap "rm -rf $TEMP_DIR" EXIT
+    
+    echo "Cloning $REMOTE ($REF)..."
+    git clone --depth 1 --branch "$REF" "$REMOTE" $TEMP_DIR/op-rbuilder
+    
+    # Get the git revision from the cloned repo
+    GIT_REV=$(cd $TEMP_DIR/op-rbuilder && git rev-parse --short HEAD)
+    
+    just --justfile "$JUSTFILE" --working-directory "$JUSTFILE_DIR" _build-rbuilder-common $TEMP_DIR "$REF" "$GIT_REV"
+
+# Build op-rbuilder docker image from a local checkout
+#
+# The local checkout is copied to a temp directory so the original is not modified.
+build-rbuilder-local local_path tag="local":
+    #!/bin/bash
+    set -euo pipefail
+    
+    TAG="{{ tag }}"
+    JUSTFILE="{{ justfile() }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
+    
+    # Expand path to absolute
+    LOCAL_PATH=$(cd {{ local_path }} && pwd)
+    
+    if [ ! -d "$LOCAL_PATH" ]; then
+        echo "Error: Directory $LOCAL_PATH does not exist"
+        exit 1
+    fi
+    
+    # Get git revision and check if working tree is dirty
+    cd "$LOCAL_PATH"
+    GIT_REV=$(git rev-parse --short HEAD)
+    if [ -n "$(git status --porcelain)" ]; then
+        echo "Warning: Working tree has uncommitted changes"
+        GIT_REV="${GIT_REV}-dirty"
+    fi
+    
+    TEMP_DIR=$(mktemp -d)
+    trap "rm -rf $TEMP_DIR" EXIT
+    
+    echo "Copying local checkout from $LOCAL_PATH (excluding generated files)..."
+    mkdir -p "$TEMP_DIR/op-rbuilder"
+    rsync -a \
+        --exclude='target/' \
+        --exclude='.git/' \
+        --exclude='node_modules/' \
+        --exclude='*.log' \
+        --exclude='.DS_Store' \
+        "$LOCAL_PATH/" "$TEMP_DIR/op-rbuilder/"
+    
+    just --justfile "$JUSTFILE" --working-directory "$JUSTFILE_DIR" _build-rbuilder-common $TEMP_DIR "$TAG" "$GIT_REV"
+
+# Internal helper for building op-rbuilder docker images
+_build-rbuilder-common temp_dir tag revision:
+    #!/bin/bash
+    set -euo pipefail
+    
+    TEMP_DIR="{{ temp_dir }}"
+    TAG="{{ tag }}"
+    REVISION="{{ revision }}"
+    JUSTFILE_DIR="{{ justfile_directory() }}"
+    
+    echo "Setting up tips-datastore..."
+    cd "$JUSTFILE_DIR"
+    
+    # Copy tips-datastore and its workspace Cargo.toml into the op-rbuilder directory
+    # so they're included in the Docker build context
+    mkdir -p "$TEMP_DIR/op-rbuilder/tips/crates"
+    cp Cargo.toml "$TEMP_DIR/op-rbuilder/tips/"
+    cp -r crates/datastore "$TEMP_DIR/op-rbuilder/tips/crates/"
+
+    # Copy sqlx offline data into the datastore crate for compile-time query verification
+    cp -r .sqlx "$TEMP_DIR/op-rbuilder/tips/crates/datastore/"
+    
+    echo "Updating workspace configuration..."
+    cd "$TEMP_DIR/op-rbuilder"
+    
+    # Modify Dockerfile to set SQLX_OFFLINE=true in the cargo build RUN command
+    # This tells sqlx to use the offline .sqlx data instead of trying to connect to a database
+    sed -i '' 's/cargo build --release/SQLX_OFFLINE=true cargo build --release/g' Dockerfile
+    
+    # Fix the dependency path: op-rbuilder expects ../tips/crates/datastore,
+    # but we copied it to tips/crates/datastore (inside the build context)
+    sed -i '' 's|path = "\.\./tips/crates/datastore"|path = "tips/crates/datastore"|g' Cargo.toml
+    
+    # Merge workspace dependencies: tips-datastore uses .workspace = true for its dependencies,
+    # which need to be defined in the workspace root. We automatically extract only the
+    # dependencies that tips-datastore actually uses from the TIPS workspace and add them
+    # to op-rbuilder's workspace. This keeps them in sync automatically.
+    echo "" >> Cargo.toml
+    echo "# TIPS workspace dependencies (auto-extracted)" >> Cargo.toml
+    
+    # Extract the entire [workspace.dependencies] section from TIPS for processing
+    awk '/^\[workspace\.dependencies\]/,0' tips/Cargo.toml > /tmp/tips-workspace-deps.txt
+    
+    # Find each dependency tips-datastore uses (marked with .workspace = true)
+    # and extract its full definition from TIPS, handling multiline entries
+    grep "\.workspace = true" tips/crates/datastore/Cargo.toml | sed 's/\.workspace.*//' | awk '{print $1}' | while read dep; do
+        if ! grep -q "^$dep = " Cargo.toml; then
+            # Extract the dependency with context, stopping at the next dependency line
+            # (handles multiline deps like features = [...])
+            grep -A 10 "^$dep = " /tmp/tips-workspace-deps.txt | awk '/^[a-zA-Z-]/ && NR>1 {exit} {print}' >> Cargo.toml
+        fi
+    done
+    rm -f /tmp/tips-workspace-deps.txt
+    
+    echo "Building docker image (revision: $REVISION)..."
+    docker build -t "op-rbuilder:$TAG" .
+
+    # Tag with git revision
+    docker tag "op-rbuilder:$TAG" "op-rbuilder:$REVISION"
+
+    # Tag as latest for convenience
+    docker tag "op-rbuilder:$TAG" op-rbuilder:latest
+
+    echo "✓ Built op-rbuilder:$TAG (revision: $REVISION)"
+    docker images | grep op-rbuilder

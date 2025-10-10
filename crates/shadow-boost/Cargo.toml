@@ -1,0 +1,28 @@
+[package]
+name = "shadow-boost"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "shadow-boost"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+eyre.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+base64.workspace = true
+
+alloy-primitives.workspace = true
+alloy-rpc-types-engine = "1.0.33"
+op-alloy-rpc-types-engine = "0.20.0"
+
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+http = "1.0"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"

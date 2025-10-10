@@ -48,11 +48,9 @@ where
             .map_err(|e| eyre::eyre!("Failed to select bundles: {}", e))?;
 
         // Convert to (Uuid, EthSendBundle) pairs
-        // TODO: The bundle ID should be returned from the datastore query
-        // For now, we generate new IDs for each bundle
         let result = bundles_with_metadata
             .into_iter()
-            .map(|bwm| (Uuid::new_v4(), bwm.bundle))
+            .map(|bwm| (bwm.id, bwm.bundle))
             .collect();
 
         Ok(result)
@@ -230,13 +228,9 @@ where
 
         // Queue simulations for each bundle
         for (index, bundle_metadata) in bundles_with_metadata.into_iter().enumerate() {
-            // TODO: The bundle ID should be returned from the datastore query
-            // For now, we generate new IDs for each bundle
-            let bundle_id = Uuid::new_v4();
-
             // Create simulation request
             let request = SimulationRequest {
-                bundle_id,
+                bundle_id: bundle_metadata.id,
                 bundle: bundle_metadata.bundle,
                 block_number,
                 block_hash: *block_hash,
