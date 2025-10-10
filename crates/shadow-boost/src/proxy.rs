@@ -1,38 +1,44 @@
 use crate::auth::generate_jwt_token;
 use alloy_primitives::B256;
-use alloy_rpc_types_engine::{
-    ExecutionPayloadV3, ForkchoiceState, ForkchoiceUpdated, JwtSecret, PayloadAttributes,
-    PayloadId, PayloadStatus, PayloadStatusEnum,
-};
+use alloy_rpc_types_engine::{ExecutionPayloadV3, ForkchoiceUpdated, JwtSecret, PayloadAttributes};
 use eyre::Result;
 use jsonrpsee::{
     core::client::ClientT,
     http_client::{HttpClient, HttpClientBuilder},
     types::ErrorObjectOwned,
 };
-use op_alloy_rpc_types_engine::{OpExecutionPayloadEnvelopeV3, OpPayloadAttributes};
+use op_alloy_rpc_types_engine::OpPayloadAttributes;
+use serde_json::Value;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tracing::{error, info, warn};
 
+/// Information extracted from the last newPayload call, used to construct
+/// synthetic payload attributes for shadow building when op-node sends FCU
+/// without attributes (Boost Sync).
 #[derive(Clone, Default)]
-struct LastPayloadInfo {
-    timestamp: u64,
-    prev_randao: B256,
-    fee_recipient: alloy_primitives::Address,
-    gas_limit: u64,
-    eip_1559_params: Option<alloy_primitives::B64>,
-    last_block_hash: B256,
+pub struct LastPayloadInfo {
+    pub timestamp: u64,
+    pub prev_randao: B256,
+    pub fee_recipient: alloy_primitives::Address,
+    pub gas_limit: u64,
+    pub eip_1559_params: Option<alloy_primitives::B64>,
+    pub parent_beacon_block_root: B256,
 }
 
+/// A pass-through proxy between op-node and the shadow builder that:
+/// 1. Logs all Engine API requests and responses
+/// 2. Injects synthetic payload attributes to trigger shadow building when
+///    FCU arrives without attributes (non-sequencer Boost Sync scenario)
+/// 3. Suppresses payload_id from responses when using injected attributes
+///    so op-node doesn't know shadow building occurred
 #[derive(Clone)]
 pub struct ShadowBuilderProxy {
     pub builder_client: Arc<RwLock<HttpClient>>,
     builder_url: String,
     jwt_secret: JwtSecret,
     timeout_ms: u64,
-    fetch_timeout_ms: u64,
-    last_payload_info: Arc<RwLock<Option<LastPayloadInfo>>>,
+    pub last_payload_info: Arc<RwLock<Option<LastPayloadInfo>>>,
 }
 
 impl ShadowBuilderProxy {
@@ -67,7 +73,6 @@ impl ShadowBuilderProxy {
             builder_url: builder_url.to_string(),
             jwt_secret,
             timeout_ms,
-            fetch_timeout_ms: timeout_ms,
             last_payload_info: Arc::new(RwLock::new(None)),
         };
 
@@ -102,290 +107,194 @@ impl ShadowBuilderProxy {
         });
     }
 
-    pub async fn handle_fcu(
-        &self,
-        fork_choice_state: ForkchoiceState,
-        payload_attributes: Option<OpPayloadAttributes>,
-    ) -> Result<ForkchoiceUpdated, ErrorObjectOwned> {
-        let has_original_attrs = payload_attributes.is_some();
+    /// Handle engine_forkchoiceUpdatedV3 with synthetic attribute injection.
+    ///
+    /// When op-node sends FCU without payload attributes (params_count=1), this
+    /// indicates a Boost Sync call to update chain state. In non-sequencer mode,
+    /// we inject synthetic payload attributes based on the last received newPayload
+    /// to trigger shadow building. The payload_id returned by the builder is
+    /// suppressed before returning to op-node.
+    ///
+    /// When FCU has payload attributes (params_count=2), pass through unchanged.
+    pub async fn handle_fcu(&self, params_vec: Vec<Value>) -> Result<Value, ErrorObjectOwned> {
+        let has_payload_attrs = params_vec.len() == 2;
 
         info!(
-            head_hash = %fork_choice_state.head_block_hash,
-            safe_hash = %fork_choice_state.safe_block_hash,
-            finalized_hash = %fork_choice_state.finalized_block_hash,
-            has_attrs = has_original_attrs,
-            "Received FCU from op-node"
+            method = "engine_forkchoiceUpdatedV3",
+            params_count = params_vec.len(),
+            params = ?params_vec,
+            "JSON-RPC request (original from op-node)"
         );
 
-        let injected_attrs = if !has_original_attrs {
-            info!("No payload attributes provided - injecting synthetic attributes to trigger shadow building");
-            true
-        } else {
-            info!("FCU has payload attributes - will rewrite no_tx_pool to trigger building");
-            false
-        };
+        let mut injected_attrs = false;
+        let modified_params = if !has_payload_attrs {
+            let last_info = self.last_payload_info.read().await;
+            if let Some(info) = last_info.as_ref() {
+                let timestamp = info.timestamp + 2;
+                let synthetic_attrs = OpPayloadAttributes {
+                    payload_attributes: PayloadAttributes {
+                        timestamp,
+                        prev_randao: info.prev_randao,
+                        suggested_fee_recipient: info.fee_recipient,
+                        withdrawals: Some(vec![]),
+                        parent_beacon_block_root: Some(info.parent_beacon_block_root),
+                    },
+                    transactions: None,
+                    no_tx_pool: Some(false),
+                    gas_limit: Some(info.gas_limit),
+                    eip_1559_params: info.eip_1559_params,
+                    min_base_fee: None,
+                };
 
-        let modified_attrs = match payload_attributes {
-            Some(mut attrs) => {
-                let original_no_tx_pool = attrs.no_tx_pool.unwrap_or(false);
-                attrs.no_tx_pool = Some(false);
                 info!(
-                    timestamp = attrs.payload_attributes.timestamp,
-                    original_no_tx_pool,
-                    modified_no_tx_pool = false,
-                    "Rewrote no_tx_pool in existing payload attributes"
+                    timestamp,
+                    gas_limit = info.gas_limit,
+                    "Injected synthetic payload attributes to trigger shadow building"
                 );
-                Some(attrs)
+
+                let mut new_params = params_vec.clone();
+                new_params.push(serde_json::to_value(synthetic_attrs).unwrap());
+                injected_attrs = true;
+                new_params
+            } else {
+                info!("No last payload info available, passing FCU through unchanged");
+                params_vec
             }
-            None => {
-                let last_info = self.last_payload_info.read().await;
-                if let Some(info) = last_info.as_ref() {
-                    use std::time::{SystemTime, UNIX_EPOCH};
-                    let current_timestamp = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs();
-
-                    let block_age_seconds = current_timestamp.saturating_sub(info.timestamp);
-
-                    if block_age_seconds > 30 {
-                        info!(
-                            last_block_timestamp = info.timestamp,
-                            block_age_seconds,
-                            "Skipping synthetic attributes - block is too old (likely historical P2P sync)"
-                        );
-                        None
-                    } else {
-                        let timestamp = info.timestamp + 2;
-
-                        info!(
-                            timestamp,
-                            gas_limit = info.gas_limit,
-                            ?info.eip_1559_params,
-                            last_block_timestamp = info.timestamp,
-                            block_age_seconds,
-                            "Created synthetic payload attributes from last newPayload"
-                        );
-
-                        Some(OpPayloadAttributes {
-                            payload_attributes: PayloadAttributes {
-                                timestamp,
-                                prev_randao: info.prev_randao,
-                                suggested_fee_recipient: info.fee_recipient,
-                                withdrawals: Some(vec![]),
-                                parent_beacon_block_root: Some(B256::ZERO),
-                            },
-                            transactions: None,
-                            no_tx_pool: Some(false),
-                            gas_limit: Some(info.gas_limit),
-                            eip_1559_params: info.eip_1559_params,
-                            min_base_fee: None,
-                        })
-                    }
-                } else {
-                    warn!("No payload attributes and no previous newPayload - cannot build shadow block yet");
-                    None
-                }
-            }
+        } else {
+            info!("FCU already has payload attributes, passing through unchanged");
+            params_vec
         };
 
-        let should_skip_build = modified_attrs.is_none() && !has_original_attrs;
-
-        if should_skip_build {
-            info!("Forwarding FCU without attributes to shadow builder (no building, just chain state update)");
-        } else {
-            info!("Sending FCU with modified attributes to shadow builder");
+        if injected_attrs {
+            info!(
+                method = "engine_forkchoiceUpdatedV3",
+                params_count = modified_params.len(),
+                "JSON-RPC request (modified, sent to builder)"
+            );
         }
 
         let client = self.builder_client.read().await;
-        let response: ForkchoiceUpdated = ClientT::request(
-            &*client,
-            "engine_forkchoiceUpdatedV3",
-            (fork_choice_state, modified_attrs),
-        )
-        .await
-        .map_err(|e| {
-            error!(error = %e, "Shadow builder FCU failed");
-            ErrorObjectOwned::owned(-32603, e.to_string(), None::<()>)
-        })?;
+        let mut response: ForkchoiceUpdated = client
+            .request("engine_forkchoiceUpdatedV3", modified_params)
+            .await
+            .map_err(|e| {
+                warn!(
+                    method = "engine_forkchoiceUpdatedV3",
+                    error = %e,
+                    "JSON-RPC request failed"
+                );
+                ErrorObjectOwned::owned(-32603, e.to_string(), None::<()>)
+            })?;
         drop(client);
 
-        if let Some(payload_id) = response.payload_id {
-            info!(
-                %payload_id,
-                injected_attrs,
-                "Shadow builder initiated block building - spawning fetch task"
-            );
-
-            let builder_client = self.builder_client.clone();
-            let timeout_ms = self.fetch_timeout_ms;
-            tokio::spawn(async move {
-                info!(%payload_id, "Waiting 1s before fetching shadow block");
-                tokio::time::sleep(Duration::from_millis(1000)).await;
-
-                let fetch_result = tokio::time::timeout(
-                    Duration::from_millis(timeout_ms),
-                    Self::fetch_and_log_payload(builder_client, payload_id),
-                )
-                .await;
-
-                match fetch_result {
-                    Ok(Ok(_)) => info!(%payload_id, "Successfully fetched and logged shadow block"),
-                    Ok(Err(e)) => warn!(%payload_id, error = %e, "Failed to fetch shadow block"),
-                    Err(_) => warn!(%payload_id, timeout_ms, "Timeout fetching shadow block"),
-                }
-            });
-        } else if !should_skip_build {
-            warn!(
-                injected_attrs,
-                "Shadow builder FCU returned Valid but no payload_id - block building may not have started"
-            );
-        }
-
-        Ok(ForkchoiceUpdated::new(PayloadStatus::new(
-            PayloadStatusEnum::Valid,
-            None,
-        )))
-    }
-
-    async fn fetch_and_log_payload(
-        builder_client: Arc<RwLock<HttpClient>>,
-        payload_id: PayloadId,
-    ) -> Result<()> {
-        info!(%payload_id, "Fetching shadow block from builder");
-
-        let client = builder_client.read().await;
-        let payload: OpExecutionPayloadEnvelopeV3 =
-            ClientT::request(&*client, "engine_getPayloadV3", (payload_id,)).await?;
-        drop(client);
-
-        let block_hash = payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .block_hash;
-        let block_number = payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .block_number;
-        let gas_used = payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .gas_used;
-        let tx_count = payload
-            .execution_payload
-            .payload_inner
-            .payload_inner
-            .transactions
-            .len();
-        let block_value = payload.block_value;
+        let builder_payload_id = response.payload_id;
 
         info!(
-            %payload_id,
-            %block_hash,
-            block_number,
-            gas_used,
-            tx_count,
-            %block_value,
-            "Shadow block built successfully"
+            method = "engine_forkchoiceUpdatedV3",
+            payload_status = ?response.payload_status.status,
+            payload_id = ?builder_payload_id,
+            injected_attrs,
+            "JSON-RPC response (from builder)"
         );
 
-        Ok(())
+        if injected_attrs && builder_payload_id.is_some() {
+            info!(
+                payload_id = ?builder_payload_id,
+                "Suppressing payload_id from injected attributes before returning to op-node"
+            );
+            response.payload_id = None;
+        }
+
+        let response_value = serde_json::to_value(response).unwrap();
+
+        info!(
+            method = "engine_forkchoiceUpdatedV3",
+            response = ?response_value,
+            "JSON-RPC response (returned to op-node)"
+        );
+
+        Ok(response_value)
     }
 
+    /// Handle engine_newPayloadV4 and capture payload info for synthetic attributes.
+    ///
+    /// Extracts key information from the payload (timestamp, gas_limit, prevRandao,
+    /// feeRecipient, EIP-1559 params, parent beacon block root) and stores it for
+    /// use in constructing synthetic payload attributes when future FCU calls arrive
+    /// without attributes.
+    ///
+    /// The request and response are passed through unchanged to/from the builder.
     pub async fn handle_new_payload(
         &self,
-        payload: ExecutionPayloadV3,
-        versioned_hashes: Vec<B256>,
-        parent_beacon_block_root: B256,
-    ) -> Result<PayloadStatus, ErrorObjectOwned> {
-        let block_hash = payload.payload_inner.payload_inner.block_hash;
-        let block_number = payload.payload_inner.payload_inner.block_number;
-        let tx_count = payload.payload_inner.payload_inner.transactions.len();
-        let gas_used = payload.payload_inner.payload_inner.gas_used;
-        let gas_limit = payload.payload_inner.payload_inner.gas_limit;
-        let timestamp = payload.payload_inner.payload_inner.timestamp;
-        let prev_randao = payload.payload_inner.payload_inner.prev_randao;
-        let fee_recipient = payload.payload_inner.payload_inner.fee_recipient;
-        let extra_data = &payload.payload_inner.payload_inner.extra_data;
-
+        params_vec: Vec<Value>,
+    ) -> Result<Value, ErrorObjectOwned> {
         info!(
-            %block_hash,
-            block_number,
-            tx_count,
-            gas_used,
-            "Received newPayload from op-node - storing payload info and forwarding to shadow builder"
+            method = "engine_newPayloadV4",
+            params_count = params_vec.len(),
+            params = ?params_vec,
+            "JSON-RPC request"
         );
 
-        let eip_1559_params = if extra_data.len() >= 9 {
-            let params_bytes = &extra_data[1..9];
-            Some(alloy_primitives::B64::from_slice(params_bytes))
-        } else {
-            Some(alloy_primitives::B64::from_slice(&[
-                0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08,
-            ]))
-        };
+        if params_vec.len() >= 3 {
+            if let Ok(payload) = serde_json::from_value::<ExecutionPayloadV3>(params_vec[0].clone())
+            {
+                let parent_beacon_block_root = if let Some(root_val) = params_vec.get(2) {
+                    serde_json::from_value(root_val.clone()).ok()
+                } else {
+                    None
+                };
 
-        let is_duplicate = {
-            let last_info = self.last_payload_info.read().await;
-            last_info
-                .as_ref()
-                .is_some_and(|info| info.last_block_hash == block_hash)
-        };
+                if let Some(parent_beacon_block_root) = parent_beacon_block_root {
+                    let timestamp = payload.payload_inner.payload_inner.timestamp;
+                    let prev_randao = payload.payload_inner.payload_inner.prev_randao;
+                    let fee_recipient = payload.payload_inner.payload_inner.fee_recipient;
+                    let gas_limit = payload.payload_inner.payload_inner.gas_limit;
+                    let extra_data = &payload.payload_inner.payload_inner.extra_data;
 
-        if is_duplicate {
-            info!(
-                %block_hash,
-                block_number,
-                "Skipping duplicate newPayload (already forwarded to shadow builder)"
-            );
-            return Ok(PayloadStatus::new(PayloadStatusEnum::Valid, None));
+                    let eip_1559_params = if extra_data.len() >= 9 {
+                        Some(alloy_primitives::B64::from_slice(&extra_data[1..9]))
+                    } else {
+                        Some(alloy_primitives::B64::from_slice(&[
+                            0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x08,
+                        ]))
+                    };
+
+                    *self.last_payload_info.write().await = Some(LastPayloadInfo {
+                        timestamp,
+                        prev_randao,
+                        fee_recipient,
+                        gas_limit,
+                        eip_1559_params,
+                        parent_beacon_block_root,
+                    });
+
+                    info!(
+                        timestamp,
+                        gas_limit, "Captured payload info for future synthetic attributes"
+                    );
+                }
+            }
         }
 
-        *self.last_payload_info.write().await = Some(LastPayloadInfo {
-            timestamp,
-            prev_randao,
-            fee_recipient,
-            gas_limit,
-            eip_1559_params,
-            last_block_hash: block_hash,
-        });
-
-        let builder_client = self.builder_client.clone();
-        tokio::spawn(async move {
-            let client = builder_client.read().await;
-            let result: Result<PayloadStatus, _> = ClientT::request(
-                &*client,
-                "engine_newPayloadV3",
-                (payload, versioned_hashes, parent_beacon_block_root),
-            )
-            .await;
-            drop(client);
-
-            match result {
-                Ok(status) => info!(
-                    %block_hash,
-                    block_number,
-                    status = ?status.status,
-                    "Shadow builder accepted newPayload"
-                ),
-                Err(e) => error!(
-                    %block_hash,
-                    block_number,
+        let client = self.builder_client.read().await;
+        let result: Value = client
+            .request("engine_newPayloadV4", params_vec)
+            .await
+            .map_err(|e| {
+                warn!(
+                    method = "engine_newPayloadV4",
                     error = %e,
-                    "Shadow builder rejected newPayload"
-                ),
-            }
-        });
+                    "JSON-RPC request failed"
+                );
+                ErrorObjectOwned::owned(-32603, e.to_string(), None::<()>)
+            })?;
 
         info!(
-            %block_hash,
-            block_number,
-            "Returning Valid status to op-node immediately"
+            method = "engine_newPayloadV4",
+            response = ?result,
+            "JSON-RPC response"
         );
 
-        Ok(PayloadStatus::new(PayloadStatusEnum::Valid, None))
+        Ok(result)
     }
 }
