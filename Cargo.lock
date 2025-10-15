@@ -12540,6 +12540,7 @@ dependencies = [
  "aws-sdk-s3",
  "bytes",
  "eyre",
+ "hex",
  "rdkafka",
  "reqwest",
  "serde",
