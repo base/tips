@@ -11,12 +11,10 @@ use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::sync::Arc;
-use std::time::Duration;
-use tips_audit::{KafkaMempoolEventPublisher, MempoolEvent, MempoolEventPublisher};
+use tips_audit::KafkaBundleEventPublisher;
 use tips_common::init_tracing;
-use tips_datastore::{BundleDatastore, PostgresDatastore};
-use tokio::time::sleep;
-use tracing::{error, info, warn};
+use tips_datastore::PostgresDatastore;
+use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -115,7 +113,7 @@ async fn main() -> Result<()> {
         init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
-            args.tracing_otlp_endpoint,
+            args.tracing_otlp_endpoint.clone(),
         )?;
     }
 

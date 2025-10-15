@@ -147,6 +147,7 @@ async fn main() -> Result<()> {
 
     let config = load_kafka_config_from_file(&args.kafka_properties_file)?;
     let kafka_producer: FutureProducer = config.create()?;
+
     if args.tracing_enabled {
         init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
@@ -154,15 +155,6 @@ async fn main() -> Result<()> {
             args.tracing_otlp_endpoint,
         )?;
     }
-
-    let mut config = ClientConfig::new();
-    config
-        .set("group.id", &args.kafka_group_id)
-        .set("bootstrap.servers", &args.kafka_brokers)
-        .set("auto.offset.reset", "earliest")
-        .set("enable.partition.eof", "false")
-        .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "true");
 
     let publisher = KafkaBundleEventPublisher::new(kafka_producer, args.audit_topic.clone());
     let consumer = config.create()?;

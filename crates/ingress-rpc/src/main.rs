@@ -58,6 +58,7 @@ struct Config {
         default_value = "10800"
     )]
     send_transaction_default_lifetime_seconds: u64,
+
     #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "false")]
     tracing_enabled: bool,
 

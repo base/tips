@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
             args.tracing_otlp_endpoint.clone(),
         )?;
     }
-    
+
     let consumer = create_kafka_consumer(&args.kafka_properties_file)?;
     consumer.subscribe(&[&args.kafka_topic])?;
 

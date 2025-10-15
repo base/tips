@@ -1,7 +1,7 @@
 use anyhow::Context;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry::{global, KeyValue};
-use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{
@@ -13,13 +13,12 @@ use tracing_subscriber::{
 pub fn init_tracing(
     service_name: String,
     service_version: String,
-    otlp_endpoint: String,
+    _otlp_endpoint: String,
 ) -> anyhow::Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let otlp_exporter = SpanExporter::builder()
         .with_tonic()
-        .with_endpoint(otlp_endpoint)
         .build()
         .context("Failed to create OTLP exporter")?;
 
