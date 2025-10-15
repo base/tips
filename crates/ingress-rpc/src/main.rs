@@ -8,7 +8,6 @@ use std::fs;
 use std::net::IpAddr;
 use tips_common::init_tracing;
 use tracing::{info, warn};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 mod queue;
@@ -91,27 +90,20 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    if config.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            config.tracing_otlp_endpoint,
+            log_level.to_string(),
+        )?;
+    }
     info!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,
         mempool_url = %config.mempool_url
     );
-
-    if config.tracing_enabled {
-        init_tracing(
-            env!("CARGO_PKG_NAME").to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
-            config.tracing_otlp_endpoint,
-        )?;
-    }
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()

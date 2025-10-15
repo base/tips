@@ -15,7 +15,6 @@ use tips_audit::KafkaBundleEventPublisher;
 use tips_common::init_tracing;
 use tips_datastore::PostgresDatastore;
 use tracing::{info, warn};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 #[derive(Parser, Clone)]
@@ -99,14 +98,6 @@ async fn main() -> Result<()> {
         }
     };
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-
     info!("Starting maintenance service");
 
     if args.tracing_enabled {
@@ -114,6 +105,7 @@ async fn main() -> Result<()> {
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
             args.tracing_otlp_endpoint.clone(),
+            log_level.to_string(),
         )?;
     }
 

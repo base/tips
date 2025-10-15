@@ -9,7 +9,6 @@ use tips_audit::{
 };
 use tips_common::init_tracing;
 use tracing::{info, warn};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Debug, Clone, ValueEnum)]
 enum S3ConfigType {
@@ -79,13 +78,14 @@ async fn main() -> Result<()> {
         }
     };
 
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    if args.tracing_enabled {
+        init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            args.tracing_otlp_endpoint.clone(),
+            log_level.to_string(),
+        )?;
+    }
 
     info!(
         kafka_properties_file = %args.kafka_properties_file,
@@ -93,14 +93,6 @@ async fn main() -> Result<()> {
         s3_bucket = %args.s3_bucket,
         "Starting audit archiver"
     );
-
-    if args.tracing_enabled {
-        init_tracing(
-            env!("CARGO_PKG_NAME").to_string(),
-            env!("CARGO_PKG_VERSION").to_string(),
-            args.tracing_otlp_endpoint.clone(),
-        )?;
-    }
 
     let consumer = create_kafka_consumer(&args.kafka_properties_file)?;
     consumer.subscribe(&[&args.kafka_topic])?;

@@ -141,10 +141,6 @@ async fn main() -> Result<()> {
     dotenvy::dotenv().ok();
     let args = Args::parse();
 
-    tracing_subscriber::fmt()
-        .with_env_filter(&args.log_level)
-        .init();
-
     let config = load_kafka_config_from_file(&args.kafka_properties_file)?;
     let kafka_producer: FutureProducer = config.create()?;
 
@@ -153,6 +149,7 @@ async fn main() -> Result<()> {
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
             args.tracing_otlp_endpoint,
+            args.log_level.to_string(),
         )?;
     }
 

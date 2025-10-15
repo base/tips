@@ -14,6 +14,7 @@ pub fn init_tracing(
     service_name: String,
     service_version: String,
     _otlp_endpoint: String,
+    log_level: String,
 ) -> anyhow::Result<()> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -43,7 +44,12 @@ pub fn init_tracing(
     tracing::subscriber::set_global_default(
         tracing_subscriber::registry()
             .with(trace_filter)
-            .with(OpenTelemetryLayer::new(tracer)),
+            .with(OpenTelemetryLayer::new(tracer))
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level)),
+            )
+            .with(tracing_subscriber::fmt::layer()),
     )?;
 
     Ok(())
