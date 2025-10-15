@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Bundle } from "@/app/api/bundles/route";
 
 export default function BundlesPage() {
@@ -12,7 +12,46 @@ export default function BundlesPage() {
   const [searchHash, setSearchHash] = useState<string>("");
   const [filteredLiveBundles, setFilteredLiveBundles] = useState<Bundle[]>([]);
   const [filteredAllBundles, setFilteredAllBundles] = useState<string[]>([]);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const filterBundles = useCallback(
+    async (searchTerm: string, live: Bundle[], all: string[]) => {
+      if (!searchTerm.trim()) {
+        setFilteredLiveBundles(live);
+        setFilteredAllBundles(all);
+        return;
+      }
+
+      // Filter live bundles immediately for better UX
+      const liveBundlesWithTx = live.filter((bundle) =>
+        bundle.txnHashes?.some((hash) =>
+          hash.toLowerCase().includes(searchTerm.toLowerCase()),
+        ),
+      );
+
+      let allBundlesWithTx: string[] = [];
+
+      try {
+        const response = await fetch(`/api/txn/${searchTerm.trim()}`);
+
+        if (response.ok) {
+          const txnData = await response.json();
+          const bundleIds = txnData.bundle_ids || [];
+
+          allBundlesWithTx = all.filter((bundleId) =>
+            bundleIds.includes(bundleId),
+          );
+        }
+      } catch (err) {
+        console.error("Error filtering bundles:", err);
+      }
+
+      // Batch all state updates together to prevent jitter
+      setFilteredLiveBundles(liveBundlesWithTx);
+      setFilteredAllBundles(allBundlesWithTx);
+    },
+    [],
+  );
 
   useEffect(() => {
     const fetchLiveBundles = async () => {
@@ -61,57 +100,26 @@ export default function BundlesPage() {
   }, []);
 
   useEffect(() => {
-    const filterBundles = async () => {
-      if (!searchHash.trim()) {
-        setFilteredLiveBundles(liveBundles);
-        setFilteredAllBundles(allBundles);
-        return;
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    if (!searchHash.trim()) {
+      // No debounce for clearing search
+      filterBundles(searchHash, liveBundles, allBundles);
+    } else {
+      // Debounce API calls for non-empty search
+      debounceTimeoutRef.current = setTimeout(() => {
+        filterBundles(searchHash, liveBundles, allBundles);
+      }, 300);
+    }
+
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
       }
-
-      setSearchLoading(true);
-
-      try {
-        const liveBundlesWithTx = liveBundles.filter(bundle =>
-          bundle.txnHashes?.some(hash =>
-            hash.toLowerCase().includes(searchHash.toLowerCase())
-          )
-        );
-
-        const response = await fetch(`/api/txn/${searchHash.trim()}`);
-
-        if (response.ok) {
-          const txnData = await response.json();
-          const bundleIds = txnData.bundle_ids || [];
-
-          const allBundlesWithTx = allBundles.filter(bundleId =>
-            bundleIds.includes(bundleId)
-          );
-
-          setFilteredLiveBundles(liveBundlesWithTx);
-          setFilteredAllBundles(allBundlesWithTx);
-        } else {
-          setFilteredLiveBundles(liveBundles.filter(bundle =>
-            bundle.txnHashes?.some(hash =>
-              hash.toLowerCase().includes(searchHash.toLowerCase())
-            )
-          ));
-          setFilteredAllBundles([]);
-        }
-      } catch (err) {
-        console.error("Error filtering bundles:", err);
-        setFilteredLiveBundles(liveBundles.filter(bundle =>
-          bundle.txnHashes?.some(hash =>
-            hash.toLowerCase().includes(searchHash.toLowerCase())
-          )
-        ));
-        setFilteredAllBundles([]);
-      }
-
-      setSearchLoading(false);
     };
-
-    filterBundles();
-  }, [searchHash, liveBundles, allBundles]);
+  }, [searchHash, liveBundles, allBundles, filterBundles]);
 
   if (loading) {
     return (
@@ -135,9 +143,6 @@ export default function BundlesPage() {
               onChange={(e) => setSearchHash(e.target.value)}
               className="px-3 py-2 border rounded-lg bg-white/5 border-gray-300 dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-gray-500 dark:placeholder-gray-400 text-sm min-w-[300px]"
             />
-            {searchLoading && (
-              <div className="text-sm text-gray-500 animate-pulse">Searching...</div>
-            )}
           </div>
         </div>
         {error && (
@@ -146,19 +151,18 @@ export default function BundlesPage() {
       </div>
 
       <div className="flex flex-col gap-6">
-        {(filteredLiveBundles.length > 0 || !searchHash.trim()) && (
-          <section>
-            <h2 className="text-xl font-semibold mb-4">
-              Live Bundles
-              {searchHash.trim() && (
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({filteredLiveBundles.length} found)
-                </span>
-              )}
-            </h2>
-            {filteredLiveBundles.length > 0 ? (
-              <ul className="space-y-2">
-                {filteredLiveBundles.map((bundle) => (
+        <section>
+          <h2 className="text-xl font-semibold mb-4">
+            Live Bundles
+            {searchHash.trim() && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                ({filteredLiveBundles.length} found)
+              </span>
+            )}
+          </h2>
+          {filteredLiveBundles.length > 0 ? (
+            <ul className="space-y-2">
+              {filteredLiveBundles.map((bundle) => (
                 <li key={bundle.id}>
                   <Link
                     href={`/bundles/${bundle.id}`}
@@ -189,25 +193,25 @@ export default function BundlesPage() {
             </ul>
           ) : (
             <p className="text-gray-600 dark:text-gray-400">
-              {searchHash.trim() ? "No live bundles found matching this transaction hash." : "No live bundles found."}
+              {searchHash.trim()
+                ? "No live bundles found matching this transaction hash."
+                : "No live bundles found."}
             </p>
           )}
-          </section>
-        )}
+        </section>
 
-        {(filteredAllBundles.length > 0 || !searchHash.trim()) && (
-          <section>
-            <h2 className="text-xl font-semibold mb-4">
-              All Bundles
-              {searchHash.trim() && (
-                <span className="text-sm font-normal text-gray-500 ml-2">
-                  ({filteredAllBundles.length} found)
-                </span>
-              )}
-            </h2>
-            {filteredAllBundles.length > 0 ? (
-              <ul className="space-y-2">
-                {filteredAllBundles.map((bundleId) => (
+        <section>
+          <h2 className="text-xl font-semibold mb-4">
+            All Bundles
+            {searchHash.trim() && (
+              <span className="text-sm font-normal text-gray-500 ml-2">
+                ({filteredAllBundles.length} found)
+              </span>
+            )}
+          </h2>
+          {filteredAllBundles.length > 0 ? (
+            <ul className="space-y-2">
+              {filteredAllBundles.map((bundleId) => (
                 <li key={bundleId}>
                   <Link
                     href={`/bundles/${bundleId}`}
@@ -220,11 +224,12 @@ export default function BundlesPage() {
             </ul>
           ) : (
             <p className="text-gray-600 dark:text-gray-400">
-              {searchHash.trim() ? "No bundles found in S3 matching this transaction hash." : "No bundles found in S3."}
+              {searchHash.trim()
+                ? "No bundles found in S3 matching this transaction hash."
+                : "No bundles found in S3."}
             </p>
           )}
-          </section>
-        )}
+        </section>
       </div>
     </div>
   );
