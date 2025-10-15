@@ -12,7 +12,6 @@ name = "tips-audit"
 path = "src/bin/main.rs"
 
 [dependencies]
-tips-common = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
@@ -33,6 +32,7 @@ aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 bytes = { workspace = true }
+tips-common = { workspace = true }
 
 [dev-dependencies]
 testcontainers = { workspace = true }
