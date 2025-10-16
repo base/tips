@@ -14,6 +14,8 @@ use tips_common::init_tracing;
 use tips_datastore::{BundleDatastore, postgres::PostgresDatastore};
 use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use uuid::Uuid;
 
 #[derive(Parser)]
@@ -145,12 +147,22 @@ async fn main() -> Result<()> {
     let kafka_producer: FutureProducer = config.create()?;
 
     if args.tracing_enabled {
-        init_tracing(
+        let (trace_filter, tracer) = init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
             args.tracing_otlp_endpoint,
-            args.log_level.to_string(),
+            args.log_level.clone().to_string(),
         )?;
+
+        tracing_subscriber::registry()
+            .with(trace_filter)
+            .with(OpenTelemetryLayer::new(tracer))
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(args.log_level.clone())),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .try_init()?;
     }
 
     let publisher = KafkaBundleEventPublisher::new(kafka_producer, args.audit_topic.clone());

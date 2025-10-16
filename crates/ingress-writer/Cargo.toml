@@ -26,3 +26,4 @@ serde_json.workspace = true
 backon.workspace = true
 uuid.workspace = true
 tips-common.workspace = true
+tracing-opentelemetry.workspace = true

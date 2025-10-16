@@ -12488,6 +12488,7 @@ dependencies = [
  "tips-common",
  "tokio",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber 0.3.20",
  "uuid",
 ]
@@ -12551,6 +12552,7 @@ dependencies = [
  "tips-common",
  "tokio",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber 0.3.20",
  "url",
 ]
@@ -12571,6 +12573,7 @@ dependencies = [
  "tips-datastore",
  "tokio",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber 0.3.20",
  "uuid",
 ]
@@ -12597,6 +12600,7 @@ dependencies = [
  "tips-datastore",
  "tokio",
  "tracing",
+ "tracing-opentelemetry",
  "tracing-subscriber 0.3.20",
  "url",
  "uuid",

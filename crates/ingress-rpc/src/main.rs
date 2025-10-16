@@ -8,6 +8,8 @@ use std::fs;
 use std::net::IpAddr;
 use tips_common::init_tracing;
 use tracing::{info, trace, warn};
+use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 mod queue;
@@ -91,12 +93,29 @@ async fn main() -> anyhow::Result<()> {
     };
 
     if config.tracing_enabled {
-        init_tracing(
+        let (trace_filter, tracer) = init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
             config.tracing_otlp_endpoint,
             log_level.to_string(),
         )?;
+
+        tracing_subscriber::registry()
+            .with(trace_filter)
+            .with(OpenTelemetryLayer::new(tracer))
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .try_init()?;
+
+        /*init_tracing(
+            env!("CARGO_PKG_NAME").to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
+            config.tracing_otlp_endpoint,
+            log_level.to_string(),
+        )?;*/
     }
     trace!(
         message = "Starting ingress service",

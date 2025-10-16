@@ -2,11 +2,11 @@ use anyhow::Context;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::SpanExporter;
+use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
-use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{
     filter::{LevelFilter, Targets},
-    layer::SubscriberExt,
+    //layer::SubscriberExt,
 };
 
 // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
@@ -14,8 +14,8 @@ pub fn init_tracing(
     service_name: String,
     service_version: String,
     _otlp_endpoint: String,
-    log_level: String,
-) -> anyhow::Result<()> {
+    _log_level: String,
+) -> anyhow::Result<(Targets, SdkTracer)> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     let otlp_exporter = SpanExporter::builder()
@@ -41,7 +41,17 @@ pub fn init_tracing(
         .with_default(LevelFilter::OFF)
         .with_target(service_name, LevelFilter::TRACE);
 
-    tracing::subscriber::set_global_default(
+    /*
+        tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
+            )
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    */
+
+    /*tracing::subscriber::set_global_default(
         tracing_subscriber::registry()
             .with(trace_filter)
             .with(OpenTelemetryLayer::new(tracer))
@@ -50,7 +60,7 @@ pub fn init_tracing(
                     .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level)),
             )
             .with(tracing_subscriber::fmt::layer()),
-    )?;
+    )?;*/
 
-    Ok(())
+    Ok((trace_filter, tracer))
 }

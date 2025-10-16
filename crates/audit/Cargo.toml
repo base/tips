@@ -33,6 +33,7 @@ aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 bytes = { workspace = true }
 tips-common = { workspace = true }
+tracing-opentelemetry.workspace = true
 
 [dev-dependencies]
 testcontainers = { workspace = true }
