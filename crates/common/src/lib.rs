@@ -1,6 +1,6 @@
 use anyhow::Context;
 use opentelemetry::trace::TracerProvider;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::global;
 use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
@@ -12,7 +12,7 @@ use tracing_subscriber::{
 // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
 pub fn init_tracing(
     service_name: String,
-    service_version: String,
+    _service_version: String,
     _otlp_endpoint: String,
     _log_level: String,
 ) -> anyhow::Result<(Targets, SdkTracer)> {
@@ -25,14 +25,7 @@ pub fn init_tracing(
 
     let provider_builder = SdkTracerProvider::builder()
         .with_batch_exporter(otlp_exporter)
-        .with_resource(
-            Resource::builder_empty()
-                .with_attributes([
-                    KeyValue::new("service.name", service_name.clone()),
-                    KeyValue::new("service.version", service_version),
-                ])
-                .build(),
-        );
+        .with_resource(Resource::builder().build());
 
     let provider = provider_builder.build();
     let tracer = provider.tracer(service_name.clone());
