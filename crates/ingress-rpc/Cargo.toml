@@ -37,3 +37,6 @@ alloy-signer-local.workspace = true
 reth-optimism-evm.workspace = true
 tips-common.workspace = true
 tracing-opentelemetry.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true

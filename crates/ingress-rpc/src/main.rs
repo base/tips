@@ -17,6 +17,8 @@ mod service;
 mod validation;
 use queue::KafkaQueuePublisher;
 use service::{IngressApiServer, IngressService};
+use tracing_subscriber::Layer;
+use tracing_subscriber::filter::{LevelFilter, Targets};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -60,7 +62,7 @@ struct Config {
     )]
     send_transaction_default_lifetime_seconds: u64,
 
-    #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "false")]
+    #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "true")]
     tracing_enabled: bool,
 
     #[arg(
@@ -100,15 +102,25 @@ async fn main() -> anyhow::Result<()> {
             log_level.to_string(),
         )?;
 
+        let log_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(env!("CARGO_PKG_NAME"), log_level);
+
+        let global_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(env!("CARGO_PKG_NAME"), LevelFilter::TRACE);
+
         tracing_subscriber::registry()
-            .with(trace_filter)
-            .with(OpenTelemetryLayer::new(tracer))
-            .with(
+            .with(global_filter)
+            .with(OpenTelemetryLayer::new(tracer).with_filter(trace_filter))
+            /*.with(
                 tracing_subscriber::EnvFilter::try_from_default_env()
                     .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
             )
             .with(tracing_subscriber::fmt::layer())
-            .try_init()?;
+            */
+            .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
+            .init();
 
         /*init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
