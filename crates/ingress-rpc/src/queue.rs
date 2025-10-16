@@ -32,8 +32,7 @@ impl KafkaQueuePublisher {
         let key = sender.to_string();
         let payload = serde_json::to_vec(bundle)?;
 
-        let span =
-            span!(tracing::Level::INFO, "enqueue_bundle", sender = %sender, topic = %self.topic);
+        let span = span!(tracing::Level::TRACE, "span_enqueue_bundle", sender = %sender, topic = %self.topic);
         let _enter = span.enter();
         let enqueue = || async {
             let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
