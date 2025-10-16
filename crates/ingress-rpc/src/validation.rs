@@ -9,7 +9,7 @@ use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
-use tracing::warn;
+use tracing::{trace, warn};
 
 /// Account info for a given address
 pub struct AccountInfo {
@@ -89,6 +89,8 @@ pub async fn validate_tx<T: Transaction>(
     data: &[u8],
     l1_block_info: &mut L1BlockInfo,
 ) -> RpcResult<()> {
+    trace!(message = "Validating with no state", account = %txn.signer(), transaction = ?txn);
+
     // skip eip4844 transactions
     if txn.is_eip4844() {
         warn!(message = "EIP-4844 transactions are not supported");
@@ -108,6 +110,7 @@ pub async fn validate_tx<T: Transaction>(
         }
     }
 
+    trace!(message = "Validating with inner state", account = %txn.signer(), transaction = ?txn);
     // error if account is 7702 but tx is not 7702
     if account.code_hash != KECCAK_EMPTY && !txn.is_eip7702() {
         return Err(EthApiError::InvalidTransaction(
@@ -144,6 +147,7 @@ pub async fn validate_tx<T: Transaction>(
         .into_rpc_err());
     }
 
+    trace!(message = "Validating op checks", account = %txn.signer(), transaction = ?txn);
     // op-checks to see if sender can cover L1 gas cost
     // from: https://github.com/paradigmxyz/reth/blob/6aa73f14808491aae77fc7c6eb4f0aa63bef7e6e/crates/optimism/txpool/src/validator.rs#L219
     let l1_cost_addition = l1_block_info.calculate_tx_l1_cost(data, OpSpecId::ISTHMUS);

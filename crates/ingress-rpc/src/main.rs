@@ -7,7 +7,7 @@ use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::net::IpAddr;
 use tips_common::init_tracing;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 use url::Url;
 
 mod queue;
@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
             log_level.to_string(),
         )?;
     }
-    info!(
+    trace!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,

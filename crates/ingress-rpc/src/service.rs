@@ -11,7 +11,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 use crate::queue::QueuePublisher;
 
@@ -75,6 +75,7 @@ where
     }
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
+        trace!(message = "Sending raw transaction", data = %data);
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
         }
@@ -92,6 +93,8 @@ where
             .provider
             .fetch_account_info(transaction.signer())
             .await?;
+
+        trace!(message = "Validating transaction", account = %transaction.signer(), transaction = %transaction.tx_hash());
         validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
 
         let expiry_timestamp = SystemTime::now()
@@ -110,6 +113,7 @@ where
         };
 
         // queue the bundle
+        trace!(message = "Queueing bundle", bundle = ?bundle);
         let sender = transaction.signer();
         if let Err(e) = self.queue.publish(&bundle, sender).await {
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
