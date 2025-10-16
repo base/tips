@@ -7,7 +7,7 @@ use rdkafka::producer::FutureProducer;
 use std::fs;
 use std::net::IpAddr;
 use tips_common::init_tracing;
-use tracing::{info, trace, warn};
+use tracing::{info, warn};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -129,7 +129,7 @@ async fn main() -> anyhow::Result<()> {
             log_level.to_string(),
         )?;*/
     }
-    trace!(
+    info!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,

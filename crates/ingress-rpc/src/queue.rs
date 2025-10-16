@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use backon::{ExponentialBuilder, Retryable};
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use tokio::time::Duration;
-use tracing::{error, info, trace};
+use tracing::{error, info, span};
 
 /// A queue to buffer transactions
 #[async_trait]
@@ -32,7 +32,9 @@ impl KafkaQueuePublisher {
         let key = sender.to_string();
         let payload = serde_json::to_vec(bundle)?;
 
-        trace!(message = "Enqueuing bundle", sender = %sender, topic = %self.topic);
+        let span =
+            span!(tracing::Level::INFO, "enqueue_bundle", sender = %sender, topic = %self.topic);
+        let _enter = span.enter();
         let enqueue = || async {
             let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
