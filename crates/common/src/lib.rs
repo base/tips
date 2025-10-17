@@ -21,7 +21,10 @@ pub fn init_tracing(
 ) -> anyhow::Result<(Targets, SdkTracer)> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
-    info!("OTLP endpoint: {}", otlp_endpoint);
+    info!(
+        message = "OTLP endpoint",
+        endpoint = %otlp_endpoint
+    );
     let h = format!(
         "http://{}:{}",
         std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string()),

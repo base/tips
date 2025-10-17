@@ -97,10 +97,6 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    info!(
-        "host: {}",
-        std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "unknown".to_string())
-    );
     if config.tracing_enabled {
         let (trace_filter, tracer) = init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
@@ -141,7 +137,17 @@ async fn main() -> anyhow::Result<()> {
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,
-        mempool_url = %config.mempool_url
+        mempool_url = %config.mempool_url,
+        host = %std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "unknown".to_string()),
+        port = %config.tracing_otlp_port,
+    );
+    info!(
+        message = "host",
+        host = %std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "unknown".to_string())
+    );
+    info!(
+        message = "port",
+        port = %config.tracing_otlp_port
     );
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
