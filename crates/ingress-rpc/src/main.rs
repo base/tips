@@ -156,7 +156,7 @@ async fn main() -> anyhow::Result<()> {
         endpoint = %otlp_endpoint
     );
 
-    let provider: RootProvider<Optimism> = ProviderBuilder::new()
+    let op_provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
         .connect_http(config.mempool_url);
@@ -168,7 +168,7 @@ async fn main() -> anyhow::Result<()> {
     let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
 
     let service = IngressService::new(
-        provider,
+        op_provider,
         config.dual_write_mempool,
         queue,
         config.send_transaction_default_lifetime_seconds,
@@ -185,6 +185,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     handle.stopped().await;
+    let _ = provider.shutdown();
     Ok(())
 }
 
