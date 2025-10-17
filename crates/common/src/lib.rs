@@ -26,7 +26,7 @@ pub fn init_tracing(
         endpoint = %otlp_endpoint
     );
     let otlp_exporter = SpanExporter::builder()
-        .with_tonic()
+        .with_http()
         .with_endpoint(otlp_endpoint)
         .build()
         .context("Failed to create OTLP exporter")?;
