@@ -11,7 +11,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{info, trace, warn};
+use tracing::{Instrument, info, span, trace, warn};
 
 use crate::queue::QueuePublisher;
 
@@ -97,12 +97,17 @@ where
         trace!(message = "Validating transaction", account = %transaction.signer(), transaction = %transaction.tx_hash());
         validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
 
+        let span = span!(tracing::Level::INFO, "span_expiry", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let expiry_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             + self.send_transaction_default_lifetime_seconds;
+        drop(_enter);
 
+        let span = span!(tracing::Level::INFO, "span_send_raw_transaction", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let bundle = EthSendBundle {
             txs: vec![data.clone()],
             block_number: 0,
@@ -111,11 +116,14 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+        drop(_enter);
 
         // queue the bundle
         trace!(message = "Queueing bundle", bundle = ?bundle);
         let sender = transaction.signer();
-        if let Err(e) = self.queue.publish(&bundle, sender).await {
+        let span =
+            span!(tracing::Level::INFO, "span_publish", transaction = %transaction.tx_hash());
+        if let Err(e) = self.queue.publish(&bundle, sender).instrument(span).await {
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
         }
 

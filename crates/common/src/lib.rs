@@ -17,7 +17,7 @@ pub fn init_tracing(
     _service_version: String,
     otlp_endpoint: String,
     _log_level: String,
-    otlp_port: u16,
+    _otlp_port: u16,
 ) -> anyhow::Result<(Targets, SdkTracer)> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -25,14 +25,9 @@ pub fn init_tracing(
         message = "OTLP endpoint",
         endpoint = %otlp_endpoint
     );
-    let h = format!(
-        "http://{}:{}",
-        std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string()),
-        otlp_port
-    );
     let otlp_exporter = SpanExporter::builder()
         .with_tonic()
-        .with_endpoint(h)
+        .with_endpoint(otlp_endpoint)
         .build()
         .context("Failed to create OTLP exporter")?;
 

@@ -98,12 +98,17 @@ async fn main() -> anyhow::Result<()> {
     };
 
     if config.tracing_enabled {
+        let h = format!(
+            "http://{}:{}",
+            std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string()),
+            config.tracing_otlp_port
+        );
         let (trace_filter, tracer) = init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
-            config.tracing_otlp_endpoint,
+            h.clone(),
             log_level.to_string(),
-            config.tracing_otlp_port,
+            4317,
         )?;
 
         let log_filter = Targets::new()
@@ -132,6 +137,10 @@ async fn main() -> anyhow::Result<()> {
             config.tracing_otlp_endpoint,
             log_level.to_string(),
         )?;*/
+        info!(
+            message = "Tracing initialized",
+            endpoint = %h,
+        );
     }
     info!(
         message = "Starting ingress service",
