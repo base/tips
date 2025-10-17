@@ -121,32 +121,48 @@ async fn main() -> anyhow::Result<()> {
     trace_config.sampler = Box::new(Sampler::AlwaysOn);
     trace_config.id_generator = Box::new(RandomIdGenerator::default());
 
-    let provider = opentelemetry_datadog::new_pipeline()
-        .with_service_name(env!("CARGO_PKG_NAME"))
-        .with_api_version(opentelemetry_datadog::ApiVersion::Version05)
-        .with_agent_endpoint(&otlp_endpoint)
-        .with_trace_config(trace_config)
-        .install_batch()
-        .unwrap();
-    global::set_tracer_provider(provider.clone());
+    let provider = if config.tracing_enabled {
+        Some(
+            opentelemetry_datadog::new_pipeline()
+                .with_service_name(env!("CARGO_PKG_NAME"))
+                .with_api_version(opentelemetry_datadog::ApiVersion::Version05)
+                .with_agent_endpoint(&otlp_endpoint)
+                .with_trace_config(trace_config)
+                .install_batch()
+                .unwrap(),
+        )
+    } else {
+        None
+    };
 
-    let scope = InstrumentationScope::builder("opentelemetry-datadog")
-        .with_version(env!("CARGO_PKG_VERSION"))
-        .with_schema_url(semcov::SCHEMA_URL)
-        .with_attributes(None)
-        .build();
+    if let Some(ref provider) = provider {
+        global::set_tracer_provider(provider.clone());
+    }
 
-    let tracer = provider.tracer_with_scope(scope);
-    tracer.in_span("span_main", |_span| {
-        info!(
-            message = "Tracing enabled",
-            endpoint = %otlp_endpoint
-        );
-    });
-    tracing_subscriber::registry()
-        .with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer))
-        .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
-        .init();
+    if let Some(ref provider) = provider {
+        let scope = InstrumentationScope::builder("opentelemetry-datadog")
+            .with_version(env!("CARGO_PKG_VERSION"))
+            .with_schema_url(semcov::SCHEMA_URL)
+            .with_attributes(None)
+            .build();
+
+        let tracer = provider.tracer_with_scope(scope);
+        tracer.in_span("span_main", |_span| {
+            info!(
+                message = "Tracing enabled",
+                endpoint = %otlp_endpoint
+            );
+        });
+
+        tracing_subscriber::registry()
+            .with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer))
+            .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
+            .init();
+    } else {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
+            .init();
+    }
 
     info!(
         message = "Starting ingress service",
@@ -184,8 +200,28 @@ async fn main() -> anyhow::Result<()> {
         address = %addr
     );
 
-    handle.stopped().await;
-    let _ = provider.shutdown();
+    // Set up graceful shutdown
+    tokio::select! {
+        _ = handle.stopped() => {
+            info!("Server stopped");
+        }
+        _ = tokio::signal::ctrl_c() => {
+            info!("Received shutdown signal");
+        }
+    }
+
+    // Give time for any remaining spans to be processed
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Shutdown tracer provider if it exists
+    if let Some(provider) = provider {
+        info!("Shutting down tracer provider");
+        if let Err(e) = provider.shutdown() {
+            warn!("Error shutting down tracer provider: {}", e);
+        }
+    }
+
+    info!("Ingress service shutdown complete");
     Ok(())
 }
 
