@@ -1,9 +1,10 @@
 use anyhow::Context;
-use opentelemetry::trace::TracerProvider;
 use opentelemetry::global;
+use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::SpanExporter;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
+use tracing::info;
 use tracing_subscriber::{
     filter::{LevelFilter, Targets},
     //layer::SubscriberExt,
@@ -13,11 +14,12 @@ use tracing_subscriber::{
 pub fn init_tracing(
     service_name: String,
     _service_version: String,
-    _otlp_endpoint: String,
+    otlp_endpoint: String,
     _log_level: String,
 ) -> anyhow::Result<(Targets, SdkTracer)> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
+    info!("OTLP endpoint: {}", otlp_endpoint);
     let otlp_exporter = SpanExporter::builder()
         .with_tonic()
         .build()

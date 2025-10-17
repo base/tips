@@ -94,6 +94,10 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
+    info!(
+        "host: {}",
+        std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "unknown".to_string())
+    );
     if config.tracing_enabled {
         let (trace_filter, tracer) = init_tracing(
             env!("CARGO_PKG_NAME").to_string(),
