@@ -50,6 +50,8 @@ opentelemetry-otlp = { version = "0.28.0", features = [
     "grpc-tonic",
 ] }
 opentelemetry_sdk = { version = "0.28.0", features = ["rt-tokio"] }
+opentelemetry-datadog = { version = "0.19.0", features = ["reqwest-client"] }
+opentelemetry-semantic-conventions = "0.28.0"
 tracing-opentelemetry = "0.29.0"
 anyhow = "1.0.99"
 clap = { version = "4.5.47", features = ["derive", "env"] }
@@ -83,3 +85,6 @@ backon = "1.5.2"
 op-revm = { version = "10.1.0", default-features = false }
 revm-context-interface = "10.2.0"
 alloy-signer-local = "1.0.36"
+
+
+reqwest = { version = "0.12", features = ["json"] }

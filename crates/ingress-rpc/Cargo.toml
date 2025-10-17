@@ -38,5 +38,8 @@ reth-optimism-evm.workspace = true
 tips-common.workspace = true
 tracing-opentelemetry.workspace = true
 opentelemetry.workspace = true
-opentelemetry-otlp.workspace = true
+opentelemetry-otlp = { workspace = true, features = ["http-proto"] }
 opentelemetry_sdk.workspace = true
+opentelemetry-datadog.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+reqwest.workspace = true
