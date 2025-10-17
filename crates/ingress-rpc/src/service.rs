@@ -11,7 +11,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{info, warn};
+use tracing::{Instrument, info, span, warn};
 
 use crate::queue::QueuePublisher;
 
@@ -111,7 +111,9 @@ where
 
         // queue the bundle
         let sender = transaction.signer();
-        if let Err(e) = self.queue.publish(&bundle, sender).await {
+        let span =
+            span!(tracing::Level::INFO, "span_publish", transaction = %transaction.tx_hash());
+        if let Err(e) = self.queue.publish(&bundle, sender).instrument(span).await {
             warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
         }
 

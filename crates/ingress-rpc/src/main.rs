@@ -2,11 +2,20 @@ use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
+use opentelemetry::global;
+use opentelemetry::trace::Tracer;
+use opentelemetry::{InstrumentationScope, trace::TracerProvider};
+use opentelemetry_sdk::trace;
+use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler};
+use opentelemetry_semantic_conventions as semcov;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
+use std::env;
 use std::fs;
 use std::net::IpAddr;
 use tracing::{info, warn};
+use tracing_subscriber::Layer;
+use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
@@ -57,6 +66,14 @@ struct Config {
         default_value = "10800"
     )]
     send_transaction_default_lifetime_seconds: u64,
+
+    /// Enable tracing
+    #[arg(long, env = "TIPS_INGRESS_TRACING_ENABLED", default_value = "false")]
+    tracing_enabled: bool,
+
+    /// Port for the OTLP endpoint
+    #[arg(long, env = "TIPS_INGRESS_TRACING_OTLP_PORT", default_value = "4317")]
+    tracing_otlp_port: u16,
 }
 
 #[tokio::main]
@@ -80,18 +97,63 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    tracing_subscriber::registry()
+    /*tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+
+    let global_filter = Targets::new()
+        .with_default(LevelFilter::INFO)
+        .with_target(env!("CARGO_PKG_NAME"), LevelFilter::TRACE);
+    */
+
+    let log_filter = Targets::new()
+        .with_default(LevelFilter::INFO)
+        .with_target(env!("CARGO_PKG_NAME"), log_level);
+
+    let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
+
+    let mut trace_config = trace::Config::default();
+    trace_config.sampler = Box::new(Sampler::AlwaysOn);
+    trace_config.id_generator = Box::new(RandomIdGenerator::default());
+
+    let provider = opentelemetry_datadog::new_pipeline()
+        .with_service_name(env!("CARGO_PKG_NAME"))
+        .with_api_version(opentelemetry_datadog::ApiVersion::Version05)
+        .with_agent_endpoint(&otlp_endpoint)
+        .with_trace_config(trace_config)
+        .install_batch()
+        .unwrap();
+    global::set_tracer_provider(provider.clone());
+
+    let scope = InstrumentationScope::builder("opentelemetry-datadog")
+        .with_version(env!("CARGO_PKG_VERSION"))
+        .with_schema_url(semcov::SCHEMA_URL)
+        .with_attributes(None)
+        .build();
+
+    let tracer = provider.tracer_with_scope(scope);
+    tracer.in_span("span_main", |_span| {
+        info!(
+            message = "Tracing enabled",
+            endpoint = %otlp_endpoint
+        );
+    });
+    tracing_subscriber::registry()
+        .with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer))
+        .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
+        .init();
+
     info!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,
-        mempool_url = %config.mempool_url
+        mempool_url = %config.mempool_url,
+        endpoint = %otlp_endpoint
     );
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
