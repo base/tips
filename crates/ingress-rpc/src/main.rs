@@ -71,6 +71,9 @@ struct Config {
         default_value = "http://localhost:4317"
     )]
     tracing_otlp_endpoint: String,
+
+    #[arg(long, env = "TIPS_INGRESS_TRACING_OTLP_PORT", default_value = "4317")]
+    tracing_otlp_port: u16,
 }
 
 #[tokio::main]
@@ -104,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
             env!("CARGO_PKG_VERSION").to_string(),
             config.tracing_otlp_endpoint,
             log_level.to_string(),
+            config.tracing_otlp_port,
         )?;
 
         let log_filter = Targets::new()

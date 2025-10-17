@@ -152,6 +152,7 @@ async fn main() -> Result<()> {
             env!("CARGO_PKG_VERSION").to_string(),
             args.tracing_otlp_endpoint,
             args.log_level.clone().to_string(),
+            4317,
         )?;
 
         tracing_subscriber::registry()

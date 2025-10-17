@@ -2,6 +2,7 @@ use anyhow::Context;
 use opentelemetry::global;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::SpanExporter;
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
 use tracing::info;
@@ -16,12 +17,19 @@ pub fn init_tracing(
     _service_version: String,
     otlp_endpoint: String,
     _log_level: String,
+    otlp_port: u16,
 ) -> anyhow::Result<(Targets, SdkTracer)> {
     global::set_text_map_propagator(TraceContextPropagator::new());
 
     info!("OTLP endpoint: {}", otlp_endpoint);
+    let h = format!(
+        "http://{}:{}",
+        std::env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string()),
+        otlp_port
+    );
     let otlp_exporter = SpanExporter::builder()
         .with_tonic()
+        .with_endpoint(h)
         .build()
         .context("Failed to create OTLP exporter")?;
 
