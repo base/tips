@@ -3,6 +3,7 @@ use opentelemetry::global;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry_otlp::SpanExporter;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_otlp::WithHttpConfig;
 use opentelemetry_sdk::trace::SdkTracer;
 use opentelemetry_sdk::{propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource};
 use tracing::info;
@@ -27,6 +28,7 @@ pub fn init_tracing(
     );
     let otlp_exporter = SpanExporter::builder()
         .with_http()
+        .with_http_client(reqwest::Client::new())
         .with_endpoint(otlp_endpoint)
         .build()
         .context("Failed to create OTLP exporter")?;

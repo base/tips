@@ -86,5 +86,5 @@ op-revm = { version = "10.1.0", default-features = false }
 revm-context-interface = "10.2.0"
 alloy-signer-local = "1.0.36"
 
-
 reqwest = { version = "0.12", features = ["json"] }
+opentelemetry-http = "0.31.0"
