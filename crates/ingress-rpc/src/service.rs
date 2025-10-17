@@ -94,12 +94,18 @@ where
             .await?;
         validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
 
+        let span = span!(tracing::Level::TRACE, "span_ethsendbundle", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let expiry_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             + self.send_transaction_default_lifetime_seconds;
+        drop(_enter);
 
+        let span =
+            span!(tracing::Level::INFO, "span_ethsendbundle", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let bundle = EthSendBundle {
             txs: vec![data.clone()],
             block_number: 0,
@@ -108,6 +114,7 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+        drop(_enter);
 
         // queue the bundle
         let sender = transaction.signer();
