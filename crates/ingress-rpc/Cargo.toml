@@ -41,3 +41,4 @@ opentelemetry_sdk.workspace = true
 tracing-opentelemetry.workspace = true
 opentelemetry-datadog.workspace = true
 opentelemetry-semantic-conventions.workspace = true
+reqwest.workspace = true
