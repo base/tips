@@ -7,7 +7,7 @@ use opentelemetry::global;
 //use opentelemetry::{InstrumentationScope, trace::TracerProvider};
 //use opentelemetry_sdk::trace;
 use opentelemetry::trace::TracerProvider;
-use opentelemetry_otlp::WithHttpConfig;
+//use opentelemetry_otlp::WithHttpConfig;
 //use opentelemetry_sdk::trace::BatchSpanProcessor;
 use opentelemetry_sdk::trace::Sampler;
 use opentelemetry_sdk::trace::SimpleSpanProcessor;
@@ -174,9 +174,9 @@ async fn main() -> anyhow::Result<()> {
 
     // https://github.com/commonwarexyz/monorepo/blob/27e6f73fce91fc46ef7170e928cbcf96cc635fea/runtime/src/tokio/tracing.rs#L10
     let exporter = SpanExporter::builder()
-        .with_http()
-        .with_http_client(reqwest::blocking::Client::new())
-        //.with_tonic()
+        //.with_http()
+        //.with_http_client(reqwest::blocking::Client::new())
+        .with_tonic()
         .with_endpoint(&otlp_endpoint)
         .build()?;
 
