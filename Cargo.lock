@@ -6592,27 +6592,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "opentelemetry-datadog"
-version = "0.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a6b2d4db32343691eb945e6153e5a4bd494dbf9d931d5bf7d1d7f59bee156d0"
-dependencies = [
- "ahash",
- "http 1.3.1",
- "indexmap 2.11.4",
- "itoa",
- "opentelemetry 0.31.0",
- "opentelemetry-http 0.31.0",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk 0.31.0",
- "reqwest",
- "rmp",
- "ryu",
- "thiserror 2.0.17",
- "url",
-]
-
-[[package]]
 name = "opentelemetry-http"
 version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6712,12 +6691,6 @@ dependencies = [
  "tonic 0.14.2",
  "tonic-prost",
 ]
-
-[[package]]
-name = "opentelemetry-semantic-conventions"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e62e29dfe041afb8ed2a6c9737ab57db4907285d999ef8ad3a59092a36bdc846"
 
 [[package]]
 name = "opentelemetry_sdk"
@@ -12673,9 +12646,7 @@ dependencies = [
  "op-alloy-network",
  "op-revm",
  "opentelemetry 0.31.0",
- "opentelemetry-datadog",
  "opentelemetry-otlp 0.31.0",
- "opentelemetry-semantic-conventions",
  "opentelemetry_sdk 0.31.0",
  "rdkafka",
  "reqwest",
