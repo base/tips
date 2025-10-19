@@ -11,7 +11,8 @@ use opentelemetry::trace::TracerProvider;
 //use opentelemetry_sdk::trace::BatchSpanProcessor;
 //use opentelemetry_sdk::trace::Sampler;
 //use opentelemetry_sdk::trace::SimpleSpanProcessor;
-use opentelemetry_sdk::trace::SpanProcessor;
+//use opentelemetry_sdk::trace::SpanProcessor;
+use tracing_opentelemetry::OpenTelemetryLayer;
 //use opentelemetry_semantic_conventions as semcov;
 use opentelemetry_sdk::Resource;
 //use opentelemetry_sdk::trace::SdkTracerProvider;
@@ -21,14 +22,14 @@ use std::env;
 use std::fs;
 use std::net::IpAddr;
 use tracing::{info, warn};
-//use tracing_subscriber::Layer;
-//use tracing_subscriber::filter::{LevelFilter, Targets};
+use tracing_subscriber::Layer;
+use tracing_subscriber::filter::{LevelFilter, Targets};
 //use opentelemetry_otlp::SpanExporter;
-use opentelemetry_otlp::{WithExportConfig};
+use opentelemetry_otlp::WithExportConfig;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{Layer};
-use url::Url;
+//use tracing_subscriber::{Layer};
 use anyhow::Context;
+use url::Url;
 
 mod queue;
 mod service;
@@ -87,6 +88,7 @@ struct Config {
     tracing_otlp_port: u16,
 }
 
+/*
 #[derive(Debug)]
 pub struct OtlpSpanProcessor;
 
@@ -108,7 +110,7 @@ impl SpanProcessor for OtlpSpanProcessor {
     }
 
     fn set_resource(&mut self, _resource: &opentelemetry_sdk::Resource) {}
-}
+}*/
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -131,83 +133,31 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    /*tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(log_level.to_string())),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
+    let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
+    let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
+
+    // Be cautious with snake_case and kebab-case here
+    let filter_name = "tips-ingress-rpc".to_string();
 
     let global_filter = Targets::new()
         .with_default(LevelFilter::INFO)
-        .with_target(env!("CARGO_PKG_NAME"), LevelFilter::TRACE);
-    */
-
-    /*global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::default());
-
-    let log_filter = Targets::new()
-        .with_default(LevelFilter::INFO)
-        .with_target(env!("CARGO_PKG_NAME"), log_level);
-
-    let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
-    let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
-
-    let mut trace_config = trace::Config::default();
-    trace_config.sampler = Box::new(Sampler::AlwaysOn);
-    trace_config.id_generator = Box::new(RandomIdGenerator::default());
-
-    let provider = opentelemetry_datadog::new_pipeline()
-        .with_service_name(env!("CARGO_PKG_NAME"))
-        .with_api_version(opentelemetry_datadog::ApiVersion::Version05)
-        .with_agent_endpoint(&otlp_endpoint)
-        .with_trace_config(trace_config)
-        .install_batch()?;
-
-    global::set_tracer_provider(provider.clone());
-
-    let scope = InstrumentationScope::builder(env!("CARGO_PKG_NAME"))
-        .with_version(env!("CARGO_PKG_VERSION"))
-        .with_schema_url(semcov::SCHEMA_URL)
-        .with_attributes(None)
-        .build();
-
-    let tracer = provider.tracer_with_scope(scope);
-    tracer.in_span("span_main", |_span| {
-        info!(
-            message = "Tracing enabled",
-            endpoint = %otlp_endpoint
-        );
-    });
-
-    tracing_subscriber::registry()
-        .with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer))
-        .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
-        .init();*/
-
-    // https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127 
-    let global_filter = tracing_subscriber::filter::Targets::new()
-        .with_default(tracing_subscriber::filter::LevelFilter::INFO)
-        .with_target(env!("CARGO_PKG_NAME"), tracing_subscriber::filter::LevelFilter::TRACE);
+        .with_target(&filter_name, LevelFilter::TRACE);
 
     let registry = tracing_subscriber::registry().with(global_filter);
 
-    let log_filter = tracing_subscriber::filter::Targets::new()
-        .with_default(tracing_subscriber::filter::LevelFilter::INFO)
-        .with_target(env!("CARGO_PKG_NAME"), log_level);
+    let log_filter = Targets::new()
+        .with_default(LevelFilter::INFO)
+        .with_target(&filter_name, log_level);
 
     let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
 
-    let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
-    let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
-    
     global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
     let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(&otlp_endpoint)
         .build()
         .context("Failed to create OTLP exporter")?;
-
     let provider_builder = opentelemetry_sdk::trace::SdkTracerProvider::builder()
         .with_batch_exporter(otlp_exporter)
         .with_resource(
@@ -217,17 +167,16 @@ async fn main() -> anyhow::Result<()> {
                     opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
                 ])
                 .build(),
-        )
-        .with_span_processor(OtlpSpanProcessor);
-
+        );
     let provider = provider_builder.build();
     let tracer = provider.tracer(env!("CARGO_PKG_NAME"));
 
-    let trace_filter = tracing_subscriber::filter::Targets::new()
-        .with_default(tracing_subscriber::filter::LevelFilter::OFF)
-        .with_target(env!("CARGO_PKG_NAME"), tracing_subscriber::filter::LevelFilter::TRACE);
+    let trace_filter = Targets::new()
+        .with_default(LevelFilter::OFF)
+        .with_target(&filter_name, LevelFilter::TRACE);
 
-    let registry = registry.with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
+    let registry = registry.with(OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
+
     tracing::subscriber::set_global_default(
         registry.with(
             tracing_subscriber::fmt::layer()
