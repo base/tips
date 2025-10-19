@@ -19,12 +19,13 @@ use rdkafka::producer::FutureProducer;
 use std::env;
 use std::fs;
 use std::net::IpAddr;
-use tracing::{info, warn};
+use tracing::{info, span, warn};
 //use tracing_subscriber::Layer;
 //use tracing_subscriber::filter::{LevelFilter, Targets};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{Layer, Registry};
+use tracing_subscriber::util::SubscriberInitExt;
 use url::Url;
 
 mod queue;
@@ -199,11 +200,16 @@ async fn main() -> anyhow::Result<()> {
 
     let trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let register = Registry::default()
+    /*let register = Registry::default()
+    .with(filter)
+    .with(log_layer)
+    .with(trace_layer);*/
+    tracing_subscriber::registry()
         .with(filter)
         .with(log_layer)
-        .with(trace_layer);
-    tracing::subscriber::set_global_default(register)?;
+        .with(trace_layer)
+        .init();
+    //tracing::subscriber::set_global_default(register)?;
 
     info!(
         message = "Starting ingress service",
@@ -213,10 +219,13 @@ async fn main() -> anyhow::Result<()> {
         endpoint = %otlp_endpoint
     );
 
+    let span = span!(tracing::Level::TRACE, "span_main");
+    let _enter = span.enter();
     let op_provider: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
         .connect_http(config.mempool_url);
+    drop(_enter);
 
     let client_config = load_kafka_config_from_file(&config.ingress_kafka_properties)?;
 
