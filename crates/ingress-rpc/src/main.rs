@@ -8,9 +8,9 @@ use opentelemetry::global;
 //use opentelemetry_sdk::trace;
 use opentelemetry::trace::TracerProvider;
 //use opentelemetry_otlp::WithHttpConfig;
-//use opentelemetry_sdk::trace::BatchSpanProcessor;
+use opentelemetry_sdk::trace::BatchSpanProcessor;
 use opentelemetry_sdk::trace::Sampler;
-use opentelemetry_sdk::trace::SimpleSpanProcessor;
+//use opentelemetry_sdk::trace::SimpleSpanProcessor;
 //use opentelemetry_semantic_conventions as semcov;
 use opentelemetry_sdk::Resource;
 use opentelemetry_sdk::trace::SdkTracerProvider;
@@ -25,7 +25,7 @@ use tracing::{error, info, span, warn};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
 use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
+//use tracing_subscriber::util::SubscriberInitExt;
 use url::Url;
 
 mod queue;
@@ -175,14 +175,14 @@ async fn main() -> anyhow::Result<()> {
 
     // https://github.com/commonwarexyz/monorepo/blob/27e6f73fce91fc46ef7170e928cbcf96cc635fea/runtime/src/tokio/tracing.rs#L10
     let exporter = SpanExporter::builder()
-        //.with_http()
+        .with_http()
         //.with_http_client(reqwest::blocking::Client::new())
-        .with_tonic()
+        //.with_tonic()
         .with_endpoint(&otlp_endpoint)
         .build()?;
 
-    //let batch_processor = BatchSpanProcessor::builder(exporter).build();
-    let batch_processor = SimpleSpanProcessor::new(exporter);
+    let batch_processor = BatchSpanProcessor::builder(exporter).build();
+    //let batch_processor = SimpleSpanProcessor::new(exporter);
 
     let resource = Resource::builder_empty()
         .with_service_name(env!("CARGO_PKG_NAME"))
@@ -200,16 +200,16 @@ async fn main() -> anyhow::Result<()> {
 
     let trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    /*let register = Registry::default()
-    .with(filter)
-    .with(log_layer)
-    .with(trace_layer);*/
-    tracing_subscriber::registry()
+    let register = tracing_subscriber::registry()
         .with(filter)
         .with(log_layer)
-        .with(trace_layer)
-        .init();
-    //tracing::subscriber::set_global_default(register)?;
+        .with(trace_layer);
+    /*tracing_subscriber::registry()
+    .with(filter)
+    .with(log_layer)
+    .with(trace_layer)
+    .init();*/
+    tracing::subscriber::set_global_default(register)?;
 
     info!(
         message = "Starting ingress service",
