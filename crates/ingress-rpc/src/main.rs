@@ -9,11 +9,12 @@ use opentelemetry::global;
 use opentelemetry::trace::TracerProvider;
 //use opentelemetry_otlp::WithHttpConfig;
 //use opentelemetry_sdk::trace::BatchSpanProcessor;
-use opentelemetry_sdk::trace::Sampler;
-use opentelemetry_sdk::trace::SimpleSpanProcessor;
+//use opentelemetry_sdk::trace::Sampler;
+//use opentelemetry_sdk::trace::SimpleSpanProcessor;
+use opentelemetry_sdk::trace::SpanProcessor;
 //use opentelemetry_semantic_conventions as semcov;
 use opentelemetry_sdk::Resource;
-use opentelemetry_sdk::trace::SdkTracerProvider;
+//use opentelemetry_sdk::trace::SdkTracerProvider;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::env;
@@ -22,10 +23,12 @@ use std::net::IpAddr;
 use tracing::{info, warn};
 //use tracing_subscriber::Layer;
 //use tracing_subscriber::filter::{LevelFilter, Targets};
-use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+//use opentelemetry_otlp::SpanExporter;
+use opentelemetry_otlp::{WithExportConfig};
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::{Layer, Registry};
+use tracing_subscriber::{Layer};
 use url::Url;
+use anyhow::Context;
 
 mod queue;
 mod service;
@@ -82,6 +85,29 @@ struct Config {
     /// Port for the OTLP endpoint
     #[arg(long, env = "TIPS_INGRESS_TRACING_OTLP_PORT", default_value = "4317")]
     tracing_otlp_port: u16,
+}
+
+#[derive(Debug)]
+pub struct OtlpSpanProcessor;
+
+impl SpanProcessor for OtlpSpanProcessor {
+    fn on_start(&self, _span: &mut opentelemetry_sdk::trace::Span, _cx: &opentelemetry::Context) {}
+
+    fn on_end(&self, _span: opentelemetry_sdk::trace::SpanData) {}
+
+    fn force_flush(&self) -> opentelemetry_sdk::error::OTelSdkResult {
+        Ok(())
+    }
+
+    fn shutdown(&self) -> opentelemetry_sdk::error::OTelSdkResult {
+        Ok(())
+    }
+
+    fn shutdown_with_timeout(&self, _timeout: tokio::time::Duration) -> opentelemetry_sdk::error::OTelSdkResult {
+        Ok(())
+    }
+
+    fn set_resource(&mut self, _resource: &opentelemetry_sdk::Resource) {}
 }
 
 #[tokio::main]
@@ -159,51 +185,58 @@ async fn main() -> anyhow::Result<()> {
         .with(tracing_subscriber::fmt::layer().with_filter(log_filter))
         .init();*/
 
-    let filter = tracing_subscriber::EnvFilter::new(log_level.to_string());
+    // https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127 
+    let global_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(tracing_subscriber::filter::LevelFilter::INFO)
+        .with_target(env!("CARGO_PKG_NAME"), tracing_subscriber::filter::LevelFilter::TRACE);
 
-    let log_layer = tracing_subscriber::fmt::layer()
-        .with_line_number(true)
-        .with_thread_ids(true)
-        .with_file(true)
-        .with_span_events(tracing_subscriber::fmt::format::FmtSpan::CLOSE)
-        .json()
-        .boxed();
+    let registry = tracing_subscriber::registry().with(global_filter);
+
+    let log_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(tracing_subscriber::filter::LevelFilter::INFO)
+        .with_target(env!("CARGO_PKG_NAME"), log_level);
+
+    let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
 
     let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
     let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
-
-    // https://github.com/commonwarexyz/monorepo/blob/27e6f73fce91fc46ef7170e928cbcf96cc635fea/runtime/src/tokio/tracing.rs#L10
-    let exporter = SpanExporter::builder()
-        //.with_http()
-        //.with_http_client(reqwest::blocking::Client::new())
+    
+    global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
+    let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(&otlp_endpoint)
-        .build()?;
+        .build()
+        .context("Failed to create OTLP exporter")?;
 
-    //let batch_processor = BatchSpanProcessor::builder(exporter).build();
-    let batch_processor = SimpleSpanProcessor::new(exporter);
+    let provider_builder = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(otlp_exporter)
+        .with_resource(
+            Resource::builder_empty()
+                .with_attributes([
+                    opentelemetry::KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
+                    opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+                ])
+                .build(),
+        )
+        .with_span_processor(OtlpSpanProcessor);
 
-    let resource = Resource::builder_empty()
-        .with_service_name(env!("CARGO_PKG_NAME"))
-        .build();
+    let provider = provider_builder.build();
+    let tracer = provider.tracer(env!("CARGO_PKG_NAME"));
 
-    let tracer_provider = SdkTracerProvider::builder()
-        .with_span_processor(batch_processor)
-        .with_resource(resource)
-        .with_sampler(Sampler::AlwaysOn)
-        .build();
+    let trace_filter = tracing_subscriber::filter::Targets::new()
+        .with_default(tracing_subscriber::filter::LevelFilter::OFF)
+        .with_target(env!("CARGO_PKG_NAME"), tracing_subscriber::filter::LevelFilter::TRACE);
 
-    // Create the tracer and set it globally
-    let tracer = tracer_provider.tracer(env!("CARGO_PKG_NAME"));
-    global::set_tracer_provider(tracer_provider);
-
-    let trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-
-    let register = Registry::default()
-        .with(filter)
-        .with(log_layer)
-        .with(trace_layer);
-    tracing::subscriber::set_global_default(register)?;
+    let registry = registry.with(tracing_opentelemetry::OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
+    tracing::subscriber::set_global_default(
+        registry.with(
+            tracing_subscriber::fmt::layer()
+                .json()
+                .with_ansi(false)
+                .with_writer(writer)
+                .with_filter(log_filter.clone()),
+        ),
+    )?;
 
     info!(
         message = "Starting ingress service",
