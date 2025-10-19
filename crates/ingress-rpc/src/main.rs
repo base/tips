@@ -18,7 +18,7 @@ use rdkafka::producer::FutureProducer;
 use std::env;
 use std::fs;
 use std::net::IpAddr;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 //use tracing_subscriber::Layer;
 //use tracing_subscriber::filter::{LevelFilter, Targets};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
@@ -174,7 +174,8 @@ async fn main() -> anyhow::Result<()> {
     // https://github.com/commonwarexyz/monorepo/blob/27e6f73fce91fc46ef7170e928cbcf96cc635fea/runtime/src/tokio/tracing.rs#L10
     let exporter = SpanExporter::builder()
         .with_http()
-        .with_http_client(reqwest::Client::new())
+        .with_protocol(opentelemetry_otlp::Protocol::HttpJson)
+        .with_http_client(reqwest::blocking::Client::new())
         .with_endpoint(&otlp_endpoint)
         .build()?;
 
@@ -192,7 +193,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create the tracer and set it globally
     let tracer = tracer_provider.tracer(env!("CARGO_PKG_NAME"));
-    global::set_tracer_provider(tracer_provider);
+    global::set_tracer_provider(tracer_provider.clone());
 
     let trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
@@ -239,6 +240,10 @@ async fn main() -> anyhow::Result<()> {
     );
 
     handle.stopped().await;
+    if let Err(e) = tracer_provider.shutdown() {
+        error!(error = %e, "Failed to shutdown tracer provider");
+        return Err(e.into());
+    };
     Ok(())
 }
 
