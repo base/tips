@@ -19,7 +19,7 @@ use rdkafka::producer::FutureProducer;
 use std::env;
 use std::fs;
 use std::net::IpAddr;
-use tracing::{info, span, warn};
+use tracing::{error, info, span, warn};
 //use tracing_subscriber::Layer;
 //use tracing_subscriber::filter::{LevelFilter, Targets};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig};
@@ -196,7 +196,7 @@ async fn main() -> anyhow::Result<()> {
 
     // Create the tracer and set it globally
     let tracer = tracer_provider.tracer(env!("CARGO_PKG_NAME"));
-    global::set_tracer_provider(tracer_provider);
+    global::set_tracer_provider(tracer_provider.clone());
 
     let trace_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
@@ -251,6 +251,10 @@ async fn main() -> anyhow::Result<()> {
     );
 
     handle.stopped().await;
+    if let Err(e) = tracer_provider.shutdown() {
+        error!(error = %e, "Failed to shutdown tracer provider");
+        return Err(e.into());
+    };
     Ok(())
 }
 
