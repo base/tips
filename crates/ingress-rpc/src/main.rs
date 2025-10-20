@@ -147,11 +147,12 @@ async fn main() -> anyhow::Result<()> {
     trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
     trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
+    // `with_agent_endpoint` or `with_http_client`?
     let provider = new_pipeline()
         .with_service_name(&filter_name)
         .with_api_version(ApiVersion::Version05)
         .with_trace_config(trace_cfg)
-        .with_agent_endpoint(&otlp_endpoint)
+        .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
         .install_batch()?;
     global::set_tracer_provider(provider.clone());
     let scope = InstrumentationScope::builder(filter_name.clone())
@@ -214,6 +215,8 @@ async fn main() -> anyhow::Result<()> {
     );
 
     handle.stopped().await;
+    // TODO: might need shutdown
+    // let _ = provider.shutdown();
     Ok(())
 }
 
