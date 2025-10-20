@@ -1,34 +1,22 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
+use anyhow::Context;
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use opentelemetry::global;
-//use opentelemetry::trace::Tracer;
-//use opentelemetry::{InstrumentationScope, trace::TracerProvider};
-//use opentelemetry_sdk::trace;
 use opentelemetry::trace::TracerProvider;
-//use opentelemetry_otlp::WithHttpConfig;
-//use opentelemetry_sdk::trace::BatchSpanProcessor;
-//use opentelemetry_sdk::trace::Sampler;
-//use opentelemetry_sdk::trace::SimpleSpanProcessor;
-//use opentelemetry_sdk::trace::SpanProcessor;
-use tracing_opentelemetry::OpenTelemetryLayer;
-//use opentelemetry_semantic_conventions as semcov;
+use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::Resource;
-//use opentelemetry_sdk::trace::SdkTracerProvider;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::env;
 use std::fs;
 use std::net::IpAddr;
 use tracing::{info, warn};
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::Layer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
-//use opentelemetry_otlp::SpanExporter;
-use opentelemetry_otlp::WithExportConfig;
 use tracing_subscriber::layer::SubscriberExt;
-//use tracing_subscriber::{Layer};
-use anyhow::Context;
 use url::Url;
 
 mod queue;
@@ -88,30 +76,6 @@ struct Config {
     tracing_otlp_port: u16,
 }
 
-/*
-#[derive(Debug)]
-pub struct OtlpSpanProcessor;
-
-impl SpanProcessor for OtlpSpanProcessor {
-    fn on_start(&self, _span: &mut opentelemetry_sdk::trace::Span, _cx: &opentelemetry::Context) {}
-
-    fn on_end(&self, _span: opentelemetry_sdk::trace::SpanData) {}
-
-    fn force_flush(&self) -> opentelemetry_sdk::error::OTelSdkResult {
-        Ok(())
-    }
-
-    fn shutdown(&self) -> opentelemetry_sdk::error::OTelSdkResult {
-        Ok(())
-    }
-
-    fn shutdown_with_timeout(&self, _timeout: tokio::time::Duration) -> opentelemetry_sdk::error::OTelSdkResult {
-        Ok(())
-    }
-
-    fn set_resource(&mut self, _resource: &opentelemetry_sdk::Resource) {}
-}*/
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -133,11 +97,10 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
     let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
     let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
 
-    // Be cautious with snake_case and kebab-case here
+    // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
     let filter_name = "tips-ingress-rpc".to_string();
 
     let global_filter = Targets::new()
