@@ -1,12 +1,12 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
-use anyhow::Context;
+//use anyhow::Context;
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use opentelemetry::global;
 use opentelemetry::trace::TracerProvider;
-use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::Resource;
+//use opentelemetry_otlp::WithExportConfig;
+//use opentelemetry_sdk::Resource;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use std::env;
@@ -18,6 +18,15 @@ use tracing_subscriber::Layer;
 use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use url::Url;
+
+//use opentelemetry::{
+//    trace::{SamplingResult, Span, TraceContextExt, Tracer},
+//    InstrumentationScope, Key, KeyValue, Value,
+//};
+use opentelemetry::InstrumentationScope;
+use opentelemetry_datadog::{ApiVersion, new_pipeline};
+use opentelemetry_sdk::trace::{self, RandomIdGenerator, Sampler};
+use opentelemetry_semantic_conventions as semcov;
 
 mod queue;
 mod service;
@@ -116,7 +125,7 @@ async fn main() -> anyhow::Result<()> {
     let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
 
     global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
-    let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
+    /*let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(&otlp_endpoint)
         .build()
@@ -132,7 +141,25 @@ async fn main() -> anyhow::Result<()> {
                 .build(),
         );
     let provider = provider_builder.build();
-    let tracer = provider.tracer(env!("CARGO_PKG_NAME"));
+    let tracer = provider.tracer(env!("CARGO_PKG_NAME"));*/
+
+    let mut trace_cfg = trace::Config::default();
+    trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+    trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
+
+    let provider = new_pipeline()
+        .with_service_name(&filter_name)
+        .with_api_version(ApiVersion::Version05)
+        .with_trace_config(trace_cfg)
+        .with_agent_endpoint(&otlp_endpoint)
+        .install_batch()?;
+    global::set_tracer_provider(provider.clone());
+    let scope = InstrumentationScope::builder(filter_name.clone())
+        .with_version(env!("CARGO_PKG_VERSION"))
+        .with_schema_url(semcov::SCHEMA_URL)
+        .with_attributes(None)
+        .build();
+    let tracer = provider.tracer_with_scope(scope);
 
     let trace_filter = Targets::new()
         .with_default(LevelFilter::OFF)
