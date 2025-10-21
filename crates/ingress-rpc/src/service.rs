@@ -1,5 +1,5 @@
-use alloy_consensus::transaction::{Recovered, SignerRecoverable};
-use alloy_primitives::{Address, B256, Bytes};
+use alloy_consensus::transaction::SignerRecoverable;
+use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
 use jsonrpsee::{
@@ -90,13 +90,6 @@ where
             .clone()
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-        /*let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
-        let account = self
-            .provider
-            .fetch_account_info(transaction.signer())
-            .await?;
-        validate_tx(account, &transaction, &data, &mut l1_block_info).await?;*/
 
         // Send transaction data to ExEx for validation
         // TODO: in the endgame version, this would push to a Redis cluster which the "Store" ExEx

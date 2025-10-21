@@ -1,14 +1,9 @@
-use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
-use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
-use alloy_primitives::{Address, B256, U256};
-use alloy_provider::{Provider, RootProvider};
-use async_trait::async_trait;
+use alloy_consensus::{Transaction, constants::KECCAK_EMPTY, transaction::Recovered};
+use alloy_primitives::{B256, U256};
 use jsonrpsee::core::RpcResult;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
-use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
-use reth_optimism_evm::extract_l1_info_from_tx;
-use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
+use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use tracing::warn;
 
 /// Account info for a given address
@@ -16,64 +11,6 @@ pub struct AccountInfo {
     pub balance: U256,
     pub nonce: u64,
     pub code_hash: B256,
-}
-
-/// Interface for fetching account info for a given address
-#[async_trait]
-pub trait AccountInfoLookup: Send + Sync {
-    async fn fetch_account_info(&self, address: Address) -> RpcResult<AccountInfo>;
-}
-
-/// Implementation of the `AccountInfoLookup` trait for the `RootProvider`
-#[async_trait]
-impl AccountInfoLookup for RootProvider<Optimism> {
-    async fn fetch_account_info(&self, address: Address) -> RpcResult<AccountInfo> {
-        let account = self
-            .get_account(address)
-            .await
-            .map_err(|_| EthApiError::Signing(SignError::NoAccount))?;
-        Ok(AccountInfo {
-            balance: account.balance,
-            nonce: account.nonce,
-            code_hash: account.code_hash,
-        })
-    }
-}
-
-/// Interface for fetching L1 block info for a given block number
-#[async_trait]
-pub trait L1BlockInfoLookup: Send + Sync {
-    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo>;
-}
-
-/// Implementation of the `L1BlockInfoLookup` trait for the `RootProvider`
-#[async_trait]
-impl L1BlockInfoLookup for RootProvider<Optimism> {
-    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo> {
-        let block = self
-            .get_block(BlockId::Number(BlockNumberOrTag::Latest))
-            .full()
-            .await
-            .map_err(|e| {
-                warn!(message = "failed to fetch latest block", err = %e);
-                EthApiError::InternalEthError.into_rpc_err()
-            })?
-            .ok_or_else(|| {
-                warn!(message = "empty latest block returned");
-                EthApiError::InternalEthError.into_rpc_err()
-            })?;
-
-        let txs = block.transactions.clone();
-        let first_tx = txs.first_transaction().ok_or_else(|| {
-            warn!(message = "block contains no transactions");
-            EthApiError::InternalEthError.into_rpc_err()
-        })?;
-
-        Ok(extract_l1_info_from_tx(&first_tx.clone()).map_err(|e| {
-            warn!(message = "failed to extract l1_info from tx", err = %e);
-            EthApiError::InternalEthError.into_rpc_err()
-        })?)
-    }
 }
 
 /// Helper function to validate a transaction. A valid transaction must satisfy the following criteria:
@@ -164,6 +101,7 @@ mod tests {
     use alloy_consensus::SignableTransaction;
     use alloy_consensus::{Transaction, constants::KECCAK_EMPTY, transaction::SignerRecoverable};
     use alloy_consensus::{TxEip1559, TxEip4844, TxEip7702};
+    use alloy_primitives::Address;
     use alloy_primitives::{bytes, keccak256};
     use alloy_signer_local::PrivateKeySigner;
     use op_alloy_consensus::OpTxEnvelope;
