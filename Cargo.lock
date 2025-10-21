@@ -12589,13 +12589,25 @@ dependencies = [
 name = "tips-rpc-exex"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-signer-local",
+ "async-trait",
  "eyre",
  "futures",
+ "jsonrpsee 0.26.0",
+ "op-alloy-consensus",
+ "op-alloy-network",
+ "op-revm",
  "reth",
  "reth-exex",
  "reth-optimism-cli",
+ "reth-optimism-evm",
  "reth-optimism-node",
  "reth-primitives",
+ "reth-rpc-eth-types",
+ "revm-context-interface",
  "tokio",
  "tracing",
 ]

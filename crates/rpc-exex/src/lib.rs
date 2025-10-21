@@ -4,6 +4,8 @@ use reth::api::FullNodeComponents;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use tracing::{debug, info};
 
+mod validation;
+
 pub async fn rpc_exex<Node: FullNodeComponents>(mut ctx: ExExContext<Node>) -> Result<()> {
     loop {
         tokio::select! {
