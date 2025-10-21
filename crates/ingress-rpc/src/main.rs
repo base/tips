@@ -3,7 +3,7 @@ use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
-use opentelemetry::trace::{Span, TraceContextExt, Tracer, TracerProvider};
+use opentelemetry::trace::{SamplingResult, Span, TraceContextExt, Tracer, TracerProvider};
 use opentelemetry::{Key, KeyValue, Value, global};
 //use opentelemetry_otlp::WithExportConfig;
 //use opentelemetry_sdk::Resource;
@@ -25,8 +25,8 @@ use url::Url;
 //    InstrumentationScope, Key, KeyValue, Value,
 //};
 use opentelemetry::InstrumentationScope;
-use opentelemetry_datadog::{ApiVersion, new_pipeline};
-use opentelemetry_sdk::trace::{self, RandomIdGenerator, Sampler};
+use opentelemetry_datadog::{ApiVersion, DatadogTraceStateBuilder, new_pipeline};
+use opentelemetry_sdk::trace::{self, RandomIdGenerator, ShouldSample};
 use opentelemetry_semantic_conventions as semcov;
 
 mod queue;
@@ -101,6 +101,38 @@ fn bar() {
     span.end()
 }
 
+#[derive(Debug, Clone)]
+struct AgentBasedSampler;
+
+impl ShouldSample for AgentBasedSampler {
+    fn should_sample(
+        &self,
+        parent_context: Option<&opentelemetry::Context>,
+        _trace_id: opentelemetry::trace::TraceId,
+        _name: &str,
+        _span_kind: &opentelemetry::trace::SpanKind,
+        _attributes: &[opentelemetry::KeyValue],
+        _links: &[opentelemetry::trace::Link],
+    ) -> opentelemetry::trace::SamplingResult {
+        let trace_state = parent_context
+            .map(
+                |parent_context| parent_context.span().span_context().trace_state().clone(), // inherit sample decision from parent span
+            )
+            .unwrap_or_else(|| {
+                DatadogTraceStateBuilder::default()
+                    .with_priority_sampling(true) // always sample root span(span without remote or local parent)
+                    .with_measuring(true) // datadog-agent will create metric for this span for APM
+                    .build()
+            });
+
+        SamplingResult {
+            decision: opentelemetry::trace::SamplingDecision::RecordAndSample, // send all spans to datadog-agent
+            attributes: vec![],
+            trace_state,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -126,7 +158,7 @@ async fn main() -> anyhow::Result<()> {
     let otlp_endpoint = format!("http://{}:{}", &dd_host, &config.tracing_otlp_port);
 
     // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
-    let filter_name = "tips-ingress-rpc".to_string();
+    let filter_name = "tips_ingress_rpc".to_string();
 
     let global_filter = Targets::new()
         .with_default(LevelFilter::INFO)
@@ -142,7 +174,7 @@ async fn main() -> anyhow::Result<()> {
 
     global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
     let mut trace_cfg = trace::Config::default();
-    trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+    trace_cfg.sampler = Box::new(AgentBasedSampler);
     trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
     // `with_agent_endpoint` or `with_http_client`?
@@ -292,7 +324,7 @@ mod tests {
 
     fn build_provider() -> SdkTracerProvider {
         let mut trace_cfg = trace::Config::default();
-        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+        trace_cfg.sampler = Box::new(AgentBasedSampler);
         trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
         let provider = new_pipeline()
