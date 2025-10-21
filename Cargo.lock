@@ -12586,6 +12586,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "tips-rpc-exex"
+version = "0.1.0"
+dependencies = [
+ "eyre",
+ "futures",
+ "reth",
+ "reth-exex",
+ "reth-optimism-cli",
+ "reth-optimism-node",
+ "reth-primitives",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "tokio"
 version = "1.47.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

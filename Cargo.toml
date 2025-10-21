@@ -7,7 +7,7 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer"]
+members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer", "crates/rpc-exex"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -15,12 +15,17 @@ tips-datastore = { path = "crates/datastore" }
 tips-audit = { path = "crates/audit" }
 tips-maintenance = { path = "crates/maintenance" }
 tips-ingress-writer = { path = "crates/ingress-writer" }
+tips-rpc-exex = { path = "crates/rpc-exex" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 base-reth-flashblocks-rpc = { git = "https://github.com/base/node-reth", rev = "a1ae148a36354c88b356f80281fef12dad9f7737" }
+reth-exex = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 
 # alloy
 alloy-primitives = { version = "1.3.1", default-features = false, features = [
@@ -72,3 +77,6 @@ backon = "1.5.2"
 op-revm = { version = "10.1.0", default-features = false }
 revm-context-interface = "10.2.0"
 alloy-signer-local = "1.0.36"
+
+# tips-exex 
+futures = "0.3"

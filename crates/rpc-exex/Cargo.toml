@@ -1,0 +1,19 @@
+[package]
+name = "tips-rpc-exex"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+reth-exex.workspace = true
+reth.workspace = true
+eyre.workspace = true
+tracing.workspace = true
+reth-optimism-node.workspace = true
+reth-optimism-cli.workspace = true
+reth-primitives.workspace = true
+tokio.workspace = true
+futures.workspace = true
