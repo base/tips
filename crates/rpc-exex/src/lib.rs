@@ -1,7 +1,6 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::transaction::Recovered;
 use alloy_primitives::Address;
-use clap::Parser;
 use eyre::Result;
 use futures::StreamExt;
 use op_alloy_rpc_types::Transaction;
@@ -11,10 +10,7 @@ use reth::providers::AccountReader;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::Block;
 use reth_node_api::BlockBody;
-use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
 use reth_optimism_evm::extract_l1_info_from_tx;
-use reth_optimism_node::OpNode;
-use reth_optimism_node::args::RollupArgs;
 use reth_primitives::RecoveredBlock;
 use tracing::{debug, info};
 
@@ -36,22 +32,22 @@ where
     }
 
     pub async fn run(mut self) -> Result<()> {
-        info!(target = "tips-rpc-exex", "Starting RPC EXEX service");
+        info!(target = "tips-rpc-exex", "Starting RPC ExEx service");
 
         loop {
             tokio::select! {
                 Some(notification) = self.ctx.notifications.next() => {
                     match notification {
                         Ok(ExExNotification::ChainCommitted { new }) => {
-                            info!(committed_chain = ?new.range(), "Received commit");
+                            debug!(committed_chain = ?new.range(), "Received commit");
                             self.ctx.events.send(ExExEvent::FinishedHeight(new.tip().num_hash()))?;
                         }
                         Ok(ExExNotification::ChainReorged { old, new }) => {
-                            info!(from_chain = ?old.range(), to_chain = ?new.range(), "Received reorg");
+                            debug!(from_chain = ?old.range(), to_chain = ?new.range(), "Received reorg");
                             self.ctx.events.send(ExExEvent::FinishedHeight(new.tip().num_hash()))?;
                         }
                         Ok(ExExNotification::ChainReverted { old }) => {
-                            info!(reverted_chain = ?old.range(), "Received revert");
+                            debug!(reverted_chain = ?old.range(), "Received revert");
                             self.ctx.events.send(ExExEvent::FinishedHeight(old.tip().num_hash()))?;
                         }
                         Err(e) => {
@@ -108,6 +104,7 @@ where
     }
 }
 
+/*
 fn main() -> Result<()> {
     let rollup_args = RollupArgs {
         disable_txpool_gossip: true,
@@ -128,3 +125,4 @@ fn main() -> Result<()> {
 
     Ok(())
 }
+*/

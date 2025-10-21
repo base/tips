@@ -35,3 +35,6 @@ op-revm.workspace = true
 revm-context-interface.workspace = true
 alloy-signer-local.workspace = true
 reth-optimism-evm.workspace = true
+tips-rpc-exex.workspace = true
+reth-optimism-cli.workspace = true
+reth-optimism-node.workspace = true

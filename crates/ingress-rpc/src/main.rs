@@ -5,6 +5,8 @@ use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
+use reth_optimism_node::OpNode;
+use reth_optimism_node::args::RollupArgs;
 use std::fs;
 use std::net::IpAddr;
 use tips_rpc_exex::RpcExEx;
@@ -116,14 +118,40 @@ async fn main() -> anyhow::Result<()> {
 
     let server = Server::builder().build(&bind_addr).await?;
     let addr = server.local_addr()?;
-    let handle = server.start(service.into_rpc());
+    let server_handle = server.start(service.into_rpc());
 
     info!(
         message = "Ingress RPC server started",
         address = %addr
     );
 
-    handle.stopped().await;
+    let rollup_args = RollupArgs {
+        disable_txpool_gossip: true,
+        ..Default::default()
+    };
+
+    Cli::<OpChainSpecParser, ()>::parse()
+        .run(|builder, _| async move {
+            let exex_handle = builder
+                .node(OpNode::new(rollup_args))
+                .install_exex("tips-rpc-exex", move |ctx| async move {
+                    Ok(RpcExEx::new(ctx).run())
+                })
+                .launch()
+                .await?;
+
+            tokio::select! {
+                _ = server_handle.stopped() => {
+                    info!("Ingress RPC server stopped");
+                }
+                _ = exex_handle.wait_for_node_exit() => {
+                    info!("RPC ExEx stopped");
+                }
+            }
+            Ok(())
+        })
+        .map_err(|e| anyhow::anyhow!(e))?;
+
     Ok(())
 }
 
