@@ -107,7 +107,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
-    let otlp_endpoint = format!("http://{}:{}", dd_host, config.tracing_otlp_port);
+    let otlp_endpoint = format!("http://{}:{}", &dd_host, &config.tracing_otlp_port);
 
     // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
     let filter_name = "tips-ingress-rpc".to_string();
@@ -148,43 +148,48 @@ async fn main() -> anyhow::Result<()> {
     trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
     // `with_agent_endpoint` or `with_http_client`?
-    let provider = new_pipeline()
-        .with_service_name(&filter_name)
-        .with_api_version(ApiVersion::Version05)
-        .with_trace_config(trace_cfg)
-        //.with_http_client(reqwest::Client::new())
-        .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
-        .install_simple()?; // TODO: use batch exporter later
-    global::set_tracer_provider(provider.clone());
-    let scope = InstrumentationScope::builder(filter_name.clone())
-        .with_version(env!("CARGO_PKG_VERSION"))
-        .with_schema_url(semcov::SCHEMA_URL)
-        .with_attributes(None)
-        .build();
-    let tracer = provider.tracer_with_scope(scope);
+    let handle = std::thread::spawn(move || {
+        let provider = new_pipeline()
+            .with_service_name(&filter_name)
+            .with_api_version(ApiVersion::Version05)
+            .with_trace_config(trace_cfg)
+            //.with_http_client(reqwest::Client::new())
+            .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
+            .install_simple()
+            .expect("Failed to build provider"); // TODO: use batch exporter later
+        global::set_tracer_provider(provider.clone());
+        let scope = InstrumentationScope::builder(filter_name.clone())
+            .with_version(env!("CARGO_PKG_VERSION"))
+            .with_schema_url(semcov::SCHEMA_URL)
+            .with_attributes(None)
+            .build();
+        let tracer = provider.tracer_with_scope(scope);
 
-    let trace_filter = Targets::new()
-        .with_default(LevelFilter::OFF)
-        .with_target(&filter_name, LevelFilter::TRACE);
+        let trace_filter = Targets::new()
+            .with_default(LevelFilter::OFF)
+            .with_target(&filter_name, LevelFilter::TRACE);
 
-    let registry = registry.with(OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
+        let registry = registry.with(OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
 
-    tracing::subscriber::set_global_default(
-        registry.with(
-            tracing_subscriber::fmt::layer()
-                .json()
-                .with_ansi(false)
-                .with_writer(writer)
-                .with_filter(log_filter.clone()),
-        ),
-    )?;
+        tracing::subscriber::set_global_default(
+            registry.with(
+                tracing_subscriber::fmt::layer()
+                    .json()
+                    .with_ansi(false)
+                    .with_writer(writer)
+                    .with_filter(log_filter.clone()),
+            ),
+        )
+        .expect("Failed to set global default");
+    });
+    handle.join().expect("Failed to join thread");
 
     info!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,
         mempool_url = %config.mempool_url,
-        endpoint = %otlp_endpoint
+        endpoint = %format!("http://{}:{}", &dd_host, &config.tracing_otlp_port)
     );
 
     let op_provider: RootProvider<Optimism> = ProviderBuilder::new()
@@ -217,7 +222,7 @@ async fn main() -> anyhow::Result<()> {
 
     handle.stopped().await;
     // TODO: might need shutdown
-    let _ = provider.shutdown();
+    // let _ = provider.shutdown();
     Ok(())
 }
 
