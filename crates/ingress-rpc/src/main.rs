@@ -152,7 +152,7 @@ async fn main() -> anyhow::Result<()> {
         .with_service_name(&filter_name)
         .with_api_version(ApiVersion::Version05)
         .with_trace_config(trace_cfg)
-        .with_http_client(reqwest::blocking::Client::new())
+        //.with_http_client(reqwest::Client::new())
         .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
         .install_simple()?; // TODO: use batch exporter later
     global::set_tracer_provider(provider.clone());
@@ -217,7 +217,7 @@ async fn main() -> anyhow::Result<()> {
 
     handle.stopped().await;
     // TODO: might need shutdown
-    // let _ = provider.shutdown();
+    let _ = provider.shutdown();
     Ok(())
 }
 
@@ -238,4 +238,26 @@ fn load_kafka_config_from_file(properties_file_path: &str) -> anyhow::Result<Cli
     }
 
     Ok(client_config)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_provider() {
+        let mut trace_cfg = trace::Config::default();
+        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+        trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
+
+        let provider = new_pipeline()
+            .with_service_name("tips-ingress-rpc")
+            .with_api_version(ApiVersion::Version05)
+            .with_trace_config(trace_cfg)
+            .with_agent_endpoint("http://localhost:4317")
+            .install_simple()
+            .expect("Failed to build provider");
+
+        let _ = provider.shutdown();
+    }
 }
