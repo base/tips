@@ -30,3 +30,5 @@ reth-rpc-eth-types.workspace = true
 revm-context-interface.workspace = true
 alloy-signer-local.workspace = true
 clap.workspace = true
+reth-node-api.workspace = true 
+op-alloy-rpc-types.workspace = true

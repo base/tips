@@ -1,13 +1,21 @@
+use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::transaction::Recovered;
+use alloy_primitives::Address;
 use clap::Parser;
 use eyre::Result;
 use futures::StreamExt;
+use op_alloy_rpc_types::Transaction;
+use op_revm::l1block::L1BlockInfo;
 use reth::api::FullNodeComponents;
-use reth::builder::Node;
-use reth::providers::providers::BlockchainProvider;
+use reth::providers::AccountReader;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
+use reth_node_api::Block;
+use reth_node_api::BlockBody;
 use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
+use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_optimism_node::OpNode;
 use reth_optimism_node::args::RollupArgs;
+use reth_primitives::RecoveredBlock;
 use tracing::{debug, info};
 
 mod validation;
@@ -54,6 +62,49 @@ where
                 }
             }
         }
+    }
+
+    pub async fn validate_tx<B>(
+        &mut self,
+        block: &RecoveredBlock<B>,
+        address: Address,
+        tx: &Recovered<Transaction>,
+        data: &[u8],
+    ) -> Result<()>
+    where
+        B: Block,
+    {
+        let mut l1_info = self.fetch_l1_block_info(block)?;
+        let account = self.fetch_account_info(address)?;
+        validation::validate_tx(account, tx, data, &mut l1_info).await?;
+        Ok(())
+    }
+
+    fn fetch_l1_block_info<B>(&mut self, block: &RecoveredBlock<B>) -> Result<L1BlockInfo>
+    where
+        B: Block,
+    {
+        let l1_info = extract_l1_info_from_tx(
+            block
+                .body()
+                .transactions()
+                .first()
+                .expect("block contains no transactions"),
+        )?;
+        Ok(l1_info)
+    }
+
+    fn fetch_account_info(&mut self, address: Address) -> Result<validation::AccountInfo> {
+        let account = self
+            .ctx
+            .provider()
+            .basic_account(&address)?
+            .expect("account not found");
+        Ok(validation::AccountInfo {
+            balance: account.balance,
+            nonce: account.nonce,
+            code_hash: account.bytecode_hash.unwrap_or(KECCAK_EMPTY),
+        })
     }
 }
 

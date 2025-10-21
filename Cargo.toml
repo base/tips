@@ -26,6 +26,7 @@ reth-exex = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
+reth-node-api = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }
 
 # alloy
 alloy-primitives = { version = "1.3.1", default-features = false, features = [
