@@ -1,17 +1,22 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
+use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::transaction::Recovered;
 use alloy_primitives::Address;
 use eyre::Result;
 use futures::StreamExt;
-use op_alloy_rpc_types::Transaction;
+use op_alloy_consensus::OpTxEnvelope;
 use op_revm::l1block::L1BlockInfo;
 use reth::api::FullNodeComponents;
 use reth::providers::AccountReader;
+use reth::providers::BlockReaderIdExt;
+use reth::providers::TransactionVariant;
 use reth_exex::{ExExContext, ExExEvent, ExExNotification};
 use reth_node_api::Block;
 use reth_node_api::BlockBody;
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_primitives::RecoveredBlock;
+use tips_common::ValidationData;
+use tokio::sync::mpsc;
 use tracing::{debug, info};
 
 mod validation;
@@ -21,14 +26,18 @@ where
     Node: FullNodeComponents,
 {
     ctx: ExExContext<Node>,
+    tx_receiver: mpsc::UnboundedReceiver<ValidationData>,
 }
 
 impl<Node> RpcExEx<Node>
 where
     Node: FullNodeComponents,
 {
-    pub fn new(ctx: ExExContext<Node>) -> Self {
-        Self { ctx }
+    pub fn new(
+        ctx: ExExContext<Node>,
+        tx_receiver: mpsc::UnboundedReceiver<ValidationData>,
+    ) -> Self {
+        Self { ctx, tx_receiver }
     }
 
     pub async fn run(mut self) -> Result<()> {
@@ -56,15 +65,24 @@ where
                         }
                     }
                 }
+                Some(validation_data) = self.tx_receiver.recv() => {
+                    info!(target = "tips-rpc-exex", "Received transaction data for validation");
+
+                    let block = self.ctx
+                        .provider()
+                        .block_with_senders_by_id(BlockId::Number(BlockNumberOrTag::Latest), TransactionVariant::WithHash)?
+                        .expect("latest block not found");
+                    self.validate_tx(&block, validation_data.address, &validation_data.tx, &validation_data.data).await?
+                }
             }
         }
     }
 
-    pub async fn validate_tx<B>(
+    async fn validate_tx<B>(
         &mut self,
         block: &RecoveredBlock<B>,
         address: Address,
-        tx: &Recovered<Transaction>,
+        tx: &Recovered<OpTxEnvelope>,
         data: &[u8],
     ) -> Result<()>
     where
@@ -103,26 +121,3 @@ where
         })
     }
 }
-
-/*
-fn main() -> Result<()> {
-    let rollup_args = RollupArgs {
-        disable_txpool_gossip: true,
-        ..Default::default()
-    };
-    Cli::<OpChainSpecParser, ()>::parse().run(|builder, _| async move {
-        let handler = builder
-            .node(OpNode::new(rollup_args))
-            .install_exex("tips-rpc-exex", move |ctx| async move {
-                Ok(RpcExEx::new(ctx).run())
-            })
-            .launch()
-            .await?;
-
-        handler.wait_for_node_exit().await?;
-        Ok(())
-    })?;
-
-    Ok(())
-}
-*/

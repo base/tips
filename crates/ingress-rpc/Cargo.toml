@@ -38,3 +38,5 @@ reth-optimism-evm.workspace = true
 tips-rpc-exex.workspace = true
 reth-optimism-cli.workspace = true
 reth-optimism-node.workspace = true
+op-alloy-rpc-types.workspace = true
+tips-common.workspace = true

@@ -1,6 +1,5 @@
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
-use alloy_consensus::transaction::SignerRecoverable;
-use alloy_primitives::{B256, Bytes};
+use alloy_consensus::transaction::{Recovered, SignerRecoverable};
+use alloy_primitives::{Address, B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
 use jsonrpsee::{
@@ -11,6 +10,8 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tips_common::ValidationData;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
@@ -35,6 +36,7 @@ pub struct IngressService<Queue> {
     dual_write_mempool: bool,
     queue: Queue,
     send_transaction_default_lifetime_seconds: u64,
+    tx_sender: mpsc::UnboundedSender<ValidationData>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -43,12 +45,14 @@ impl<Queue> IngressService<Queue> {
         dual_write_mempool: bool,
         queue: Queue,
         send_transaction_default_lifetime_seconds: u64,
+        tx_sender: mpsc::UnboundedSender<ValidationData>,
     ) -> Self {
         Self {
             provider,
             dual_write_mempool,
             queue,
             send_transaction_default_lifetime_seconds,
+            tx_sender,
         }
     }
 }
@@ -87,12 +91,25 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
+        /*let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
             .await?;
-        validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
+        validate_tx(account, &transaction, &data, &mut l1_block_info).await?;*/
+
+        // Send transaction data to ExEx for validation
+        // TODO: in the endgame version, this would push to a Redis cluster which the "Store" ExEx
+        // would read from. Instead, we are implementing v1 of this by having the ingress-rpc
+        // forward to the rpc-exex.
+        let validation_data = ValidationData {
+            address: transaction.signer(),
+            tx: transaction.clone(),
+            data: data.clone(),
+        };
+        if let Err(e) = self.tx_sender.send(validation_data) {
+            warn!(message = "Failed to send transaction to ExEx", error = %e);
+        }
 
         let expiry_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)

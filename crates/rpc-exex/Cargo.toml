@@ -32,3 +32,4 @@ alloy-signer-local.workspace = true
 clap.workspace = true
 reth-node-api.workspace = true 
 op-alloy-rpc-types.workspace = true
+tips-common.workspace = true

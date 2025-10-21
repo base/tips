@@ -7,7 +7,7 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer", "crates/rpc-exex"]
+members = ["crates/datastore", "crates/audit", "crates/ingress-rpc", "crates/maintenance", "crates/ingress-writer", "crates/rpc-exex", "crates/common"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -16,6 +16,7 @@ tips-audit = { path = "crates/audit" }
 tips-maintenance = { path = "crates/maintenance" }
 tips-ingress-writer = { path = "crates/ingress-writer" }
 tips-rpc-exex = { path = "crates/rpc-exex" }
+tips-common = { path = "crates/common" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.1" }

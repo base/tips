@@ -12492,6 +12492,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tips-common"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-primitives",
+ "op-alloy-consensus",
+]
+
+[[package]]
 name = "tips-datastore"
 version = "0.1.0"
 dependencies = [
@@ -12528,6 +12537,7 @@ dependencies = [
  "jsonrpsee 0.26.0",
  "op-alloy-consensus",
  "op-alloy-network",
+ "op-alloy-rpc-types",
  "op-revm",
  "rdkafka",
  "reth-optimism-cli",
@@ -12536,6 +12546,7 @@ dependencies = [
  "reth-rpc-eth-types",
  "revm-context-interface",
  "serde_json",
+ "tips-common",
  "tips-rpc-exex",
  "tokio",
  "tracing",
@@ -12614,6 +12625,7 @@ dependencies = [
  "reth-primitives",
  "reth-rpc-eth-types",
  "revm-context-interface",
+ "tips-common",
  "tokio",
  "tracing",
 ]

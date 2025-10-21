@@ -9,7 +9,9 @@ use reth_optimism_node::OpNode;
 use reth_optimism_node::args::RollupArgs;
 use std::fs;
 use std::net::IpAddr;
+use tips_common::ValidationData;
 use tips_rpc_exex::RpcExEx;
+use tokio::sync::mpsc;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
@@ -108,11 +110,15 @@ async fn main() -> anyhow::Result<()> {
 
     let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
 
+    // Create mpsc channel for communication between service and exex to forward txs to validate
+    let (tx_sender, tx_receiver) = mpsc::unbounded_channel::<ValidationData>();
+
     let service = IngressService::new(
         provider,
         config.dual_write_mempool,
         queue,
         config.send_transaction_default_lifetime_seconds,
+        tx_sender,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 
@@ -129,13 +135,12 @@ async fn main() -> anyhow::Result<()> {
         disable_txpool_gossip: true,
         ..Default::default()
     };
-
     Cli::<OpChainSpecParser, ()>::parse()
         .run(|builder, _| async move {
             let exex_handle = builder
                 .node(OpNode::new(rollup_args))
                 .install_exex("tips-rpc-exex", move |ctx| async move {
-                    Ok(RpcExEx::new(ctx).run())
+                    Ok(RpcExEx::new(ctx, tx_receiver).run())
                 })
                 .launch()
                 .await?;
