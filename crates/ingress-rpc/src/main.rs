@@ -152,8 +152,9 @@ async fn main() -> anyhow::Result<()> {
         .with_service_name(&filter_name)
         .with_api_version(ApiVersion::Version05)
         .with_trace_config(trace_cfg)
+        .with_http_client(reqwest::blocking::Client::new())
         .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
-        .install_batch()?;
+        .install_simple()?; // TODO: use batch exporter later
     global::set_tracer_provider(provider.clone());
     let scope = InstrumentationScope::builder(filter_name.clone())
         .with_version(env!("CARGO_PKG_VERSION"))

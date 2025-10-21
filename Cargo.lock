@@ -6605,6 +6605,7 @@ dependencies = [
  "opentelemetry-http 0.31.0",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk 0.31.0",
+ "reqwest",
  "rmp",
  "ryu",
  "thiserror 2.0.17",
