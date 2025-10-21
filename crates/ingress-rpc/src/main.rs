@@ -157,28 +157,29 @@ async fn main() -> anyhow::Result<()> {
     let dd_host = env::var("DD_AGENT_HOST").unwrap_or_else(|_| "localhost".to_string());
     let otlp_endpoint = format!("http://{}:{}", &dd_host, &config.tracing_otlp_port);
 
-    // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
-    let filter_name = "tips_ingress_rpc".to_string();
-
-    let global_filter = Targets::new()
-        .with_default(LevelFilter::INFO)
-        .with_target(&filter_name, LevelFilter::TRACE);
-
-    let registry = tracing_subscriber::registry().with(global_filter);
-
-    let log_filter = Targets::new()
-        .with_default(LevelFilter::INFO)
-        .with_target(&filter_name, log_level);
-
-    let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
-
-    global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
-    let mut trace_cfg = trace::Config::default();
-    trace_cfg.sampler = Box::new(AgentBasedSampler);
-    trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
-
-    // `with_agent_endpoint` or `with_http_client`?
     let handle = std::thread::spawn(move || {
+        // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
+        let filter_name = "tips_ingress_rpc".to_string();
+
+        let global_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(&filter_name, LevelFilter::TRACE);
+
+        let registry = tracing_subscriber::registry().with(global_filter);
+
+        let log_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(&filter_name, log_level);
+
+        let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
+
+        global::set_text_map_propagator(
+            opentelemetry_sdk::propagation::TraceContextPropagator::new(),
+        );
+        let mut trace_cfg = trace::Config::default();
+        trace_cfg.sampler = Box::new(AgentBasedSampler);
+        trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
+
         let provider = new_pipeline()
             .with_service_name(&filter_name)
             .with_api_version(ApiVersion::Version05)
@@ -348,9 +349,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_build_tracer() {
-        let (registry, log_filter, writer) = setup();
-
         let handle = std::thread::spawn(move || {
+            let (registry, log_filter, writer) = setup();
+
             let provider = build_provider();
             global::set_tracer_provider(provider.clone());
             let scope = InstrumentationScope::builder(FILTER_NAME.to_string())
