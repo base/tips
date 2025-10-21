@@ -4,15 +4,16 @@ use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
+use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
 use std::fs;
 use std::net::IpAddr;
+use tips_rpc_exex::RpcExEx;
 use tracing::{info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use url::Url;
 
 mod queue;
 mod service;
-mod validation;
 use queue::KafkaQueuePublisher;
 use service::{IngressApiServer, IngressService};
 

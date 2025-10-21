@@ -12594,6 +12594,7 @@ dependencies = [
  "alloy-provider",
  "alloy-signer-local",
  "async-trait",
+ "clap",
  "eyre",
  "futures",
  "jsonrpsee 0.26.0",

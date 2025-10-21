@@ -29,3 +29,4 @@ reth-optimism-evm.workspace = true
 reth-rpc-eth-types.workspace = true
 revm-context-interface.workspace = true
 alloy-signer-local.workspace = true
+clap.workspace = true
