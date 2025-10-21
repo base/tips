@@ -3,8 +3,8 @@ use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
-use opentelemetry::global;
-use opentelemetry::trace::TracerProvider;
+use opentelemetry::trace::{Span, TraceContextExt, Tracer, TracerProvider};
+use opentelemetry::{Key, KeyValue, Value, global};
 //use opentelemetry_otlp::WithExportConfig;
 //use opentelemetry_sdk::Resource;
 use rdkafka::ClientConfig;
@@ -12,6 +12,7 @@ use rdkafka::producer::FutureProducer;
 use std::env;
 use std::fs;
 use std::net::IpAddr;
+use std::time::Duration;
 use tracing::{info, warn};
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::Layer;
@@ -85,6 +86,21 @@ struct Config {
     tracing_otlp_port: u16,
 }
 
+fn bar() {
+    let tracer = global::tracer("component-bar");
+    let mut span = tracer.start("bar");
+    span.set_attribute(KeyValue::new(
+        Key::new("span.type"),
+        Value::String("sql".into()),
+    ));
+    span.set_attribute(KeyValue::new(
+        Key::new("sql.query"),
+        Value::String("SELECT * FROM table".into()),
+    ));
+    std::thread::sleep(Duration::from_millis(6));
+    span.end()
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
@@ -125,24 +141,6 @@ async fn main() -> anyhow::Result<()> {
     let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
 
     global::set_text_map_propagator(opentelemetry_sdk::propagation::TraceContextPropagator::new());
-    /*let otlp_exporter = opentelemetry_otlp::SpanExporter::builder()
-        .with_tonic()
-        .with_endpoint(&otlp_endpoint)
-        .build()
-        .context("Failed to create OTLP exporter")?;
-    let provider_builder = opentelemetry_sdk::trace::SdkTracerProvider::builder()
-        .with_batch_exporter(otlp_exporter)
-        .with_resource(
-            Resource::builder_empty()
-                .with_attributes([
-                    opentelemetry::KeyValue::new("service.name", env!("CARGO_PKG_NAME")),
-                    opentelemetry::KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-                ])
-                .build(),
-        );
-    let provider = provider_builder.build();
-    let tracer = provider.tracer(env!("CARGO_PKG_NAME"));*/
-
     let mut trace_cfg = trace::Config::default();
     trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
     trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
@@ -164,6 +162,26 @@ async fn main() -> anyhow::Result<()> {
             .with_attributes(None)
             .build();
         let tracer = provider.tracer_with_scope(scope);
+        tracer.in_span("foo", |cx| {
+            let span = cx.span();
+            span.set_attribute(KeyValue::new(
+                Key::new("span.type"),
+                Value::String("web".into()),
+            ));
+            span.set_attribute(KeyValue::new(
+                Key::new("http.url"),
+                Value::String("http://localhost:8080/foo".into()),
+            ));
+            span.set_attribute(KeyValue::new(
+                Key::new("http.method"),
+                Value::String("GET".into()),
+            ));
+            span.set_attribute(KeyValue::new(Key::new("http.status_code"), Value::I64(200)));
+
+            std::thread::sleep(Duration::from_millis(6));
+            bar();
+            std::thread::sleep(Duration::from_millis(6));
+        });
 
         let trace_filter = Targets::new()
             .with_default(LevelFilter::OFF)
@@ -248,23 +266,85 @@ fn load_kafka_config_from_file(properties_file_path: &str) -> anyhow::Result<Cli
 #[cfg(test)]
 mod tests {
     use super::*;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
+    use tracing_subscriber::Registry;
+    use tracing_subscriber::fmt::writer::BoxMakeWriter;
+    use tracing_subscriber::layer::Layered;
+
+    const FILTER_NAME: &str = "tips-ingress-rpc";
+
+    fn setup() -> (Layered<Targets, Registry>, Targets, BoxMakeWriter) {
+        let global_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(FILTER_NAME, LevelFilter::TRACE);
+
+        let registry: Layered<Targets, Registry> =
+            tracing_subscriber::registry().with(global_filter);
+
+        let log_filter = Targets::new()
+            .with_default(LevelFilter::INFO)
+            .with_target(FILTER_NAME, LevelFilter::TRACE);
+
+        let writer = BoxMakeWriter::new(std::io::stdout);
+
+        (registry, log_filter, writer)
+    }
+
+    fn build_provider() -> SdkTracerProvider {
+        let mut trace_cfg = trace::Config::default();
+        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+        trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
+
+        let provider = new_pipeline()
+            .with_service_name(FILTER_NAME)
+            .with_api_version(ApiVersion::Version05)
+            .with_trace_config(trace_cfg)
+            .with_agent_endpoint("http://localhost:4317")
+            .install_simple()
+            .expect("Failed to build provider");
+        provider
+    }
 
     #[tokio::test]
     async fn test_build_provider() {
         let handle = std::thread::spawn(|| {
-            let mut trace_cfg = trace::Config::default();
-            trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
-            trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
-
-            let _provider = new_pipeline()
-                .with_service_name("tips-ingress-rpc")
-                .with_api_version(ApiVersion::Version05)
-                .with_trace_config(trace_cfg)
-                .with_agent_endpoint("http://localhost:4317")
-                .install_simple()
-                .expect("Failed to build provider");
+            build_provider();
         });
 
         handle.join().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_build_tracer() {
+        let (registry, log_filter, writer) = setup();
+
+        let handle = std::thread::spawn(move || {
+            let provider = build_provider();
+            global::set_tracer_provider(provider.clone());
+            let scope = InstrumentationScope::builder(FILTER_NAME.to_string())
+                .with_version(env!("CARGO_PKG_VERSION"))
+                .with_schema_url(semcov::SCHEMA_URL)
+                .with_attributes(None)
+                .build();
+            let tracer = provider.tracer_with_scope(scope);
+
+            let trace_filter = Targets::new()
+                .with_default(LevelFilter::OFF)
+                .with_target(FILTER_NAME, LevelFilter::TRACE);
+
+            let registry = registry.with(OpenTelemetryLayer::new(tracer).with_filter(trace_filter));
+
+            tracing::subscriber::set_global_default(
+                registry.with(
+                    tracing_subscriber::fmt::layer()
+                        .json()
+                        .with_ansi(false)
+                        .with_writer(writer)
+                        .with_filter(log_filter.clone()),
+                ),
+            )
+            .expect("Failed to set global default");
+        });
+        handle.join().expect("Failed to join thread");
     }
 }
