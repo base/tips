@@ -244,20 +244,22 @@ fn load_kafka_config_from_file(properties_file_path: &str) -> anyhow::Result<Cli
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_build_provider() {
-        let mut trace_cfg = trace::Config::default();
-        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
-        trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
+    #[tokio::test]
+    async fn test_build_provider() {
+        let handle = std::thread::spawn(|| {
+            let mut trace_cfg = trace::Config::default();
+            trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
+            trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
-        let provider = new_pipeline()
-            .with_service_name("tips-ingress-rpc")
-            .with_api_version(ApiVersion::Version05)
-            .with_trace_config(trace_cfg)
-            .with_agent_endpoint("http://localhost:4317")
-            .install_simple()
-            .expect("Failed to build provider");
+            let _provider = new_pipeline()
+                .with_service_name("tips-ingress-rpc")
+                .with_api_version(ApiVersion::Version05)
+                .with_trace_config(trace_cfg)
+                .with_agent_endpoint("http://localhost:4317")
+                .install_simple()
+                .expect("Failed to build provider");
+        });
 
-        let _ = provider.shutdown();
+        handle.join().unwrap();
     }
 }
