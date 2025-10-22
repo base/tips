@@ -131,14 +131,13 @@ async fn main() -> anyhow::Result<()> {
         address = %addr
     );
 
-    let rollup_args = RollupArgs {
-        disable_txpool_gossip: true,
-        ..Default::default()
-    };
-    Cli::<OpChainSpecParser, ()>::parse()
+    Cli::<OpChainSpecParser, Config>::parse()
         .run(|builder, _| async move {
             let exex_handle = builder
-                .node(OpNode::new(rollup_args))
+                .node(OpNode::new(RollupArgs {
+                    disable_txpool_gossip: true,
+                    ..Default::default()
+                }))
                 .install_exex("tips-rpc-exex", move |ctx| async move {
                     Ok(RpcExEx::new(ctx, tx_receiver).run())
                 })
