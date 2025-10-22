@@ -131,7 +131,8 @@ async fn main() -> anyhow::Result<()> {
         address = %addr
     );
 
-    Cli::<OpChainSpecParser, Config>::parse()
+    let args = vec!["tips-ingress-rpc", "node"];
+    Cli::<OpChainSpecParser, Config>::try_parse_from(args)?
         .run(|builder, _| async move {
             let exex_handle = builder
                 .node(OpNode::new(RollupArgs {
