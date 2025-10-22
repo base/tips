@@ -71,7 +71,7 @@ where
                     let block = self.ctx
                         .provider()
                         .block_with_senders_by_id(BlockId::Number(BlockNumberOrTag::Latest), TransactionVariant::WithHash)?
-                        .expect("latest block not found");
+                        .ok_or_else(|| eyre::eyre!("latest block not found"))?;
                     self.validate_tx(&block, validation_data.address, &validation_data.tx, &validation_data.data).await?
                 }
             }
@@ -98,12 +98,13 @@ where
     where
         B: Block,
     {
+        // TODO: this errors on empty blocks, need to figure out how to handle this
         let l1_info = extract_l1_info_from_tx(
             block
                 .body()
                 .transactions()
                 .first()
-                .expect("block contains no transactions"),
+                .ok_or_else(|| eyre::eyre!("block contains no transactions"))?,
         )?;
         Ok(l1_info)
     }
