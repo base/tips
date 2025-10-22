@@ -54,6 +54,10 @@ struct Config {
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     log_level: String,
 
+    /// Chain to connect to 
+    #[arg(long, env = "TIPS_INGRESS_CHAIN", default_value = "base-sepolia")]
+    chain: String,
+
     /// Default lifetime for sent transactions in seconds (default: 3 hours)
     #[arg(
         long,
@@ -97,7 +101,7 @@ fn main() -> anyhow::Result<()> {
         mempool_url = %config.mempool_url
     );
 
-    let args = vec!["tips-ingress-rpc", "node", "--chain", "base-sepolia", "-v"];
+    let args =vec!["tips-ingress-rpc", "node", "--chain", &config.chain, "-v"];
     Cli::<OpChainSpecParser, ()>::try_parse_from(args)?
         .run(|builder, _| async move {
             let provider: RootProvider<Optimism> = ProviderBuilder::new()
