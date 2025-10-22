@@ -9,9 +9,10 @@ use jsonrpsee::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
+use opentelemetry::{global, trace::Tracer};
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tracing::{info, warn};
+use tracing::{Instrument, info, span, warn};
 
 use crate::queue::QueuePublisher;
 
@@ -94,12 +95,18 @@ where
             .await?;
         validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
 
+        let span = span!(tracing::Level::TRACE, "span_ethsendbundle", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let expiry_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs()
             + self.send_transaction_default_lifetime_seconds;
+        drop(_enter);
 
+        let span =
+            span!(tracing::Level::INFO, "span_ethsendbundle", transaction = %transaction.tx_hash());
+        let _enter = span.enter();
         let bundle = EthSendBundle {
             txs: vec![data.clone()],
             block_number: 0,
@@ -108,12 +115,18 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+        drop(_enter);
 
         // queue the bundle
         let sender = transaction.signer();
-        if let Err(e) = self.queue.publish(&bundle, sender).await {
-            warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
-        }
+        let t = global::tracer("queue_publish");
+        t.in_span("queue_publish_span", async |_| {
+            let span =
+                span!(tracing::Level::INFO, "span_publish", transaction = %transaction.tx_hash());
+            if let Err(e) = self.queue.publish(&bundle, sender).instrument(span).await {
+                warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
+            }
+        }).await;
 
         info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
 
