@@ -12497,7 +12497,9 @@ version = "0.1.0"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
+ "jsonrpsee 0.26.0",
  "op-alloy-consensus",
+ "tokio",
 ]
 
 [[package]]

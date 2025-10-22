@@ -11,3 +11,5 @@ repository.workspace = true
 op-alloy-consensus.workspace = true
 alloy-primitives.workspace = true
 alloy-consensus.workspace = true
+tokio.workspace = true
+jsonrpsee.workspace = true

@@ -11,7 +11,7 @@ use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_common::ValidationData;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
@@ -95,13 +95,33 @@ where
         // TODO: in the endgame version, this would push to a Redis cluster which the "Store" ExEx
         // would read from. Instead, we are implementing v1 of this by having the ingress-rpc
         // forward to the rpc-exex.
+        let (response_tx, response_rx) = oneshot::channel();
         let validation_data = ValidationData {
             address: transaction.signer(),
             tx: transaction.clone(),
             data: data.clone(),
+            response_tx,
         };
+
         if let Err(e) = self.tx_sender.send(validation_data) {
             warn!(message = "Failed to send transaction to ExEx", error = %e);
+            // TODO: error on here?
+        }
+
+        // Wait for validation result from ExEx
+        match response_rx.await {
+            Ok(Ok(())) => {
+                // Validation successful, continue processing
+            }
+            Ok(Err(validation_error)) => {
+                // Validation failed, return the error
+                return Err(validation_error);
+            }
+            Err(_) => {
+                // Channel was dropped, ExEx is not responding
+                warn!(message = "ExEx validation channel dropped");
+                // TODO: error on here?
+            }
         }
 
         let expiry_timestamp = SystemTime::now()

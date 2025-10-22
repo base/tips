@@ -1,10 +1,8 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
-use alloy_consensus::transaction::Recovered;
 use alloy_primitives::Address;
 use eyre::Result;
 use futures::StreamExt;
-use op_alloy_consensus::OpTxEnvelope;
 use op_revm::l1block::L1BlockInfo;
 use reth::api::FullNodeComponents;
 use reth::providers::AccountReader;
@@ -17,7 +15,7 @@ use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_primitives::RecoveredBlock;
 use tips_common::ValidationData;
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 mod validation;
 
@@ -72,26 +70,17 @@ where
                         .provider()
                         .block_with_senders_by_id(BlockId::Number(BlockNumberOrTag::Latest), TransactionVariant::WithHash)?
                         .ok_or_else(|| eyre::eyre!("latest block not found"))?;
-                    self.validate_tx(&block, validation_data.address, &validation_data.tx, &validation_data.data).await?
+
+                    let mut l1_info = self.fetch_l1_block_info(&block)?;
+                    let account = self.fetch_account_info(validation_data.address)?;
+                    let res = validation::validate_tx(account, &validation_data.tx, &validation_data.data, &mut l1_info).await;
+
+                    if validation_data.response_tx.send(res).is_err() {
+                        warn!(target = "tips-rpc-exex", "Failed to send validation response - receiver dropped");
+                    }
                 }
             }
         }
-    }
-
-    async fn validate_tx<B>(
-        &mut self,
-        block: &RecoveredBlock<B>,
-        address: Address,
-        tx: &Recovered<OpTxEnvelope>,
-        data: &[u8],
-    ) -> Result<()>
-    where
-        B: Block,
-    {
-        let mut l1_info = self.fetch_l1_block_info(block)?;
-        let account = self.fetch_account_info(address)?;
-        validation::validate_tx(account, tx, data, &mut l1_info).await?;
-        Ok(())
     }
 
     fn fetch_l1_block_info<B>(&mut self, block: &RecoveredBlock<B>) -> Result<L1BlockInfo>
