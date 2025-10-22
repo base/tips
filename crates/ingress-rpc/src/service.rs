@@ -9,6 +9,7 @@ use jsonrpsee::{
 };
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
+use opentelemetry::{global, trace::Tracer};
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{Instrument, info, span, warn};
@@ -118,11 +119,14 @@ where
 
         // queue the bundle
         let sender = transaction.signer();
-        let span =
-            span!(tracing::Level::INFO, "span_publish", transaction = %transaction.tx_hash());
-        if let Err(e) = self.queue.publish(&bundle, sender).instrument(span).await {
-            warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
-        }
+        let t = global::tracer("queue_publish");
+        t.in_span("queue_publish_span", async |_| {
+            let span =
+                span!(tracing::Level::INFO, "span_publish", transaction = %transaction.tx_hash());
+            if let Err(e) = self.queue.publish(&bundle, sender).instrument(span).await {
+                warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
+            }
+        }).await;
 
         info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
 

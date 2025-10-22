@@ -42,3 +42,4 @@ tracing-opentelemetry.workspace = true
 reqwest.workspace = true
 opentelemetry-datadog = { workspace = true, features = ["reqwest-client", "agent-sampling"]}
 opentelemetry-semantic-conventions.workspace = true
+opentelemetry-appender-tracing.workspace = true

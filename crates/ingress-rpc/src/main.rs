@@ -3,7 +3,7 @@ use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
-use opentelemetry::trace::{SamplingResult, Span, TraceContextExt, Tracer, TracerProvider};
+use opentelemetry::trace::{Span, TraceContextExt, Tracer, TracerProvider};
 use opentelemetry::{Key, KeyValue, Value, global};
 //use opentelemetry_otlp::WithExportConfig;
 //use opentelemetry_sdk::Resource;
@@ -25,8 +25,9 @@ use url::Url;
 //    InstrumentationScope, Key, KeyValue, Value,
 //};
 use opentelemetry::InstrumentationScope;
-use opentelemetry_datadog::{ApiVersion, DatadogTraceStateBuilder, new_pipeline};
-use opentelemetry_sdk::trace::{self, RandomIdGenerator, ShouldSample};
+//use opentelemetry_appender_tracing::layer::OpenTelemetryTracingBridge;
+use opentelemetry_datadog::{ApiVersion, new_pipeline}; //DatadogTraceStateBuilder,
+use opentelemetry_sdk::trace::{self, RandomIdGenerator, Sampler}; //ShouldSample
 use opentelemetry_semantic_conventions as semcov;
 
 mod queue;
@@ -101,7 +102,7 @@ fn bar() {
     span.end()
 }
 
-#[derive(Debug, Clone)]
+/*#[derive(Debug, Clone)]
 struct AgentBasedSampler;
 
 impl ShouldSample for AgentBasedSampler {
@@ -131,7 +132,7 @@ impl ShouldSample for AgentBasedSampler {
             trace_state,
         }
     }
-}
+}*/
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -159,7 +160,7 @@ async fn main() -> anyhow::Result<()> {
 
     let handle = std::thread::spawn(move || {
         // from: https://github.com/flashbots/rollup-boost/blob/08ebd3e75a8f4c7ebc12db13b042dee04e132c05/crates/rollup-boost/src/tracing.rs#L127
-        let filter_name = "tips_ingress_rpc".to_string();
+        let filter_name = "tips-ingress-rpc".to_string();
 
         let global_filter = Targets::new()
             .with_default(LevelFilter::INFO)
@@ -173,11 +174,9 @@ async fn main() -> anyhow::Result<()> {
 
         let writer = tracing_subscriber::fmt::writer::BoxMakeWriter::new(std::io::stdout);
 
-        global::set_text_map_propagator(
-            opentelemetry_sdk::propagation::TraceContextPropagator::new(),
-        );
+        global::set_text_map_propagator(opentelemetry_datadog::DatadogPropagator::default());
         let mut trace_cfg = trace::Config::default();
-        trace_cfg.sampler = Box::new(AgentBasedSampler);
+        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
         trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
         let provider = new_pipeline()
@@ -186,7 +185,7 @@ async fn main() -> anyhow::Result<()> {
             .with_trace_config(trace_cfg)
             //.with_http_client(reqwest::Client::new())
             .with_agent_endpoint(&otlp_endpoint) // TODO: do we need to configure HTTP client?
-            .install_simple()
+            .install_batch()
             .expect("Failed to build provider"); // TODO: use batch exporter later
         global::set_tracer_provider(provider.clone());
         let scope = InstrumentationScope::builder(filter_name.clone())
@@ -325,7 +324,7 @@ mod tests {
 
     fn build_provider() -> SdkTracerProvider {
         let mut trace_cfg = trace::Config::default();
-        trace_cfg.sampler = Box::new(AgentBasedSampler);
+        trace_cfg.sampler = Box::new(Sampler::AlwaysOn);
         trace_cfg.id_generator = Box::new(RandomIdGenerator::default());
 
         let provider = new_pipeline()

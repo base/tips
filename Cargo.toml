@@ -86,3 +86,4 @@ tracing-opentelemetry = "0.32.0"
 reqwest = { version = "0.12", features = ["json"] }
 opentelemetry-datadog = { version = "0.19.0", features = ["reqwest-blocking-client", "reqwest-client"] }
 opentelemetry-semantic-conventions = { version = "0.31.0" }
+opentelemetry-appender-tracing = "0.31.1"
