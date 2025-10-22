@@ -6,7 +6,6 @@ use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use reth_optimism_cli::{Cli, chainspec::OpChainSpecParser};
 use reth_optimism_node::OpNode;
-use reth_optimism_node::args::RollupArgs;
 use std::fs;
 use std::net::IpAddr;
 use tips_common::ValidationData;
@@ -64,8 +63,7 @@ struct Config {
     send_transaction_default_lifetime_seconds: u64,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let config = Config::parse();
@@ -99,46 +97,43 @@ async fn main() -> anyhow::Result<()> {
         mempool_url = %config.mempool_url
     );
 
-    let provider: RootProvider<Optimism> = ProviderBuilder::new()
-        .disable_recommended_fillers()
-        .network::<Optimism>()
-        .connect_http(config.mempool_url);
-
-    let client_config = load_kafka_config_from_file(&config.ingress_kafka_properties)?;
-
-    let queue_producer: FutureProducer = client_config.create()?;
-
-    let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
-
-    // Create mpsc channel for communication between service and exex to forward txs to validate
-    let (tx_sender, tx_receiver) = mpsc::unbounded_channel::<ValidationData>();
-
-    let service = IngressService::new(
-        provider,
-        config.dual_write_mempool,
-        queue,
-        config.send_transaction_default_lifetime_seconds,
-        tx_sender,
-    );
-    let bind_addr = format!("{}:{}", config.address, config.port);
-
-    let server = Server::builder().build(&bind_addr).await?;
-    let addr = server.local_addr()?;
-    let server_handle = server.start(service.into_rpc());
-
-    info!(
-        message = "Ingress RPC server started",
-        address = %addr
-    );
-
-    let args = vec!["tips-ingress-rpc", "node"];
-    Cli::<OpChainSpecParser, Config>::try_parse_from(args)?
+    let args = vec!["tips-ingress-rpc", "node", "--chain", "base-sepolia", "-v"];
+    Cli::<OpChainSpecParser, ()>::try_parse_from(args)?
         .run(|builder, _| async move {
+            let provider: RootProvider<Optimism> = ProviderBuilder::new()
+                .disable_recommended_fillers()
+                .network::<Optimism>()
+                .connect_http(config.mempool_url.clone());
+
+            let client_config = load_kafka_config_from_file(&config.ingress_kafka_properties)
+                .expect("Failed to load kafka config");
+
+            let queue_producer: FutureProducer = client_config.create()?;
+
+            let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic.clone());
+
+            // Create mpsc channel for communication between service and exex to forward txs to validate
+            let (tx_sender, tx_receiver) = mpsc::unbounded_channel::<ValidationData>();
+
+            let service = IngressService::new(
+                provider,
+                config.dual_write_mempool,
+                queue,
+                config.send_transaction_default_lifetime_seconds,
+                tx_sender,
+            );
+            let bind_addr = format!("{}:{}", config.address, config.port);
+
+            let server = Server::builder().build(&bind_addr).await?;
+            let addr = server.local_addr()?;
+            let server_handle = server.start(service.into_rpc());
+
+            info!(
+                message = "Ingress RPC server started",
+                address = %addr
+            );
             let exex_handle = builder
-                .node(OpNode::new(RollupArgs {
-                    disable_txpool_gossip: true,
-                    ..Default::default()
-                }))
+                .node(OpNode::default())
                 .install_exex("tips-rpc-exex", move |ctx| async move {
                     Ok(RpcExEx::new(ctx, tx_receiver).run())
                 })
