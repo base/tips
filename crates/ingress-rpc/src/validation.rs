@@ -2,6 +2,7 @@ use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
+use alloy_rpc_types_mev::EthSendBundle;
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
@@ -9,7 +10,11 @@ use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::warn;
+
+// TODO: make this configurable
+const MAX_BUNDLE_GAS: u64 = 30_000_000;
 
 /// Account info for a given address
 pub struct AccountInfo {
@@ -155,6 +160,37 @@ pub async fn validate_tx<T: Transaction>(
         )
         .into_rpc_err());
     }
+    Ok(())
+}
+
+/// Helper function to validate propeties of a bundle. A bundle is valid if it satisfies the following criteria:
+/// - The bundle's max_timestamp is not more than 1 hour in the future
+/// - The bundle's gas limit is not greater than the maximum allowed gas limit
+pub async fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()> {
+    // Don't allow bundles to be submitted over 1 hour into the future
+    // TODO: make the window configurable
+    let valid_timestamp_window = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+        + Duration::from_secs(3600).as_secs();
+    if let Some(max_timestamp) = bundle.max_timestamp {
+        if max_timestamp > valid_timestamp_window {
+            return Err(EthApiError::InvalidParams(
+                "Bundle cannot be more than 1 hour in the future".into(),
+            )
+            .into_rpc_err());
+        }
+    }
+
+    // Check max gas limit for the entire bundle
+    if bundle_gas > MAX_BUNDLE_GAS {
+        return Err(EthApiError::InvalidParams(format!(
+            "Bundle gas limit {bundle_gas} exceeds maximum allowed {MAX_BUNDLE_GAS}"
+        ))
+        .into_rpc_err());
+    }
+
     Ok(())
 }
 

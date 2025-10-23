@@ -10,14 +10,11 @@ use jsonrpsee::{
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
-
-// TODO: make this configurable
-const MAX_BUNDLE_GAS: u64 = 30_000_000;
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -63,43 +60,7 @@ where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
-        if bundle.txs.is_empty() {
-            return Err(
-                EthApiError::InvalidParams("Bundle cannot have empty transactions".into())
-                    .into_rpc_err(),
-            );
-        }
-
-        // Don't allow bundles to be submitted over 1 hour into the future
-        // TODO: make the window configurable
-        let valid_timestamp_window = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            + Duration::from_secs(3600).as_secs();
-        if let Some(max_timestamp) = bundle.max_timestamp {
-            if max_timestamp > valid_timestamp_window {
-                return Err(EthApiError::InvalidParams(
-                    "Bundle cannot be more than 1 hour in the future".into(),
-                )
-                .into_rpc_err());
-            }
-        }
-
-        // Decode and validate all transactions
-        let mut total_gas = 0u64;
-        for tx_data in &bundle.txs {
-            let transaction = self.validate_tx(tx_data).await?;
-            total_gas = total_gas.saturating_add(transaction.gas_limit());
-        }
-
-        // Check max gas limit for the entire bundle
-        if total_gas > MAX_BUNDLE_GAS {
-            return Err(EthApiError::InvalidParams(format!(
-                "Bundle gas limit {total_gas} exceeds maximum allowed {MAX_BUNDLE_GAS}"
-            ))
-            .into_rpc_err());
-        }
+        self.validate_bundle(&bundle).await?;
 
         // Queue the bundle
         let bundle_hash = bundle.bundle_hash();
@@ -112,7 +73,6 @@ where
             message = "queued bundle",
             bundle_hash = %bundle_hash,
             tx_count = bundle.txs.len(),
-            total_gas = total_gas,
         );
 
         Ok(EthBundleHash {
@@ -202,5 +162,22 @@ where
         validate_tx(account, &transaction, data, &mut l1_block_info).await?;
 
         Ok(transaction)
+    }
+
+    async fn validate_bundle(&self, bundle: &EthSendBundle) -> RpcResult<()> {
+        if bundle.txs.is_empty() {
+            return Err(
+                EthApiError::InvalidParams("Bundle cannot have empty transactions".into())
+                    .into_rpc_err(),
+            );
+        }
+
+        let mut total_gas = 0u64;
+        for tx_data in &bundle.txs {
+            let transaction = self.validate_tx(tx_data).await?;
+            total_gas = total_gas.saturating_add(transaction.gas_limit());
+        }
+
+        validate_bundle(bundle, total_gas).await
     }
 }
