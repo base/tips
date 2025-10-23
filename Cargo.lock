@@ -6932,6 +6932,7 @@ dependencies = [
  "alloy-consensus",
  "alloy-primitives",
  "alloy-provider",
+ "alloy-serde",
  "alloy-signer-local",
  "anyhow",
  "async-trait",
