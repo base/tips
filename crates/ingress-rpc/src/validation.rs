@@ -198,6 +198,14 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64) -> RpcResult<()> {
         );
     }
 
+    // Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
+    if !bundle.dropping_tx_hashes.is_empty() {
+        return Err(EthApiError::InvalidParams(
+            "Partial transaction dropping is not supported".into(),
+        )
+        .into_rpc_err());
+    }
+
     Ok(())
 }
 
@@ -616,5 +624,21 @@ mod tests {
             let error_message = format!("{e:?}");
             assert!(error_message.contains("Bundle can only contain 3 transactions"));
         }
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_partial_transaction_dropping_not_supported() {
+        let bundle = EthSendBundle {
+            txs: vec![],
+            dropping_tx_hashes: vec![B256::random()],
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(
+                EthApiError::InvalidParams("Partial transaction dropping is not supported".into())
+                    .into_rpc_err()
+            )
+        );
     }
 }
