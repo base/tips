@@ -294,10 +294,19 @@ impl BundleDatastore for PostgresDatastore {
                 sqlx::query!(
                     r#"
                     UPDATE bundles
-                    SET bundle_state = $1, updated_at = NOW(), state_changed_at = NOW()
-                    WHERE id = $2
+                    SET bundle_state = $1, senders = $2, minimum_base_fee = $3, txn_hashes = $4,
+                        dropping_tx_hashes = $5, block_number = $6, min_timestamp = $7,
+                        max_timestamp = $8, updated_at = NOW(), state_changed_at = NOW()
+                    WHERE id = $9
                     "#,
                     BundleState::Ready as BundleState,
+                    &senders,
+                    minimum_base_fee,
+                    &txn_hashes,
+                    &dropping_tx_hashes,
+                    bundle.block_number as i64,
+                    bundle.min_timestamp.map(|t| t as i64),
+                    bundle.max_timestamp.map(|t| t as i64),
                     existing_bundle.id
                 )
                 .execute(&self.pool)
