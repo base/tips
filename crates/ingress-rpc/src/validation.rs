@@ -190,6 +190,14 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64) -> RpcResult<()> {
         );
     }
 
+    // Can only provide 3 transactions at once
+    if bundle.txs.len() > 3 {
+        return Err(
+            EthApiError::InvalidParams("Bundle can only contain 3 transactions".into())
+                .into_rpc_err(),
+        );
+    }
+
     Ok(())
 }
 
@@ -559,6 +567,54 @@ mod tests {
         if let Err(e) = result {
             let error_message = format!("{e:?}");
             assert!(error_message.contains("Bundle gas limit exceeds maximum allowed"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_too_many_transactions() {
+        let signer = PrivateKeySigner::random();
+        let mut encoded_txs = vec![];
+
+        let gas = 4_000_000;
+        let mut total_gas = 0u64;
+        for _ in 0..4 {
+            let mut tx = TxEip1559 {
+                chain_id: 1,
+                nonce: 0,
+                gas_limit: gas,
+                max_fee_per_gas: 200000u128,
+                max_priority_fee_per_gas: 100000u128,
+                to: Address::random().into(),
+                value: U256::from(1000000u128),
+                access_list: Default::default(),
+                input: bytes!("").clone(),
+            };
+            total_gas = total_gas.saturating_add(gas);
+
+            let signature = signer.sign_transaction_sync(&mut tx).unwrap();
+            let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
+
+            // Encode the transaction
+            let mut encoded = vec![];
+            envelope.encode_2718(&mut encoded);
+            encoded_txs.push(Bytes::from(encoded));
+        }
+
+        let bundle = EthSendBundle {
+            txs: encoded_txs,
+            block_number: 0,
+            min_timestamp: None,
+            max_timestamp: None,
+            reverting_tx_hashes: vec![],
+            ..Default::default()
+        };
+
+        // Test should fail due to exceeding gas limit
+        let result = validate_bundle(&bundle, total_gas);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let error_message = format!("{e:?}");
+            assert!(error_message.contains("Bundle can only contain 3 transactions"));
         }
     }
 }
