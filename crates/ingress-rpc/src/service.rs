@@ -1,5 +1,4 @@
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
-use alloy_consensus::transaction::SignerRecoverable;
+use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use alloy_rpc_types_mev::{EthBundleHash, EthCancelBundle, EthSendBundle};
@@ -10,10 +9,14 @@ use jsonrpsee::{
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_tx};
+
+// TODO: make this configurable
+const MAX_BUNDLE_GAS: u64 = 30_000_000;
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -58,12 +61,80 @@ impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
-    async fn send_bundle(&self, _bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
-        warn!(
-            message = "TODO: implement send_bundle",
-            method = "send_bundle"
+    async fn send_bundle(&self, bundle: EthSendBundle) -> RpcResult<EthBundleHash> {
+        if bundle.txs.is_empty() {
+            return Err(
+                EthApiError::InvalidParams("Bundle cannot have empty transactions".into())
+                    .into_rpc_err(),
+            );
+        }
+
+        // Don't allow bundles to be submitted over 1 hour into the future
+        // TODO: make the window configurable
+        let valid_timestamp_window = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            + Duration::from_secs(3600).as_secs();
+        if let Some(max_timestamp) = bundle.max_timestamp {
+            if max_timestamp > valid_timestamp_window {
+                return Err(EthApiError::InvalidParams(
+                    "Bundle cannot be more than 1 hour in the future".into(),
+                )
+                .into_rpc_err());
+            }
+        }
+
+        // Decode and validate all transactions
+        let mut decoded_txs = Vec::new();
+        let mut total_gas = 0u64;
+        for tx_data in &bundle.txs {
+            if tx_data.is_empty() {
+                return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
+            }
+
+            let envelope = OpTxEnvelope::decode_2718_exact(tx_data.iter().as_slice())
+                .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
+
+            let transaction = envelope
+                .clone()
+                .try_into_recovered()
+                .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
+
+            // Add gas limit to total
+            total_gas = total_gas.saturating_add(transaction.gas_limit());
+
+            decoded_txs.push(transaction);
+        }
+
+        // Check max gas limit for the entire bundle
+        if total_gas > MAX_BUNDLE_GAS {
+            return Err(EthApiError::InvalidParams(format!(
+                "Bundle gas limit {total_gas} exceeds maximum allowed {MAX_BUNDLE_GAS}"
+            ))
+            .into_rpc_err());
+        }
+
+        // For now, we'll use the first transaction's signer as the bundle sender
+        // In a real implementation, you might want different logic here
+        let sender = decoded_txs[0].signer();
+
+        // Queue the bundle
+        if let Err(e) = self.queue.publish(&bundle, sender).await {
+            warn!(message = "Failed to publish bundle to queue", sender = %sender, error = %e);
+            return Err(EthApiError::InvalidParams("Failed to queue bundle".into()).into_rpc_err());
+        }
+
+        info!(
+            message = "queued bundle",
+            tx_count = bundle.txs.len(),
+            total_gas = total_gas,
+            sender = %sender
         );
-        todo!("implement send_bundle")
+
+        Ok(EthBundleHash {
+            bundle_hash: bundle.bundle_hash(),
+        })
     }
 
     async fn cancel_bundle(&self, _request: EthCancelBundle) -> RpcResult<()> {
