@@ -166,6 +166,7 @@ pub async fn validate_tx<T: Transaction>(
 /// - The bundle's max_timestamp is not more than 1 hour in the future
 /// - The bundle's gas limit is not greater than the maximum allowed gas limit
 /// - The bundle can only contain 3 transactions at once
+/// - Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
 pub fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()> {
     // Don't allow bundles to be submitted over 1 hour into the future
     // TODO: make the window configurable
@@ -197,6 +198,14 @@ pub fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()>
             EthApiError::InvalidParams("Bundle can only contain 3 transactions".into())
                 .into_rpc_err(),
         );
+    }
+
+    // Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
+    if !bundle.dropping_tx_hashes.is_empty() {
+        return Err(EthApiError::InvalidParams(
+            "Partial transaction dropping is not supported".into(),
+        )
+        .into_rpc_err());
     }
 
     Ok(())
@@ -617,5 +626,21 @@ mod tests {
             let error_message = format!("{e:?}");
             assert!(error_message.contains("Bundle can only contain 3 transactions"));
         }
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_partial_transaction_dropping_not_supported() {
+        let bundle = EthSendBundle {
+            txs: vec![],
+            dropping_tx_hashes: vec![B256::random()],
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(
+                EthApiError::InvalidParams("Partial transaction dropping is not supported".into())
+                    .into_rpc_err()
+            )
+        );
     }
 }
