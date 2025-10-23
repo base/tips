@@ -271,7 +271,7 @@ impl BundleDatastore for PostgresDatastore {
             .map(|h| h.encode_hex_with_prefix())
             .collect();
 
-        // Check to see if there's an existing bundle with the same bundle hash. We can 
+        // Check to see if there's an existing bundle with the same bundle hash. We can
         // just check if `txs` is the exact same, since it will keccak in the same order.
         // In SQL, comparing arrays also compares the order of the elements.
         let existing_bundle = sqlx::query_as::<_, BundleRow>(
@@ -286,6 +286,7 @@ impl BundleDatastore for PostgresDatastore {
         .await?;
 
         if let Some(existing_bundle) = existing_bundle {
+            let bundle_id = existing_bundle.id;
             let bundle_with_metadata = self.row_to_bundle_with_metadata(existing_bundle)?;
 
             // make sure bundle hash is the same
@@ -307,13 +308,13 @@ impl BundleDatastore for PostgresDatastore {
                     bundle.block_number as i64,
                     bundle.min_timestamp.map(|t| t as i64),
                     bundle.max_timestamp.map(|t| t as i64),
-                    existing_bundle.id
+                    bundle_id.clone()
                 )
                 .execute(&self.pool)
                 .await?;
             }
 
-            return Ok(existing_bundle.id);
+            return Ok(bundle_id);
         }
 
         sqlx::query!(
