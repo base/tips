@@ -185,10 +185,10 @@ pub async fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResu
 
     // Check max gas limit for the entire bundle
     if bundle_gas > MAX_BUNDLE_GAS {
-        return Err(EthApiError::InvalidParams(format!(
-            "Bundle gas limit {bundle_gas} exceeds maximum allowed {MAX_BUNDLE_GAS}"
-        ))
-        .into_rpc_err());
+        return Err(
+            EthApiError::InvalidParams("Bundle gas limit exceeds maximum allowed".into())
+                .into_rpc_err(),
+        );
     }
 
     Ok(())
@@ -200,11 +200,14 @@ mod tests {
     use alloy_consensus::SignableTransaction;
     use alloy_consensus::{Transaction, constants::KECCAK_EMPTY, transaction::SignerRecoverable};
     use alloy_consensus::{TxEip1559, TxEip4844, TxEip7702};
+    use alloy_primitives::Bytes;
     use alloy_primitives::{bytes, keccak256};
     use alloy_signer_local::PrivateKeySigner;
     use op_alloy_consensus::OpTxEnvelope;
     use op_alloy_network::TxSignerSync;
+    use op_alloy_network::eip2718::Encodable2718;
     use revm_context_interface::transaction::{AccessList, AccessListItem};
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_account(nonce: u64, balance: U256) -> AccountInfo {
         AccountInfo {
@@ -487,5 +490,76 @@ mod tests {
             )
             .into_rpc_err())
         );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_max_timestamp_too_far_in_the_future() {
+        let current_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let too_far_in_the_future = current_time + 3601;
+        let bundle = EthSendBundle {
+            txs: vec![],
+            max_timestamp: Some(too_far_in_the_future),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0).await,
+            Err(EthApiError::InvalidParams(
+                "Bundle cannot be more than 1 hour in the future".into()
+            )
+            .into_rpc_err())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_max_gas_limit_too_high() {
+        let signer = PrivateKeySigner::random();
+        let mut encoded_txs = vec![];
+
+        // Create transactions that collectively exceed MAX_BUNDLE_GAS (30M)
+        // Each transaction uses 4M gas, so 8 transactions = 32M gas > 30M limit
+        let gas = 4_000_000;
+        let mut total_gas = 0u64;
+        for _ in 0..8 {
+            let mut tx = TxEip1559 {
+                chain_id: 1,
+                nonce: 0,
+                gas_limit: gas,
+                max_fee_per_gas: 200000u128,
+                max_priority_fee_per_gas: 100000u128,
+                to: Address::random().into(),
+                value: U256::from(1000000u128),
+                access_list: Default::default(),
+                input: bytes!("").clone(),
+            };
+            total_gas = total_gas.saturating_add(gas);
+
+            let signature = signer.sign_transaction_sync(&mut tx).unwrap();
+            let envelope = OpTxEnvelope::Eip1559(tx.into_signed(signature));
+
+            // Encode the transaction
+            let mut encoded = vec![];
+            envelope.encode_2718(&mut encoded);
+            encoded_txs.push(Bytes::from(encoded));
+        }
+
+        let bundle = EthSendBundle {
+            txs: encoded_txs,
+            block_number: 0,
+            min_timestamp: None,
+            max_timestamp: None,
+            reverting_tx_hashes: vec![],
+            ..Default::default()
+        };
+
+        // Test should fail due to exceeding gas limit
+        let result = validate_bundle(&bundle, total_gas).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            let error_message = format!("{e:?}");
+            assert!(error_message.contains("Bundle gas limit exceeds maximum allowed"));
+        }
     }
 }
