@@ -1,4 +1,4 @@
-use alloy_primitives::Address;
+use alloy_primitives::B256;
 use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::{Error, Result};
 use async_trait::async_trait;
@@ -10,7 +10,7 @@ use tracing::{error, info};
 /// A queue to buffer transactions
 #[async_trait]
 pub trait QueuePublisher: Send + Sync {
-    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()>;
+    async fn publish(&self, bundle: &EthSendBundle, bundle_hash: &B256) -> Result<()>;
 }
 
 /// A queue to buffer transactions
@@ -27,9 +27,9 @@ impl KafkaQueuePublisher {
     pub async fn enqueue_bundle(
         &self,
         bundle: &EthSendBundle,
-        sender: Address,
+        bundle_hash: &B256,
     ) -> Result<(), Error> {
-        let key = sender.to_string();
+        let key = bundle_hash.to_string();
         let payload = serde_json::to_vec(bundle)?;
 
         let enqueue = || async {
@@ -38,7 +38,7 @@ impl KafkaQueuePublisher {
             match self.producer.send(record, Duration::from_secs(5)).await {
                 Ok((partition, offset)) => {
                     info!(
-                        sender = %sender,
+                        bundle_hash = %bundle_hash,
                         partition = partition,
                         offset = offset,
                         topic = %self.topic,
@@ -48,7 +48,7 @@ impl KafkaQueuePublisher {
                 }
                 Err((err, _)) => {
                     error!(
-                        sender = %sender,
+                        bundle_hash = %bundle_hash,
                         error = %err,
                         topic = %self.topic,
                         "Failed to enqueue bundle"
@@ -74,8 +74,8 @@ impl KafkaQueuePublisher {
 
 #[async_trait]
 impl QueuePublisher for KafkaQueuePublisher {
-    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()> {
-        self.enqueue_bundle(bundle, sender).await
+    async fn publish(&self, bundle: &EthSendBundle, bundle_hash: &B256) -> Result<()> {
+        self.enqueue_bundle(bundle, bundle_hash).await
     }
 }
 
@@ -100,10 +100,10 @@ mod tests {
 
         let publisher = KafkaQueuePublisher::new(producer, "tips-ingress-rpc".to_string());
         let bundle = create_test_bundle();
-        let sender = Address::ZERO;
+        let bundle_hash = bundle.bundle_hash();
 
         let start = Instant::now();
-        let result = publisher.enqueue_bundle(&bundle, sender).await;
+        let result = publisher.enqueue_bundle(&bundle, &bundle_hash).await;
         let elapsed = start.elapsed();
 
         // the backoff tries at minimum 100ms, so verify we tried at least once

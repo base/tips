@@ -86,7 +86,6 @@ where
         }
 
         // Decode and validate all transactions
-        let mut decoded_txs = Vec::new();
         let mut total_gas = 0u64;
         for tx_data in &bundle.txs {
             if tx_data.is_empty() {
@@ -103,8 +102,6 @@ where
 
             // Add gas limit to total
             total_gas = total_gas.saturating_add(transaction.gas_limit());
-
-            decoded_txs.push(transaction);
         }
 
         // Check max gas limit for the entire bundle
@@ -115,21 +112,18 @@ where
             .into_rpc_err());
         }
 
-        // For now, we'll use the first transaction's signer as the bundle sender
-        // In a real implementation, you might want different logic here
-        let sender = decoded_txs[0].signer();
-
         // Queue the bundle
-        if let Err(e) = self.queue.publish(&bundle, sender).await {
-            warn!(message = "Failed to publish bundle to queue", sender = %sender, error = %e);
+        let bundle_hash = bundle.bundle_hash();
+        if let Err(e) = self.queue.publish(&bundle, &bundle_hash).await {
+            warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
             return Err(EthApiError::InvalidParams("Failed to queue bundle".into()).into_rpc_err());
         }
 
         info!(
             message = "queued bundle",
+            bundle_hash = %bundle_hash,
             tx_count = bundle.txs.len(),
             total_gas = total_gas,
-            sender = %sender
         );
 
         Ok(EthBundleHash {
@@ -181,9 +175,9 @@ where
         };
 
         // queue the bundle
-        let sender = transaction.signer();
-        if let Err(e) = self.queue.publish(&bundle, sender).await {
-            warn!(message = "Failed to publish Queue::enqueue_bundle", sender = %sender, error = %e);
+        let bundle_hash = bundle.bundle_hash();
+        if let Err(e) = self.queue.publish(&bundle, &bundle_hash).await {
+            warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
         }
 
         info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
