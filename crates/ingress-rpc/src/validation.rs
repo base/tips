@@ -13,8 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tips_core::Bundle;
 use tracing::warn;
 
-// TODO: make this configurable
-const MAX_BUNDLE_GAS: u64 = 30_000_000;
+const MAX_BUNDLE_GAS: u64 = 25_000_000;
 
 /// Account info for a given address
 pub struct AccountInfo {
@@ -518,8 +517,8 @@ mod tests {
         let signer = PrivateKeySigner::random();
         let mut encoded_txs = vec![];
 
-        // Create transactions that collectively exceed MAX_BUNDLE_GAS (30M)
-        // Each transaction uses 4M gas, so 8 transactions = 32M gas > 30M limit
+        // Create transactions that collectively exceed MAX_BUNDLE_GAS (25M)
+        // Each transaction uses 4M gas, so 8 transactions = 32M gas > 25M limit
         let gas = 4_000_000;
         let mut total_gas = 0u64;
         for _ in 0..8 {
