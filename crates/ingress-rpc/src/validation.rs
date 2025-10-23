@@ -166,7 +166,7 @@ pub async fn validate_tx<T: Transaction>(
 /// Helper function to validate propeties of a bundle. A bundle is valid if it satisfies the following criteria:
 /// - The bundle's max_timestamp is not more than 1 hour in the future
 /// - The bundle's gas limit is not greater than the maximum allowed gas limit
-pub async fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()> {
+pub fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()> {
     // Don't allow bundles to be submitted over 1 hour into the future
     // TODO: make the window configurable
     let valid_timestamp_window = SystemTime::now()
@@ -505,7 +505,7 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(
-            validate_bundle(&bundle, 0).await,
+            validate_bundle(&bundle, 0),
             Err(EthApiError::InvalidParams(
                 "Bundle cannot be more than 1 hour in the future".into()
             )
@@ -555,7 +555,7 @@ mod tests {
         };
 
         // Test should fail due to exceeding gas limit
-        let result = validate_bundle(&bundle, total_gas).await;
+        let result = validate_bundle(&bundle, total_gas);
         assert!(result.is_err());
         if let Err(e) = result {
             let error_message = format!("{e:?}");

@@ -178,6 +178,6 @@ where
             total_gas = total_gas.saturating_add(transaction.gas_limit());
         }
 
-        validate_bundle(bundle, total_gas).await
+        validate_bundle(bundle, total_gas)
     }
 }
