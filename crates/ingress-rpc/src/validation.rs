@@ -167,6 +167,7 @@ pub async fn validate_tx<T: Transaction>(
 /// - The bundle's gas limit is not greater than the maximum allowed gas limit
 /// - The bundle can only contain 3 transactions at once
 /// - Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
+/// - extra_fields must be empty
 pub fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()> {
     // Don't allow bundles to be submitted over 1 hour into the future
     // TODO: make the window configurable
@@ -208,6 +209,11 @@ pub fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResult<()>
         .into_rpc_err());
     }
 
+    // extra_fields must be empty
+    if !bundle.extra_fields.is_empty() {
+        return Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err());
+    }
+
     Ok(())
 }
 
@@ -219,11 +225,13 @@ mod tests {
     use alloy_consensus::{TxEip1559, TxEip4844, TxEip7702};
     use alloy_primitives::Bytes;
     use alloy_primitives::{bytes, keccak256};
+    use alloy_serde::OtherFields;
     use alloy_signer_local::PrivateKeySigner;
     use op_alloy_consensus::OpTxEnvelope;
     use op_alloy_network::TxSignerSync;
     use op_alloy_network::eip2718::Encodable2718;
     use revm_context_interface::transaction::{AccessList, AccessListItem};
+    use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_account(nonce: u64, balance: U256) -> AccountInfo {
@@ -641,6 +649,20 @@ mod tests {
                 EthApiError::InvalidParams("Partial transaction dropping is not supported".into())
                     .into_rpc_err()
             )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_extra_fields_not_empty() {
+        let mut extra_fields = OtherFields::new(BTreeMap::new());
+        let _ = extra_fields.insert_value("test".to_string(), "test".to_string());
+        let bundle = EthSendBundle {
+            extra_fields,
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err())
         );
     }
 }
