@@ -100,7 +100,12 @@ where
                 .try_into_recovered()
                 .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-            // Add gas limit to total
+            let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
+            let account = self
+                .provider
+                .fetch_account_info(transaction.signer())
+                .await?;
+            validate_tx(account, &transaction, tx_data, &mut l1_block_info).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
         }
 
