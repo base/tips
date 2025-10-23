@@ -1,6 +1,6 @@
 use alloy_primitives::B256;
 use alloy_rpc_types_mev::EthSendBundle;
-use anyhow::{Error, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use backon::{ExponentialBuilder, Retryable};
 use rdkafka::producer::{FutureProducer, FutureRecord};
@@ -23,12 +23,11 @@ impl KafkaQueuePublisher {
     pub fn new(producer: FutureProducer, topic: String) -> Self {
         Self { producer, topic }
     }
+}
 
-    pub async fn enqueue_bundle(
-        &self,
-        bundle: &EthSendBundle,
-        bundle_hash: &B256,
-    ) -> Result<(), Error> {
+#[async_trait]
+impl QueuePublisher for KafkaQueuePublisher {
+    async fn publish(&self, bundle: &EthSendBundle, bundle_hash: &B256) -> Result<()> {
         let key = bundle_hash.to_string();
         let payload = serde_json::to_vec(bundle)?;
 
@@ -72,13 +71,6 @@ impl KafkaQueuePublisher {
     }
 }
 
-#[async_trait]
-impl QueuePublisher for KafkaQueuePublisher {
-    async fn publish(&self, bundle: &EthSendBundle, bundle_hash: &B256) -> Result<()> {
-        self.enqueue_bundle(bundle, bundle_hash).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,7 +95,7 @@ mod tests {
         let bundle_hash = bundle.bundle_hash();
 
         let start = Instant::now();
-        let result = publisher.enqueue_bundle(&bundle, &bundle_hash).await;
+        let result = publisher.publish(&bundle, &bundle_hash).await;
         let elapsed = start.elapsed();
 
         // the backoff tries at minimum 100ms, so verify we tried at least once
