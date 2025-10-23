@@ -174,13 +174,13 @@ pub async fn validate_bundle(bundle: &EthSendBundle, bundle_gas: u64) -> RpcResu
         .unwrap()
         .as_secs()
         + Duration::from_secs(3600).as_secs();
-    if let Some(max_timestamp) = bundle.max_timestamp {
-        if max_timestamp > valid_timestamp_window {
-            return Err(EthApiError::InvalidParams(
-                "Bundle cannot be more than 1 hour in the future".into(),
-            )
-            .into_rpc_err());
-        }
+    if let Some(max_timestamp) = bundle.max_timestamp
+        && max_timestamp > valid_timestamp_window
+    {
+        return Err(EthApiError::InvalidParams(
+            "Bundle cannot be more than 1 hour in the future".into(),
+        )
+        .into_rpc_err());
     }
 
     // Check max gas limit for the entire bundle
