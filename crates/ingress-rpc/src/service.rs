@@ -1,3 +1,4 @@
+use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
@@ -88,24 +89,7 @@ where
         // Decode and validate all transactions
         let mut total_gas = 0u64;
         for tx_data in &bundle.txs {
-            if tx_data.is_empty() {
-                return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
-            }
-
-            let envelope = OpTxEnvelope::decode_2718_exact(tx_data.iter().as_slice())
-                .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-            let transaction = envelope
-                .clone()
-                .try_into_recovered()
-                .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-            let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
-            let account = self
-                .provider
-                .fetch_account_info(transaction.signer())
-                .await?;
-            validate_tx(account, &transaction, tx_data, &mut l1_block_info).await?;
+            let transaction = self.validate_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
         }
 
@@ -145,24 +129,7 @@ where
     }
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
-        if data.is_empty() {
-            return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
-        }
-
-        let envelope = OpTxEnvelope::decode_2718_exact(data.iter().as_slice())
-            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-        let transaction = envelope
-            .clone()
-            .try_into_recovered()
-            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
-        let account = self
-            .provider
-            .fetch_account_info(transaction.signer())
-            .await?;
-        validate_tx(account, &transaction, &data, &mut l1_block_info).await?;
+        let transaction = self.validate_tx(&data).await?;
 
         let expiry_timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -207,5 +174,33 @@ where
         }
 
         Ok(transaction.tx_hash())
+    }
+}
+
+impl<Queue> IngressService<Queue>
+where
+    Queue: QueuePublisher + Sync + Send + 'static,
+{
+    async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
+        if data.is_empty() {
+            return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
+        }
+
+        let envelope = OpTxEnvelope::decode_2718_exact(data.iter().as_slice())
+            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
+
+        let transaction = envelope
+            .clone()
+            .try_into_recovered()
+            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
+
+        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
+        let account = self
+            .provider
+            .fetch_account_info(transaction.signer())
+            .await?;
+        validate_tx(account, &transaction, data, &mut l1_block_info).await?;
+
+        Ok(transaction)
     }
 }
