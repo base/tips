@@ -211,6 +211,16 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64) -> RpcResult<()> {
         return Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err());
     }
 
+    // refunds are not initially supported
+    if bundle.refund_percent.is_some()
+        || bundle.refund_recipient.is_some()
+        || !bundle.refund_tx_hashes.is_empty()
+    {
+        return Err(
+            EthApiError::InvalidParams("refunds are not initially supported".into()).into_rpc_err(),
+        );
+    }
+
     Ok(())
 }
 
@@ -660,6 +670,51 @@ mod tests {
         assert_eq!(
             validate_bundle(&bundle, 0),
             Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_refund_percent_not_empty() {
+        let bundle = EthSendBundle {
+            refund_percent: Some(100),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(
+                EthApiError::InvalidParams("refunds are not initially supported".into())
+                    .into_rpc_err()
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_refund_recipient_not_empty() {
+        let bundle = EthSendBundle {
+            refund_recipient: Some(Address::random()),
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(
+                EthApiError::InvalidParams("refunds are not initially supported".into())
+                    .into_rpc_err()
+            )
+        );
+    }
+
+    #[tokio::test]
+    async fn test_err_bundle_refund_tx_hashes_not_empty() {
+        let bundle = EthSendBundle {
+            refund_tx_hashes: vec![B256::random()],
+            ..Default::default()
+        };
+        assert_eq!(
+            validate_bundle(&bundle, 0),
+            Err(
+                EthApiError::InvalidParams("refunds are not initially supported".into())
+                    .into_rpc_err()
+            )
         );
     }
 }
