@@ -31,6 +31,7 @@ alloy-rpc-types = { version = "1.0.35", default-features = false }
 alloy-consensus = { version = "1.0.35" }
 alloy-provider = { version = "1.0.35" }
 alloy-rpc-types-mev = "1.0.35"
+alloy-serde = "1.0.41"
 
 # op-alloy
 op-alloy-rpc-types = { version = "0.20.0", default-features = false }
