@@ -276,7 +276,9 @@ impl BundleDatastore for PostgresDatastore {
         // In SQL, comparing arrays also compares the order of the elements.
         let existing_bundle = sqlx::query_as::<_, BundleRow>(
             r#"
-            SELECT id FROM bundles
+            SELECT id, senders, minimum_base_fee, txn_hashes, txs, reverting_tx_hashes,
+                   dropping_tx_hashes, block_number, min_timestamp, max_timestamp, bundle_state, state_changed_at
+            FROM bundles
             WHERE txs = $1
             LIMIT 1
             "#,
@@ -289,10 +291,36 @@ impl BundleDatastore for PostgresDatastore {
             let bundle_id = existing_bundle.id;
             let bundle_with_metadata = self.row_to_bundle_with_metadata(existing_bundle)?;
 
-            // make sure bundle hash is the same
+            // make sure bundle hash is the same. the assumption is that since the bundle_hash is the same,
+            // all fields related to txs remain unchanged (i.e., txs, txn_hashes, reverting_tx_hashes, dropping_tx_hashes)
             if bundle_with_metadata.bundle.bundle_hash() == bundle.bundle_hash() {
-                // combine the bundles. the assumption is that since the bundle_hash is the same,
-                // all fields related to txs remain unchanged (i.e., txs, txn_hashes, reverting_tx_hashes, dropping_tx_hashes)
+                let existing_bundle = &bundle_with_metadata.bundle;
+
+                // use the higher minimum_base_fee if available
+                let combined_minimum_base_fee =
+                    Some(bundle_with_metadata.min_base_fee.max(minimum_base_fee));
+
+                // use the more restrictive block_number (higher value)
+                let combined_block_number = existing_bundle.block_number.max(bundle.block_number);
+
+                // use the more restrictive min_timestamp (higher value if both specified)
+                let combined_min_timestamp =
+                    match (existing_bundle.min_timestamp, bundle.min_timestamp) {
+                        (Some(existing), Some(new)) => Some(existing.max(new)),
+                        (Some(existing), None) => Some(existing),
+                        (None, Some(new)) => Some(new),
+                        (None, None) => None,
+                    };
+
+                // use the more restrictive max_timestamp (lower value if both specified)
+                let combined_max_timestamp =
+                    match (existing_bundle.max_timestamp, bundle.max_timestamp) {
+                        (Some(existing), Some(new)) => Some(existing.min(new)),
+                        (Some(existing), None) => Some(existing),
+                        (None, Some(new)) => Some(new),
+                        (None, None) => None,
+                    };
+
                 sqlx::query!(
                     r#"
                     UPDATE bundles
@@ -302,10 +330,10 @@ impl BundleDatastore for PostgresDatastore {
                     WHERE id = $6
                     "#,
                     BundleState::Ready as BundleState,
-                    minimum_base_fee,
-                    bundle.block_number as i64,
-                    bundle.min_timestamp.map(|t| t as i64),
-                    bundle.max_timestamp.map(|t| t as i64),
+                    combined_minimum_base_fee,
+                    combined_block_number as i64,
+                    combined_min_timestamp.map(|t| t as i64),
+                    combined_max_timestamp.map(|t| t as i64),
                     bundle_id.clone()
                 )
                 .execute(&self.pool)

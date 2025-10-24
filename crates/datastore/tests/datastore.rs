@@ -552,3 +552,34 @@ async fn remove_old_included_bundles() -> eyre::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn insert_bundle_with_same_bundle_hash() -> eyre::Result<()> {
+    let harness = setup_datastore().await?;
+
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
+    let retrieved_bundle1 = harness.data_store.get_bundle(id1).await.unwrap().unwrap();
+
+    let bundle2 = create_test_bundle(100, Some(1500), Some(1800))?;
+    let id2 = harness.data_store.insert_bundle(bundle2).await.unwrap();
+    let retrieved_bundle2 = harness.data_store.get_bundle(id2).await.unwrap().unwrap();
+
+    // verify the UUID and bundle hash are the same
+    assert_eq!(id1, id2);
+    assert_eq!(
+        retrieved_bundle1.bundle.bundle_hash(),
+        retrieved_bundle2.bundle.bundle_hash()
+    );
+
+    // verify properties
+    assert_eq!(retrieved_bundle1.bundle.txs, retrieved_bundle2.bundle.txs);
+    assert_eq!(
+        retrieved_bundle1.bundle.block_number,
+        retrieved_bundle2.bundle.block_number
+    );
+    assert_eq!(retrieved_bundle2.bundle.min_timestamp, Some(1500));
+    assert_eq!(retrieved_bundle2.bundle.max_timestamp, Some(1800));
+
+    Ok(())
+}
