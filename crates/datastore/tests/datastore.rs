@@ -1,5 +1,8 @@
-use alloy_primitives::{Address, Bytes, TxHash, address, b256, bytes};
+use alloy_consensus::{SignableTransaction, TxEip1559};
+use alloy_primitives::{Address, Bytes, TxHash, U256, address, b256, bytes};
 use alloy_rpc_types_mev::EthSendBundle;
+use alloy_signer_local::PrivateKeySigner;
+use op_alloy_network::{TxSignerSync, eip2718::Encodable2718};
 use sqlx::PgPool;
 use sqlx::types::chrono::Utc;
 use testcontainers_modules::{
@@ -58,9 +61,10 @@ fn create_test_bundle(
     block_number: u64,
     min_timestamp: Option<u64>,
     max_timestamp: Option<u64>,
+    tx: Bytes,
 ) -> eyre::Result<EthSendBundle> {
     Ok(EthSendBundle {
-        txs: vec![TX_DATA],
+        txs: vec![tx],
         block_number,
         min_timestamp,
         max_timestamp,
@@ -72,6 +76,26 @@ fn create_test_bundle(
         refund_tx_hashes: vec![],
         extra_fields: Default::default(),
     })
+}
+
+fn generate_tx() -> Bytes {
+    let signer = PrivateKeySigner::random();
+    let mut tx = TxEip1559 {
+        chain_id: 1,
+        nonce: 0,
+        gas_limit: 21000,
+        max_fee_per_gas: 20000000000u128,
+        max_priority_fee_per_gas: 1000000000u128,
+        to: Address::ZERO.into(),
+        value: U256::from(10000000000000u128),
+        access_list: Default::default(),
+        input: bytes!("").clone(),
+    };
+
+    let signature = signer.sign_transaction_sync(&mut tx).unwrap();
+    let encoded_tx = tx.into_signed(signature).encoded_2718();
+
+    Bytes::from(encoded_tx)
 }
 
 #[tokio::test]
@@ -143,10 +167,10 @@ async fn insert_and_get() -> eyre::Result<()> {
 async fn select_bundles_comprehensive() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
-    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
-    let bundle3 = create_test_bundle(300, None, None)?; // valid for all times
-    let bundle4 = create_test_bundle(0, Some(500), Some(3000))?; // valid for all blocks
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000), generate_tx())?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500), generate_tx())?;
+    let bundle3 = create_test_bundle(300, None, None, generate_tx())?; // valid for all times
+    let bundle4 = create_test_bundle(0, Some(500), Some(3000), generate_tx())?; // valid for all blocks
 
     harness
         .data_store
@@ -240,8 +264,8 @@ async fn select_bundles_comprehensive() -> eyre::Result<()> {
 async fn cancel_bundle_workflow() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
-    let bundle2 = create_test_bundle(200, Some(1500), Some(2500))?;
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000), generate_tx())?;
+    let bundle2 = create_test_bundle(200, Some(1500), Some(2500), generate_tx())?;
 
     let bundle1_id = harness
         .data_store
@@ -337,8 +361,8 @@ async fn find_bundle_by_transaction_hash() -> eyre::Result<()> {
 async fn remove_bundles() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, None, None)?;
-    let bundle2 = create_test_bundle(200, None, None)?;
+    let bundle1 = create_test_bundle(100, None, None, generate_tx())?;
+    let bundle2 = create_test_bundle(200, None, None, generate_tx())?;
 
     let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
     let id2 = harness.data_store.insert_bundle(bundle2).await.unwrap();
@@ -363,8 +387,8 @@ async fn remove_bundles() -> eyre::Result<()> {
 async fn update_bundles_state() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, None, None)?;
-    let bundle2 = create_test_bundle(200, None, None)?;
+    let bundle1 = create_test_bundle(100, None, None, generate_tx())?;
+    let bundle2 = create_test_bundle(200, None, None, generate_tx())?;
 
     let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
     let id2 = harness.data_store.insert_bundle(bundle2).await.unwrap();
@@ -450,8 +474,8 @@ async fn get_stats() -> eyre::Result<()> {
     assert_eq!(stats.total_bundles, 0);
     assert_eq!(stats.total_transactions, 0);
 
-    let bundle1 = create_test_bundle(100, None, None)?;
-    let bundle2 = create_test_bundle(200, None, None)?;
+    let bundle1 = create_test_bundle(100, None, None, generate_tx())?;
+    let bundle2 = create_test_bundle(200, None, None, generate_tx())?;
 
     let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
     harness.data_store.insert_bundle(bundle2).await.unwrap();
@@ -478,9 +502,9 @@ async fn get_stats() -> eyre::Result<()> {
 async fn remove_timed_out_bundles() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let expired_bundle = create_test_bundle(100, None, Some(1000))?;
-    let valid_bundle = create_test_bundle(200, None, Some(2000))?;
-    let no_timestamp_bundle = create_test_bundle(300, None, None)?;
+    let expired_bundle = create_test_bundle(100, None, Some(1000), generate_tx())?;
+    let valid_bundle = create_test_bundle(200, None, Some(2000), generate_tx())?;
+    let no_timestamp_bundle = create_test_bundle(300, None, None, generate_tx())?;
 
     harness
         .data_store
@@ -519,8 +543,8 @@ async fn remove_timed_out_bundles() -> eyre::Result<()> {
 async fn remove_old_included_bundles() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, None, None)?;
-    let bundle2 = create_test_bundle(200, None, None)?;
+    let bundle1 = create_test_bundle(100, None, None, generate_tx())?;
+    let bundle2 = create_test_bundle(200, None, None, generate_tx())?;
 
     let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
     let id2 = harness.data_store.insert_bundle(bundle2).await.unwrap();
@@ -557,11 +581,14 @@ async fn remove_old_included_bundles() -> eyre::Result<()> {
 async fn insert_bundle_with_same_bundle_hash() -> eyre::Result<()> {
     let harness = setup_datastore().await?;
 
-    let bundle1 = create_test_bundle(100, Some(1000), Some(2000))?;
+    // we use the same tx here to replicate the scenario where two bundles have the same bundle hash
+    let tx = generate_tx();
+
+    let bundle1 = create_test_bundle(100, Some(1000), Some(2000), tx.clone())?;
     let id1 = harness.data_store.insert_bundle(bundle1).await.unwrap();
     let retrieved_bundle1 = harness.data_store.get_bundle(id1).await.unwrap().unwrap();
 
-    let bundle2 = create_test_bundle(100, Some(1500), Some(1800))?;
+    let bundle2 = create_test_bundle(100, Some(1500), Some(1800), tx)?;
     let id2 = harness.data_store.insert_bundle(bundle2).await.unwrap();
     let retrieved_bundle2 = harness.data_store.get_bundle(id2).await.unwrap().unwrap();
 

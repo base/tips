@@ -24,3 +24,6 @@ tracing.workspace = true
 [dev-dependencies]
 testcontainers.workspace = true
 testcontainers-modules.workspace = true
+alloy-consensus.workspace = true
+alloy-signer-local.workspace = true
+op-alloy-network.workspace = true
