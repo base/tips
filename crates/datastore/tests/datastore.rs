@@ -6,7 +6,8 @@ use testcontainers_modules::{
     postgres,
     testcontainers::{ContainerAsync, runners::AsyncRunner},
 };
-use tips_datastore::postgres::{BlockInfoUpdate, BundleFilter, BundleState};
+use tips_common::BundleState;
+use tips_datastore::postgres::{BlockInfoUpdate, BundleFilter};
 use tips_datastore::{BundleDatastore, PostgresDatastore};
 
 struct TestHarness {

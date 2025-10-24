@@ -14,12 +14,7 @@ use sqlx::{
 use tracing::info;
 use uuid::Uuid;
 
-#[derive(Debug, Clone, sqlx::Type)]
-#[sqlx(type_name = "bundle_state", rename_all = "PascalCase")]
-pub enum BundleState {
-    Ready,
-    IncludedByBuilder,
-}
+use tips_common::{BundleState, BundleWithMetadata};
 
 #[derive(sqlx::FromRow, Debug)]
 struct BundleRow {
@@ -83,17 +78,6 @@ impl BundleFilter {
         self.max_time_before = Some(timestamp);
         self
     }
-}
-
-/// Extended bundle data that includes the original bundle plus extracted metadata
-#[derive(Debug, Clone)]
-pub struct BundleWithMetadata {
-    pub bundle: EthSendBundle,
-    pub txn_hashes: Vec<TxHash>,
-    pub senders: Vec<Address>,
-    pub min_base_fee: i64,
-    pub state: BundleState,
-    pub state_changed_at: DateTime<Utc>,
 }
 
 /// Statistics about bundles and transactions grouped by state

@@ -20,6 +20,7 @@ alloy-provider.workspace = true
 op-alloy-consensus.workspace = true
 eyre.workspace = true
 tracing.workspace = true
+tips-common.workspace = true
 
 [dev-dependencies]
 testcontainers.workspace = true

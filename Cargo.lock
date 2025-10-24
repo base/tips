@@ -12492,6 +12492,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tips-common"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types-mev",
+ "sqlx",
+]
+
+[[package]]
 name = "tips-datastore"
 version = "0.1.0"
 dependencies = [
@@ -12506,6 +12515,7 @@ dependencies = [
  "sqlx",
  "testcontainers",
  "testcontainers-modules",
+ "tips-common",
  "tokio",
  "tracing",
  "uuid",
@@ -12577,6 +12587,7 @@ dependencies = [
  "rdkafka",
  "sqlx",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
  "tokio",
  "tracing",
