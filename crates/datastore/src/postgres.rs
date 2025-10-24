@@ -291,20 +291,18 @@ impl BundleDatastore for PostgresDatastore {
 
             // make sure bundle hash is the same
             if bundle_with_metadata.bundle.bundle_hash() == bundle.bundle_hash() {
-                // combine the bundles
+                // combine the bundles. the assumption is that since the bundle_hash is the same,
+                // all fields related to txs remain unchanged (i.e., txs, txn_hashes, reverting_tx_hashes, dropping_tx_hashes)
                 sqlx::query!(
                     r#"
                     UPDATE bundles
-                    SET bundle_state = $1, senders = $2, minimum_base_fee = $3, txn_hashes = $4,
-                        dropping_tx_hashes = $5, block_number = $6, min_timestamp = $7,
-                        max_timestamp = $8, updated_at = NOW(), state_changed_at = NOW()
-                    WHERE id = $9
+                    SET bundle_state = $1, minimum_base_fee = $2,
+                        block_number = $3, min_timestamp = $4,
+                        max_timestamp = $5, updated_at = NOW(), state_changed_at = NOW()
+                    WHERE id = $6
                     "#,
                     BundleState::Ready as BundleState,
-                    &senders,
                     minimum_base_fee,
-                    &txn_hashes,
-                    &dropping_tx_hashes,
                     bundle.block_number as i64,
                     bundle.min_timestamp.map(|t| t as i64),
                     bundle.max_timestamp.map(|t| t as i64),

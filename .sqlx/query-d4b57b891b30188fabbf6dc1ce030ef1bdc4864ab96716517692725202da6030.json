@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                    UPDATE bundles\n                    SET bundle_state = $1, minimum_base_fee = $2,\n                        block_number = $3, min_timestamp = $4,\n                        max_timestamp = $5, updated_at = NOW(), state_changed_at = NOW()\n                    WHERE id = $6\n                    ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "bundle_state",
+            "kind": {
+              "Enum": [
+                "Ready",
+                "IncludedByBuilder"
+              ]
+            }
+          }
+        },
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d4b57b891b30188fabbf6dc1ce030ef1bdc4864ab96716517692725202da6030"
+}
