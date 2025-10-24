@@ -234,7 +234,8 @@ pub fn validate_bundle(
     for tx_hash in &tx_hashes {
         if !bundle.reverting_tx_hashes.contains(tx_hash) {
             return Err(EthApiError::InvalidParams(
-                "Transaction hash not found in reverting_tx_hashes".into(),
+                "Revert protection is not supported. reverting_tx_hashes must include all hashes"
+                    .into(),
             )
             .into_rpc_err());
         }
