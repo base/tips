@@ -25,3 +25,4 @@ rdkafka.workspace = true
 serde_json.workspace = true
 backon.workspace = true
 uuid.workspace = true
+tips-common.workspace = true

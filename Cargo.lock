@@ -12495,8 +12495,14 @@ dependencies = [
 name = "tips-common"
 version = "0.1.0"
 dependencies = [
+ "alloy-consensus",
  "alloy-primitives",
+ "alloy-provider",
  "alloy-rpc-types-mev",
+ "anyhow",
+ "chrono",
+ "op-alloy-consensus",
+ "serde",
  "sqlx",
 ]
 
@@ -12544,6 +12550,7 @@ dependencies = [
  "reth-rpc-eth-types",
  "revm-context-interface",
  "serde_json",
+ "tips-common",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
@@ -12562,6 +12569,7 @@ dependencies = [
  "rdkafka",
  "serde_json",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
  "tokio",
  "tracing",
