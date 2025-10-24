@@ -8,7 +8,7 @@ End-to-end tests for the TIPS (Transaction Inclusion Protocol Service) system.
 - [just](https://github.com/casey/just) command runner: `brew install just`
 - Rust toolchain
 
-## Running Tests
+## Running All Tests
 
 From the repository root:
 
@@ -21,7 +21,7 @@ just start-all
 
 # 3. Run tests
 cd crates/e2e-tests
-cargo test
+cargo test -- --include-ignored
 ```
 
 ## Stopping Services
@@ -39,5 +39,5 @@ just stop-all
 ## Notes
 
 - Tests expect services running on `localhost:8080` (ingress-rpc)
-- Tests require a fully configured local node running via `just start-all`
+- Ignored tests require a fully configured local node running via `just start-all`
 
