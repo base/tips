@@ -12528,10 +12528,12 @@ name = "tips-e2e-tests"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus",
+ "alloy-network",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-rpc-types-mev",
+ "alloy-signer",
  "alloy-signer-local",
  "anyhow",
  "async-trait",

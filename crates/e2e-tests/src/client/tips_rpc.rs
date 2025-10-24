@@ -63,12 +63,7 @@ impl TipsRpcClient {
             id: 1,
         };
 
-        let response = self
-            .client
-            .post(&self.url)
-            .json(&request)
-            .send()
-            .await?;
+        let response = self.client.post(&self.url).json(&request).send().await?;
 
         let rpc_response: JsonRpcResponse<R> = response.json().await?;
 
@@ -102,4 +97,3 @@ impl TipsRpcClient {
         self.call("eth_cancelBundle", vec![params]).await
     }
 }
-
