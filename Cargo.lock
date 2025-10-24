@@ -12510,14 +12510,10 @@ dependencies = [
 name = "tips-datastore"
 version = "0.1.0"
 dependencies = [
- "alloy-consensus",
  "alloy-primitives",
- "alloy-provider",
  "alloy-rpc-types-mev",
  "anyhow",
  "async-trait",
- "eyre",
- "op-alloy-consensus",
  "sqlx",
  "testcontainers",
  "testcontainers-modules",
@@ -12561,7 +12557,6 @@ dependencies = [
 name = "tips-ingress-writer"
 version = "0.1.0"
 dependencies = [
- "alloy-rpc-types-mev",
  "anyhow",
  "backon",
  "clap",
