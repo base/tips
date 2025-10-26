@@ -11,10 +11,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
-    "drizzle-kit": "^0.31.4",
-    "drizzle-orm": "^0.44.5",
     "next": "15.5.3",
-    "pg": "^8.16.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -22,7 +19,6 @@
     "@biomejs/biome": "2.2.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pg": "^8.15.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "tailwindcss": "^4",

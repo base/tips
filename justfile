@@ -20,12 +20,6 @@ create-migration name:
     touch crates/datastore/migrations/$(date +%s)_{{ name }}.sql
 
 sync: deps-reset
-    ### DATABASE ###
-    cargo sqlx prepare -D postgresql://postgres:postgres@localhost:5432/postgres --workspace --all --no-dotenv
-    cd ui && npx drizzle-kit pull --dialect=postgresql --url=postgresql://postgres:postgres@localhost:5432/postgres
-    cd ui && mv ./drizzle/relations.ts ./src/db/
-    cd ui && mv ./drizzle/schema.ts ./src/db/
-    cd ui && rm -rf ./drizzle
     ###   ENV    ###
     just sync-env
     ###    REFORMAT   ###
@@ -45,12 +39,12 @@ stop-all:
 
 # Start every service running in docker, useful for demos
 start-all: stop-all
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d
 
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
 start-except programs: stop-all
     #!/bin/bash
-    all_services=(postgres kafka kafka-setup minio minio-setup ingress-rpc ingres-writer audit maintenance ui)
+    all_services=(kafka kafka-setup minio minio-setup ingress-rpc audit ui)
     exclude_services=({{ programs }})
     
     # Create result array with services not in exclude list
@@ -68,11 +62,11 @@ start-except programs: stop-all
         fi
     done
     
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/postgres data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
 ### RUN SERVICES ###
 deps-reset:
-    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/postgres data/kafka data/minio && docker compose up -d
+    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/kafka data/minio && docker compose up -d
 
 deps:
     COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && docker compose up -d

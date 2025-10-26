@@ -1,24 +1,10 @@
 import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { bundles } from "@/db/schema";
-
-export interface Bundle {
-  id: string;
-  txnHashes: string[];
-  state: "Ready" | "IncludedByBuilder";
-}
+import { listAllBundleKeys } from "@/lib/s3";
 
 export async function GET() {
   try {
-    const allBundles = await db
-      .select({
-        id: bundles.id,
-        txnHashes: bundles.txnHashes,
-        state: bundles.bundleState,
-      })
-      .from(bundles);
-
-    return NextResponse.json(allBundles);
+    const bundleKeys = await listAllBundleKeys();
+    return NextResponse.json(bundleKeys);
   } catch (error) {
     console.error("Error fetching bundles:", error);
     return NextResponse.json(
