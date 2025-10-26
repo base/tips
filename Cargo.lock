@@ -12492,7 +12492,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tips-datastore"
+name = "tips-common"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus",
@@ -12500,12 +12500,24 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types-mev",
  "anyhow",
- "async-trait",
- "eyre",
+ "chrono",
  "op-alloy-consensus",
+ "serde",
+ "sqlx",
+]
+
+[[package]]
+name = "tips-datastore"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-rpc-types-mev",
+ "anyhow",
+ "async-trait",
  "sqlx",
  "testcontainers",
  "testcontainers-modules",
+ "tips-common",
  "tokio",
  "tracing",
  "uuid",
@@ -12534,6 +12546,7 @@ dependencies = [
  "reth-rpc-eth-types",
  "revm-context-interface",
  "serde_json",
+ "tips-common",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.20",
@@ -12544,7 +12557,6 @@ dependencies = [
 name = "tips-ingress-writer"
 version = "0.1.0"
 dependencies = [
- "alloy-rpc-types-mev",
  "anyhow",
  "backon",
  "clap",
@@ -12552,6 +12564,7 @@ dependencies = [
  "rdkafka",
  "serde_json",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
  "tokio",
  "tracing",
@@ -12577,6 +12590,7 @@ dependencies = [
  "rdkafka",
  "sqlx",
  "tips-audit",
+ "tips-common",
  "tips-datastore",
  "tokio",
  "tracing",
