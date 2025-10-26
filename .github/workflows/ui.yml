@@ -7,7 +7,6 @@ on:
     branches: [ master ]
     paths: ['ui/**']
   pull_request:
-    branches: [ master ]
     paths: ['ui/**']
 
 jobs:
