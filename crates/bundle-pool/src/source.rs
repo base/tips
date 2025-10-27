@@ -1,9 +1,15 @@
 use anyhow::Result;
+use async_trait::async_trait;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use tips_core::{Bundle, BundleWithMetadata};
 use tokio::sync::mpsc;
 use tracing::{debug, error};
+
+#[async_trait]
+pub trait BundleSource {
+    async fn run(&self) -> Result<()>;
+}
 
 pub struct KafkaBundleSource {
     queue_consumer: StreamConsumer,
@@ -23,8 +29,11 @@ impl KafkaBundleSource {
             publisher,
         })
     }
+}
 
-    pub async fn run(&self) -> Result<()> {
+#[async_trait]
+impl BundleSource for KafkaBundleSource {
+    async fn run(&self) -> Result<()> {
         loop {
             match self.queue_consumer.recv().await {
                 Ok(message) => {

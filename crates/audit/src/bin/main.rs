@@ -5,7 +5,7 @@ use aws_sdk_s3::{Client as S3Client, config::Builder as S3ConfigBuilder};
 use clap::{Parser, ValueEnum};
 use rdkafka::consumer::Consumer;
 use tips_audit::{
-    KafkaAuditLogReader, KafkaMempoolArchiver, S3EventReaderWriter, create_kafka_consumer,
+    KafkaAuditArchiver, KafkaAuditLogReader, S3EventReaderWriter, create_kafka_consumer,
 };
 use tips_core::logger::init_logger;
 use tracing::info;
@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
     let s3_bucket = args.s3_bucket.clone();
     let writer = S3EventReaderWriter::new(s3_client, s3_bucket);
 
-    let mut archiver = KafkaMempoolArchiver::new(reader, writer);
+    let mut archiver = KafkaAuditArchiver::new(reader, writer);
 
     info!("Audit archiver initialized, starting main loop");
 

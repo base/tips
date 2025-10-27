@@ -1,6 +1,6 @@
 use std::time::Duration;
 use tips_audit::{
-    KafkaAuditLogReader, KafkaMempoolArchiver,
+    KafkaAuditArchiver, KafkaAuditLogReader,
     publisher::{BundleEventPublisher, KafkaBundleEventPublisher},
     storage::{BundleEventS3Reader, S3EventReaderWriter},
     types::{BundleEvent, DropReason},
@@ -37,7 +37,7 @@ async fn test_kafka_publisher_s3_archiver_integration()
         publisher.publish(event.clone()).await?;
     }
 
-    let mut consumer = KafkaMempoolArchiver::new(
+    let mut consumer = KafkaAuditArchiver::new(
         KafkaAuditLogReader::new(harness.kafka_consumer, topic.to_string())?,
         s3_writer.clone(),
     );

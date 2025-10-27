@@ -4,17 +4,20 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use testcontainers::runners::AsyncRunner;
+use testcontainers_modules::testcontainers::ContainerAsync;
 use testcontainers_modules::{kafka, kafka::Kafka};
 use tips_audit::BundleEvent;
-use tips_bundle_pool::{BundleStore, InMemoryBundlePool, KafkaBundleSource};
+use tips_bundle_pool::{
+    BundleStore, InMemoryBundlePool, KafkaBundleSource, connect_sources_to_pool,
+};
 use tips_core::{
     BundleWithMetadata,
     test_utils::{create_test_bundle, create_transaction},
 };
 use tokio::sync::mpsc;
 
-#[tokio::test]
-async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn std::error::Error>> {
+async fn setup_kafka()
+-> Result<(ContainerAsync<Kafka>, FutureProducer, ClientConfig), Box<dyn std::error::Error>> {
     let kafka_container = Kafka::default().start().await?;
     let bootstrap_servers = format!(
         "127.0.0.1:{}",
@@ -23,15 +26,11 @@ async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn st
             .await?
     );
 
-    let topic = "test-bundles";
-
     let kafka_producer = ClientConfig::new()
         .set("bootstrap.servers", &bootstrap_servers)
         .set("message.timeout.ms", "5000")
         .create::<FutureProducer>()?;
 
-
-    let (bundle_tx, mut bundle_rx) = mpsc::unbounded_channel::<BundleWithMetadata>();
     let mut kafka_consumer_config = ClientConfig::new();
     kafka_consumer_config
         .set("group.id", "bundle-pool-test-source")
@@ -40,10 +39,17 @@ async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn st
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "earliest");
 
+    Ok((kafka_container, kafka_producer, kafka_consumer_config))
+}
+
+#[tokio::test]
+async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn std::error::Error>> {
+    let topic = "test-bundles";
+    let (_kafka_container, kafka_producer, kafka_consumer_config) = setup_kafka().await?;
+
+    let (bundle_tx, bundle_rx) = mpsc::unbounded_channel::<BundleWithMetadata>();
+
     let kafka_source = KafkaBundleSource::new(kafka_consumer_config, topic.to_string(), bundle_tx)?;
-    tokio::spawn(async move {
-        kafka_source.run().await.expect("Kafka source failed");
-    });
 
     let (audit_tx, _audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     let pool = Arc::new(Mutex::new(InMemoryBundlePool::new(
@@ -51,12 +57,7 @@ async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn st
         "test-builder".to_string(),
     )));
 
-    let pool_clone = pool.clone();
-    tokio::spawn(async move {
-        while let Some(bundle) = bundle_rx.recv().await {
-            pool_clone.lock().unwrap().add_bundle(bundle);
-        }
-    });
+    connect_sources_to_pool(vec![kafka_source], bundle_rx, pool.clone());
 
     let alice = PrivateKeySigner::random();
     let bob = PrivateKeySigner::random();
@@ -79,11 +80,9 @@ async fn test_kafka_bundle_source_to_pool_integration() -> Result<(), Box<dyn st
     let mut counter = 0;
     loop {
         counter += 1;
-        if counter > 10 {
-            panic!("Bundle was not added to pool within timeout");
-        }
+        assert!(counter < 10);
 
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
 
         let bundles = pool.lock().unwrap().get_bundles();
         if bundles.is_empty() {
