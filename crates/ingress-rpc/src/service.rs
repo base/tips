@@ -178,9 +178,9 @@ where
 
         let bundle_with_metadata = BundleWithMetadata::load(bundle.clone())
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let tx_hashes = bundle_with_metadata.txn_hashes();
 
         let mut total_gas = 0u64;
-        let tx_hashes = bundle_with_metadata.txn_hashes();
         for tx_data in &bundle.txs {
             let transaction = self.validate_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
