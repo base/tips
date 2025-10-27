@@ -235,13 +235,11 @@ mod tests {
     use alloy_consensus::{TxEip1559, TxEip4844, TxEip7702};
     use alloy_primitives::Bytes;
     use alloy_primitives::{bytes, keccak256};
-    use alloy_serde::OtherFields;
     use alloy_signer_local::PrivateKeySigner;
     use op_alloy_consensus::OpTxEnvelope;
     use op_alloy_network::TxSignerSync;
     use op_alloy_network::eip2718::Encodable2718;
     use revm_context_interface::transaction::{AccessList, AccessListItem};
-    use std::collections::BTreeMap;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn create_account(nonce: u64, balance: U256) -> AccountInfo {
@@ -634,7 +632,7 @@ mod tests {
             encoded_txs.push(Bytes::from(encoded));
         }
 
-        let bundle = EthSendBundle {
+        let bundle = Bundle {
             txs: encoded_txs,
             block_number: 0,
             min_timestamp: None,
@@ -654,7 +652,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_err_bundle_partial_transaction_dropping_not_supported() {
-        let bundle = EthSendBundle {
+        let bundle = Bundle {
             txs: vec![],
             dropping_tx_hashes: vec![B256::random()],
             ..Default::default()
@@ -701,7 +699,7 @@ mod tests {
             encoded_txs.push(Bytes::from(encoded));
         }
 
-        let bundle = EthSendBundle {
+        let bundle = Bundle {
             txs: encoded_txs,
             block_number: 0,
             min_timestamp: None,
