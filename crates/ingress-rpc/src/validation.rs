@@ -9,6 +9,7 @@ use op_alloy_network::Optimism;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
+use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tips_core::Bundle;
 use tracing::warn;
@@ -210,14 +211,14 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64, tx_hashes: Vec<B256>) -
     }
 
     // revert protection: all transaction hashes must be in `reverting_tx_hashes`
-    for tx_hash in &tx_hashes {
-        if !bundle.reverting_tx_hashes.contains(tx_hash) {
-            return Err(EthApiError::InvalidParams(
-                "Revert protection is not supported. reverting_tx_hashes must include all hashes"
-                    .into(),
-            )
-            .into_rpc_err());
-        }
+    let reverting_tx_hashes_set: HashSet<_> = bundle.reverting_tx_hashes.iter().collect();
+    let tx_hashes_set: HashSet<_> = tx_hashes.iter().collect();
+    if reverting_tx_hashes_set != tx_hashes_set {
+        return Err(EthApiError::InvalidParams(
+            "Revert protection is not supported. reverting_tx_hashes must include all hashes"
+                .into(),
+        )
+        .into_rpc_err());
     }
 
     Ok(())
