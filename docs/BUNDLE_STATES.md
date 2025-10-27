@@ -1,27 +1,5 @@
 # Bundle States
 
-## States
-```mermaid
-stateDiagram
-    [*] --> Ready
-    Ready --> Dropped
-    Ready --> IncludedByBuilder
-    IncludedByBuilder --> Ready: Reorg
-    IncludedByBuilder --> [*]: After X blocks
-    Dropped --> [*]
-```
-_(this maybe extended to include a NonReady category for nonce gapped transactions etc.)_
-
-The builder will load all `READY` transactions, which have a high enough minimum base fee
-and are valid for the current block that is being built.
-
-## Bundle Events
-
-In addition to the states above,
-
-- **Received**:
-  - Received bundle event
-  - Arguments: (uuid)
 - **Created**:
   - Initial bundle creation with transaction list
   - Arguments: (bundle)
@@ -34,9 +12,6 @@ In addition to the states above,
 - **IncludedByBuilder**:
   - Bundle included by builder in flashblock
   - Arguments: (flashblockNum, blockNum, builderId)
-- **IncludedInFlashblock**:
-  - Flashblock containing bundle included in chain
-  - Arguments: (flashblockNum, blockNum)
 - **IncludedInBlock**:
   - Final confirmation in blockchain
   - Arguments: (blockNum, blockHash)
@@ -45,6 +20,7 @@ In addition to the states above,
   - Arguments: Why(enum Reason)
     - "TIMEOUT": Bundle expired without inclusion
     - "INCLUDED_BY_OTHER": Another bundle caused the transactions in this bundle to not be includable
+    - "REVERTED": A transaction reverted which was not allowed to
 
 ### Dropping Transactions
 Transactions can be dropped because of multiple reasons, all of which are indicated on 
@@ -63,9 +39,3 @@ the audit log for a transaction. The initial prototype has the following limits:
   - When the mempool reaches a certain size (TBD), it will be pruned based on a combination of:
     - Bundle age
     - Low base fee
-
-### Maintenance Job
-The limit enforcement and inclusion detection is managed by the maintenance job in 
-[`crates/maintenance`](https://github.com/base/tips/tree/master/crates/maintenance). It's designed to be idempotent so 
-that multiple jobs can execute concurrently. As this adds additional load to the BundleStore, it's preferable 
-to run a low number.

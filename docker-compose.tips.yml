@@ -27,19 +27,6 @@ services:
       - ./docker/audit-kafka-properties:/app/docker/audit-kafka-properties:ro
     restart: unless-stopped
 
-  maintenance:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command:
-      - "/app/tips-maintenance"
-    container_name: tips-maintenance
-    env_file:
-      - .env.docker
-    volumes:
-      - ./docker/maintenance-kafka-properties:/app/docker/maintenance-kafka-properties:ro
-    restart: unless-stopped
-
   ui:
     build:
       context: .
@@ -49,17 +36,4 @@ services:
     container_name: tips-ui
     env_file:
       - .env.docker
-    restart: unless-stopped
-
-  ingress-writer:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command:
-      - "/app/tips-ingress-writer"
-    container_name: tips-ingress-writer
-    env_file:
-      - .env.docker
-    volumes:
-      - ./docker/ingress-writer-kafka-properties:/app/docker/ingress-writer-kafka-properties:ro
     restart: unless-stopped
