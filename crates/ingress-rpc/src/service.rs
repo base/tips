@@ -176,17 +176,16 @@ where
             );
         }
 
+        let bundle_with_metadata = BundleWithMetadata::load(bundle.clone())
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
         let mut total_gas = 0u64;
-        let mut tx_hashes = Vec::new();
+        let tx_hashes = bundle_with_metadata.txn_hashes();
         for tx_data in &bundle.txs {
             let transaction = self.validate_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
-            tx_hashes.push(transaction.tx_hash());
         }
         validate_bundle(&bundle, total_gas, tx_hashes)?;
-
-        let bundle_with_metadata = BundleWithMetadata::load(bundle)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
         Ok(bundle_with_metadata)
     }
