@@ -6932,7 +6932,6 @@ dependencies = [
  "alloy-consensus",
  "alloy-primitives",
  "alloy-provider",
- "alloy-serde",
  "alloy-signer-local",
  "anyhow",
  "async-trait",
@@ -6951,7 +6950,6 @@ dependencies = [
  "tips-core",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.20",
  "url",
 ]
 

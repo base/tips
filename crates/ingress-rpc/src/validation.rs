@@ -168,11 +168,7 @@ pub async fn validate_tx<T: Transaction>(
 /// - The bundle can only contain 3 transactions at once
 /// - Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
 /// - revert protection is not supported, all transaction hashes must be in `reverting_tx_hashes`
-pub fn validate_bundle(
-    bundle: &Bundle,
-    bundle_gas: u64,
-    tx_hashes: Vec<B256>,
-) -> RpcResult<()> {
+pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64, tx_hashes: Vec<B256>) -> RpcResult<()> {
     // Don't allow bundles to be submitted over 1 hour into the future
     // TODO: make the window configurable
     let valid_timestamp_window = SystemTime::now()
