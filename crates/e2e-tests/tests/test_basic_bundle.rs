@@ -1,5 +1,5 @@
 use alloy_primitives::{Address, Bytes, U256};
-use eyre::Result;
+use anyhow::Result;
 use tips_e2e_tests::client::TipsRpcClient;
 use tips_e2e_tests::fixtures::{create_signed_transaction, create_test_signer};
 
@@ -85,24 +85,26 @@ async fn test_send_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_when_implemented() -> Result<()> {
-    use alloy_rpc_types_mev::EthSendBundle;
+    use tips_core::Bundle;
 
     let client = TipsRpcClient::new("http://localhost:8080");
 
-    let empty_bundle = EthSendBundle {
+    let empty_bundle = Bundle {
         txs: vec![],
         block_number: 1,
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![],
         replacement_uuid: None,
-        ..Default::default()
+        dropping_tx_hashes: vec![],
+        flashblock_number_min: None,
+        flashblock_number_max: None,
     };
 
     let result = client.send_bundle(empty_bundle).await;
 
     match result {
-        Ok(_uuid) => Ok(()),
+        Ok(_bundle_hash) => Ok(()),
         Err(e) => {
             let error_msg = e.to_string();
             if error_msg.contains("connection closed")

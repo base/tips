@@ -9,12 +9,11 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-tips-datastore = { workspace = true }
 tips-audit = { workspace = true }
+tips-core = { workspace = true }
 
 alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
-alloy-rpc-types-mev = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-signer-local = { workspace = true }
 alloy-signer = "1.0.37"
@@ -23,8 +22,6 @@ alloy-network = "1.0.37"
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
-
-sqlx = { workspace = true }
 
 aws-sdk-s3 = { workspace = true }
 aws-config = { workspace = true }
@@ -35,7 +32,6 @@ rdkafka = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
-eyre = { workspace = true }
 anyhow = { workspace = true }
 
 uuid = { workspace = true }

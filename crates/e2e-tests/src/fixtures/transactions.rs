@@ -3,7 +3,7 @@ use alloy_network::eip2718::Encodable2718;
 use alloy_primitives::{Address, Bytes, U256};
 use alloy_signer::Signer;
 use alloy_signer_local::PrivateKeySigner;
-use eyre::Result;
+use anyhow::Result;
 
 pub fn create_test_signer() -> PrivateKeySigner {
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"

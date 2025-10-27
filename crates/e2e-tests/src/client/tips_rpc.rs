@@ -1,7 +1,7 @@
 use alloy_primitives::{Bytes, TxHash};
-use alloy_rpc_types_mev::EthSendBundle;
-use eyre::Result;
+use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
+use tips_core::{Bundle, BundleHash};
 use uuid::Uuid;
 
 #[derive(Clone)]
@@ -70,7 +70,7 @@ impl TipsRpcClient {
         match rpc_response.result {
             JsonRpcResult::Success { result } => Ok(result),
             JsonRpcResult::Error { error } => {
-                eyre::bail!(
+                bail!(
                     "RPC error {}: {} (data: {:?})",
                     error.code,
                     error.message,
@@ -85,9 +85,8 @@ impl TipsRpcClient {
         self.call("eth_sendRawTransaction", vec![tx_hex]).await
     }
 
-    pub async fn send_bundle(&self, bundle: EthSendBundle) -> Result<Uuid> {
-        let uuid_str: String = self.call("eth_sendBundle", vec![bundle]).await?;
-        Ok(Uuid::parse_str(&uuid_str)?)
+    pub async fn send_bundle(&self, bundle: Bundle) -> Result<BundleHash> {
+        self.call("eth_sendBundle", vec![bundle]).await
     }
 
     pub async fn cancel_bundle(&self, uuid: Uuid) -> Result<bool> {
