@@ -50,8 +50,11 @@ async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
 }
 
 #[tokio::test]
-#[ignore = "Requires a fully configured local node running via `just start-all`"]
 async fn test_send_valid_transaction() -> Result<()> {
+    if std::env::var("RUN_NODE_TESTS").is_err() {
+        eprintln!("skipping test_send_valid_transaction (set RUN_NODE_TESTS=1 to run)");
+        return Ok(());
+    }
     let client = TipsRpcClient::new("http://localhost:8080");
     let signer = create_test_signer();
 
