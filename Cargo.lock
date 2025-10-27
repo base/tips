@@ -6896,6 +6896,11 @@ dependencies = [
  "async-trait",
  "op-alloy-consensus 0.21.0",
  "op-alloy-rpc-types 0.21.0",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "testcontainers",
+ "testcontainers-modules",
  "tips-audit",
  "tips-core",
  "tokio",
@@ -6916,6 +6921,7 @@ dependencies = [
  "op-alloy-rpc-types 0.21.0",
  "serde",
  "tracing",
+ "tracing-subscriber 0.3.20",
  "uuid",
 ]
 
