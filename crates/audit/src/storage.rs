@@ -1,7 +1,6 @@
 use crate::reader::Event;
 use crate::types::{BundleEvent, BundleId, DropReason, TransactionId};
 use alloy_primitives::TxHash;
-use alloy_rpc_types_mev::EthSendBundle;
 use anyhow::Result;
 use async_trait::async_trait;
 use aws_sdk_s3::Client as S3Client;
@@ -11,6 +10,7 @@ use aws_sdk_s3::primitives::ByteStream;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
+use tips_core::Bundle;
 use tracing::info;
 
 #[derive(Debug)]
@@ -39,12 +39,12 @@ pub enum BundleHistoryEvent {
     Created {
         key: String,
         timestamp: i64,
-        bundle: EthSendBundle,
+        bundle: Bundle,
     },
     Updated {
         key: String,
         timestamp: i64,
-        bundle: EthSendBundle,
+        bundle: Bundle,
     },
     Cancelled {
         key: String,
@@ -54,12 +54,6 @@ pub enum BundleHistoryEvent {
         key: String,
         timestamp: i64,
         builder: String,
-        block_number: u64,
-        flashblock_index: u64,
-    },
-    FlashblockIncluded {
-        key: String,
-        timestamp: i64,
         block_number: u64,
         flashblock_index: u64,
     },
@@ -83,7 +77,6 @@ impl BundleHistoryEvent {
             BundleHistoryEvent::Updated { key, .. } => key,
             BundleHistoryEvent::Cancelled { key, .. } => key,
             BundleHistoryEvent::BuilderIncluded { key, .. } => key,
-            BundleHistoryEvent::FlashblockIncluded { key, .. } => key,
             BundleHistoryEvent::BlockIncluded { key, .. } => key,
             BundleHistoryEvent::Dropped { key, .. } => key,
         }
@@ -136,16 +129,6 @@ fn update_bundle_history_transform(
             key: event.key.clone(),
             timestamp: event.timestamp,
             builder: builder.clone(),
-            block_number: *block_number,
-            flashblock_index: *flashblock_index,
-        },
-        BundleEvent::FlashblockIncluded {
-            block_number,
-            flashblock_index,
-            ..
-        } => BundleHistoryEvent::FlashblockIncluded {
-            key: event.key.clone(),
-            timestamp: event.timestamp,
             block_number: *block_number,
             flashblock_index: *flashblock_index,
         },
@@ -393,11 +376,11 @@ mod tests {
     use crate::reader::Event;
     use crate::types::{BundleEvent, DropReason};
     use alloy_primitives::TxHash;
-    use alloy_rpc_types_mev::EthSendBundle;
+    use tips_core::Bundle;
     use uuid::Uuid;
 
-    fn create_test_bundle() -> EthSendBundle {
-        EthSendBundle::default()
+    fn create_test_bundle() -> Bundle {
+        Bundle::default()
     }
 
     fn create_test_event(key: &str, timestamp: i64, bundle_event: BundleEvent) -> Event {
@@ -465,7 +448,6 @@ mod tests {
         let bundle_history = BundleHistory { history: vec![] };
         let bundle_id = Uuid::new_v4();
 
-        // Test Created
         let bundle = create_test_bundle();
         let bundle_event = BundleEvent::Created {
             bundle_id,
@@ -475,7 +457,6 @@ mod tests {
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        // Test Updated
         let bundle_event = BundleEvent::Updated {
             bundle_id,
             bundle: bundle.clone(),
@@ -484,13 +465,11 @@ mod tests {
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        // Test Cancelled
         let bundle_event = BundleEvent::Cancelled { bundle_id };
         let event = create_test_event("test-key-3", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        // Test BuilderIncluded
         let bundle_event = BundleEvent::BuilderIncluded {
             bundle_id,
             builder: "test-builder".to_string(),
@@ -501,32 +480,20 @@ mod tests {
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        // Test FlashblockIncluded
-        let bundle_event = BundleEvent::FlashblockIncluded {
-            bundle_id,
-            block_number: 12345,
-            flashblock_index: 1,
-        };
-        let event = create_test_event("test-key-5", 1234567890, bundle_event);
-        let result = update_bundle_history_transform(bundle_history.clone(), &event);
-        assert!(result.is_some());
-
-        // Test BlockIncluded
         let bundle_event = BundleEvent::BlockIncluded {
             bundle_id,
             block_number: 12345,
             block_hash: TxHash::from([1u8; 32]),
         };
-        let event = create_test_event("test-key-6", 1234567890, bundle_event);
+        let event = create_test_event("test-key-5", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        // Test Dropped
         let bundle_event = BundleEvent::Dropped {
             bundle_id,
             reason: DropReason::TimedOut,
         };
-        let event = create_test_event("test-key-7", 1234567890, bundle_event);
+        let event = create_test_event("test-key-6", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history, &event);
         assert!(result.is_some());
     }

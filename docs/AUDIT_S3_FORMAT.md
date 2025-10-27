@@ -13,7 +13,7 @@ dervied from the events defined in the [bundle states](./BUNDLE_STATES.md).
 {
    "history": [
         {
-            "event": "Created",          // Event type (see ./BUNDLE_STATES.md)
+            "event": "Created",          // Event type
             "timestamp": 1234567890,     // timestamp event was written to kafka
             "key": "<bundle_id>-<uuid>", // used to dedup events
             "data": {
@@ -31,15 +31,6 @@ dervied from the events defined in the [bundle states](./BUNDLE_STATES.md).
               "flashblockIndex": 1,
               "builderId": "builder-id"
             }
-        },
-        {
-            "event": "FlashblockIncluded",
-            "timestamp": 1234567894,
-            "key": "<bundle_id>-<uuid>",
-            "data": {
-              "blockNumber": 12345,
-              "flashblockIndex": 1
-            },
         },
         {
             "event": "BlockIncluded",

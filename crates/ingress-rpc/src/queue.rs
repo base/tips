@@ -1,16 +1,16 @@
-use alloy_primitives::Address;
-use alloy_rpc_types_mev::EthSendBundle;
-use anyhow::{Error, Result};
+use alloy_primitives::B256;
+use anyhow::Result;
 use async_trait::async_trait;
 use backon::{ExponentialBuilder, Retryable};
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use tips_core::Bundle;
 use tokio::time::Duration;
 use tracing::{error, info};
 
 /// A queue to buffer transactions
 #[async_trait]
 pub trait QueuePublisher: Send + Sync {
-    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()>;
+    async fn publish(&self, bundle: &Bundle, bundle_hash: &B256) -> Result<()>;
 }
 
 /// A queue to buffer transactions
@@ -23,14 +23,13 @@ impl KafkaQueuePublisher {
     pub fn new(producer: FutureProducer, topic: String) -> Self {
         Self { producer, topic }
     }
+}
 
-    pub async fn enqueue_bundle(
-        &self,
-        bundle: &EthSendBundle,
-        sender: Address,
-    ) -> Result<(), Error> {
-        let key = sender.to_string();
-        let payload = serde_json::to_vec(bundle)?;
+#[async_trait]
+impl QueuePublisher for KafkaQueuePublisher {
+    async fn publish(&self, bundle: &Bundle, bundle_hash: &B256) -> Result<()> {
+        let key = bundle_hash.to_string();
+        let payload = serde_json::to_vec(&bundle)?;
 
         let enqueue = || async {
             let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
@@ -38,7 +37,7 @@ impl KafkaQueuePublisher {
             match self.producer.send(record, Duration::from_secs(5)).await {
                 Ok((partition, offset)) => {
                     info!(
-                        sender = %sender,
+                        bundle_hash = %bundle_hash,
                         partition = partition,
                         offset = offset,
                         topic = %self.topic,
@@ -48,7 +47,7 @@ impl KafkaQueuePublisher {
                 }
                 Err((err, _)) => {
                     error!(
-                        sender = %sender,
+                        bundle_hash = %bundle_hash,
                         error = %err,
                         topic = %self.topic,
                         "Failed to enqueue bundle"
@@ -72,21 +71,15 @@ impl KafkaQueuePublisher {
     }
 }
 
-#[async_trait]
-impl QueuePublisher for KafkaQueuePublisher {
-    async fn publish(&self, bundle: &EthSendBundle, sender: Address) -> Result<()> {
-        self.enqueue_bundle(bundle, sender).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use rdkafka::config::ClientConfig;
+    use tips_core::BundleWithMetadata;
     use tokio::time::{Duration, Instant};
 
-    fn create_test_bundle() -> EthSendBundle {
-        EthSendBundle::default()
+    fn create_test_bundle() -> Bundle {
+        Bundle::default()
     }
 
     #[tokio::test]
@@ -100,10 +93,11 @@ mod tests {
 
         let publisher = KafkaQueuePublisher::new(producer, "tips-ingress-rpc".to_string());
         let bundle = create_test_bundle();
-        let sender = Address::ZERO;
+        let bundle_with_metadata = BundleWithMetadata::load(bundle.clone()).unwrap();
+        let bundle_hash = bundle_with_metadata.bundle_hash();
 
         let start = Instant::now();
-        let result = publisher.enqueue_bundle(&bundle, sender).await;
+        let result = publisher.publish(&bundle, &bundle_hash).await;
         let elapsed = start.elapsed();
 
         // the backoff tries at minimum 100ms, so verify we tried at least once

@@ -1,10 +1,10 @@
 use alloy_consensus::transaction::{SignerRecoverable, Transaction as ConsensusTransaction};
 use alloy_primitives::{Address, TxHash, U256};
 use alloy_provider::network::eip2718::Decodable2718;
-use alloy_rpc_types_mev::EthSendBundle;
 use bytes::Bytes;
 use op_alloy_consensus::OpTxEnvelope;
 use serde::{Deserialize, Serialize};
+use tips_core::Bundle;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -19,13 +19,7 @@ pub type BundleId = Uuid;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DropReason {
     TimedOut,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Bundle {
-    pub id: BundleId,
-    pub transactions: Vec<Transaction>,
-    pub metadata: serde_json::Value,
+    Reverted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,11 +33,11 @@ pub struct Transaction {
 pub enum BundleEvent {
     Created {
         bundle_id: BundleId,
-        bundle: EthSendBundle,
+        bundle: Bundle,
     },
     Updated {
         bundle_id: BundleId,
-        bundle: EthSendBundle,
+        bundle: Bundle,
     },
     Cancelled {
         bundle_id: BundleId,
@@ -51,11 +45,6 @@ pub enum BundleEvent {
     BuilderIncluded {
         bundle_id: BundleId,
         builder: String,
-        block_number: u64,
-        flashblock_index: u64,
-    },
-    FlashblockIncluded {
-        bundle_id: BundleId,
         block_number: u64,
         flashblock_index: u64,
     },
@@ -77,7 +66,6 @@ impl BundleEvent {
             BundleEvent::Updated { bundle_id, .. } => *bundle_id,
             BundleEvent::Cancelled { bundle_id, .. } => *bundle_id,
             BundleEvent::BuilderIncluded { bundle_id, .. } => *bundle_id,
-            BundleEvent::FlashblockIncluded { bundle_id, .. } => *bundle_id,
             BundleEvent::BlockIncluded { bundle_id, .. } => *bundle_id,
             BundleEvent::Dropped { bundle_id, .. } => *bundle_id,
         }
@@ -108,7 +96,6 @@ impl BundleEvent {
             }
             BundleEvent::Cancelled { .. } => vec![],
             BundleEvent::BuilderIncluded { .. } => vec![],
-            BundleEvent::FlashblockIncluded { .. } => vec![],
             BundleEvent::BlockIncluded { .. } => vec![],
             BundleEvent::Dropped { .. } => vec![],
         }
@@ -122,14 +109,6 @@ impl BundleEvent {
                 ..
             } => {
                 format!("{bundle_id}-{block_hash}")
-            }
-            BundleEvent::FlashblockIncluded {
-                bundle_id,
-                block_number,
-                flashblock_index,
-                ..
-            } => {
-                format!("{bundle_id}-{block_number}-{flashblock_index}")
             }
             _ => {
                 format!("{}-{}", self.bundle_id(), Uuid::new_v4())

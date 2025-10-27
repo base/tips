@@ -22,11 +22,5 @@ Event streaming and archival system that:
 ### 🔌 Ingress RPC (`crates/ingress-rpc`)
 The main entry point that provides a JSON-RPC API for receiving transactions and bundles.
 
-### 🔨 Maintenance (`crates/maintenance`)
-A service that maintains the health of the TIPS DataStore, by removing stale or included bundles.
-
-### ✍️ Ingress Writer (`crates/ingress-writer`)
-A service that consumes bundles from Kafka and persists them to the datastore.
-
 ### 🖥️ UI (`ui`)
 A debug UI for viewing the state of the bundle store and S3.
