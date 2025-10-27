@@ -167,8 +167,6 @@ pub async fn validate_tx<T: Transaction>(
 /// - The bundle's gas limit is not greater than the maximum allowed gas limit
 /// - The bundle can only contain 3 transactions at once
 /// - Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
-/// - extra_fields must be empty
-/// - refunds are not initially supported (refund_percent, refund_recipient, refund_tx_hashes must be empty)
 /// - revert protection is not supported, all transaction hashes must be in `reverting_tx_hashes`
 pub fn validate_bundle(
     bundle: &Bundle,
@@ -213,16 +211,6 @@ pub fn validate_bundle(
             "Partial transaction dropping is not supported".into(),
         )
         .into_rpc_err());
-    }
-
-    // refunds are not initially supported
-    if bundle.refund_percent.is_some()
-        || bundle.refund_recipient.is_some()
-        || !bundle.refund_tx_hashes.is_empty()
-    {
-        return Err(
-            EthApiError::InvalidParams("refunds are not initially supported".into()).into_rpc_err(),
-        );
     }
 
     // revert protection: all transaction hashes must be in `reverting_tx_hashes`
@@ -675,51 +663,6 @@ mod tests {
             validate_bundle(&bundle, 0, vec![]),
             Err(
                 EthApiError::InvalidParams("Partial transaction dropping is not supported".into())
-                    .into_rpc_err()
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn test_err_bundle_refund_percent_not_empty() {
-        let bundle = EthSendBundle {
-            refund_percent: Some(100),
-            ..Default::default()
-        };
-        assert_eq!(
-            validate_bundle(&bundle, 0, vec![]),
-            Err(
-                EthApiError::InvalidParams("refunds are not initially supported".into())
-                    .into_rpc_err()
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn test_err_bundle_refund_recipient_not_empty() {
-        let bundle = EthSendBundle {
-            refund_recipient: Some(Address::random()),
-            ..Default::default()
-        };
-        assert_eq!(
-            validate_bundle(&bundle, 0, vec![]),
-            Err(
-                EthApiError::InvalidParams("refunds are not initially supported".into())
-                    .into_rpc_err()
-            )
-        );
-    }
-
-    #[tokio::test]
-    async fn test_err_bundle_refund_tx_hashes_not_empty() {
-        let bundle = EthSendBundle {
-            refund_tx_hashes: vec![B256::random()],
-            ..Default::default()
-        };
-        assert_eq!(
-            validate_bundle(&bundle, 0, vec![]),
-            Err(
-                EthApiError::InvalidParams("refunds are not initially supported".into())
                     .into_rpc_err()
             )
         );
