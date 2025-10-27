@@ -30,3 +30,4 @@ A service that consumes bundles from Kafka and persists them to the datastore.
 
 ### 🖥️ UI (`ui`)
 A debug UI for viewing the state of the bundle store and S3.
+https://github.com/base/tips.git
