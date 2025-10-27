@@ -215,11 +215,6 @@ pub fn validate_bundle(
         .into_rpc_err());
     }
 
-    // extra_fields must be empty
-    if !bundle.extra_fields.is_empty() {
-        return Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err());
-    }
-
     // refunds are not initially supported
     if bundle.refund_percent.is_some()
         || bundle.refund_recipient.is_some()
@@ -682,20 +677,6 @@ mod tests {
                 EthApiError::InvalidParams("Partial transaction dropping is not supported".into())
                     .into_rpc_err()
             )
-        );
-    }
-
-    #[tokio::test]
-    async fn test_err_bundle_extra_fields_not_empty() {
-        let mut extra_fields = OtherFields::new(BTreeMap::new());
-        let _ = extra_fields.insert_value("test".to_string(), "test".to_string());
-        let bundle = EthSendBundle {
-            extra_fields,
-            ..Default::default()
-        };
-        assert_eq!(
-            validate_bundle(&bundle, 0, vec![]),
-            Err(EthApiError::InvalidParams("extra_fields must be empty".into()).into_rpc_err())
         );
     }
 
