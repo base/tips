@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{Address, B256, Bytes, TxHash};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -9,6 +9,7 @@ use jsonrpsee::{
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
+use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
@@ -16,6 +17,38 @@ use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransactionResult {
+    pub coinbase_diff: String,
+    pub eth_sent_to_coinbase: String,
+    pub from_address: Address,
+    pub gas_fees: String,
+    pub gas_price: String,
+    pub gas_used: u64,
+    pub to_address: Option<Address>,
+    pub tx_hash: TxHash,
+    pub value: String,
+    /// Resource metering: execution time for this tx in microseconds
+    pub execution_time_us: u128,
+}
+
+/// Response for base_meterBundle
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeterBundleResponse {
+    pub bundle_gas_price: String,
+    pub bundle_hash: B256,
+    pub coinbase_diff: String,
+    pub eth_sent_to_coinbase: String,
+    pub gas_fees: String,
+    pub results: Vec<TransactionResult>,
+    pub state_block_number: u64,
+    pub total_gas_used: u64,
+    /// Resource metering: total execution time in microseconds
+    pub total_execution_time_us: u128,
+}
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -65,7 +98,8 @@ where
     Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
-        let bundle_with_metadata = self.validate_bundle(bundle).await?;
+        let bundle_with_metadata = self.validate_bundle(&bundle).await?;
+        self.meter_bundle(&bundle).await?;
 
         let bundle_hash = bundle_with_metadata.bundle_hash();
         if let Err(e) = self
@@ -117,6 +151,7 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+        self.meter_bundle(&bundle).await?;
 
         let bundle_with_metadata = BundleWithMetadata::load(bundle)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
@@ -191,7 +226,7 @@ where
         Ok(transaction)
     }
 
-    async fn validate_bundle(&self, bundle: Bundle) -> RpcResult<BundleWithMetadata> {
+    async fn validate_bundle(&self, bundle: &Bundle) -> RpcResult<BundleWithMetadata> {
         if bundle.txs.is_empty() {
             return Err(
                 EthApiError::InvalidParams("Bundle cannot have empty transactions".into())
@@ -208,8 +243,25 @@ where
             let transaction = self.validate_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
         }
-        validate_bundle(&bundle, total_gas, tx_hashes)?;
+        validate_bundle(bundle, total_gas, tx_hashes)?;
 
         Ok(bundle_with_metadata)
+    }
+
+    async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<()> {
+        let res: MeterBundleResponse = self
+            .provider
+            .client()
+            .request("base_meterBundle", (bundle,))
+            .await
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
+        // if simulation takes longer than 2s, we don't include and just error to user
+        if res.total_execution_time_us > 2000000 {
+            return Err(
+                EthApiError::InvalidParams("Bundle simulation took too long".into()).into_rpc_err(),
+            );
+        }
+        Ok(())
     }
 }
