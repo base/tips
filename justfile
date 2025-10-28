@@ -36,7 +36,7 @@ stop-all:
 
 # Start every service running in docker, useful for demos
 start-all: stop-all ensure-node-reth-image
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio data/node-reth && docker compose build && docker compose up -d
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d
 
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
 start-except programs: stop-all ensure-node-reth-image
@@ -59,11 +59,11 @@ start-except programs: stop-all ensure-node-reth-image
         fi
     done
 
-    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio data/node-reth && docker compose build && docker compose up -d ${result_services[@]}
+    export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
 ### RUN SERVICES ###
 deps-reset:
-    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/kafka data/minio data/node-reth && docker compose up -d
+    COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && rm -rf data/ && mkdir -p data/kafka data/minio && docker compose up -d
 
 deps:
     COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml docker compose down && docker compose rm && docker compose up -d
