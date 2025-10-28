@@ -1,5 +1,5 @@
 use alloy_primitives::{Bytes, TxHash};
-use anyhow::{bail, Result};
+use anyhow::{Result, bail};
 use serde::{Deserialize, Serialize};
 use tips_core::{Bundle, BundleHash};
 use uuid::Uuid;
