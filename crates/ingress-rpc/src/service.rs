@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{Address, B256, Bytes, TxHash};
+use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -9,46 +9,13 @@ use jsonrpsee::{
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
-use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
-use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
+use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TransactionResult {
-    pub coinbase_diff: String,
-    pub eth_sent_to_coinbase: String,
-    pub from_address: Address,
-    pub gas_fees: String,
-    pub gas_price: String,
-    pub gas_used: u64,
-    pub to_address: Option<Address>,
-    pub tx_hash: TxHash,
-    pub value: String,
-    /// Resource metering: execution time for this tx in microseconds
-    pub execution_time_us: u128,
-}
-
-/// Response for base_meterBundle
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct MeterBundleResponse {
-    pub bundle_gas_price: String,
-    pub bundle_hash: B256,
-    pub coinbase_diff: String,
-    pub eth_sent_to_coinbase: String,
-    pub gas_fees: String,
-    pub results: Vec<TransactionResult>,
-    pub state_block_number: u64,
-    pub total_gas_used: u64,
-    /// Resource metering: total execution time in microseconds
-    pub total_execution_time_us: u128,
-}
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
