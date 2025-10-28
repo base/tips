@@ -38,7 +38,7 @@ just stop-all
 
 ### Test Categories
 
-**Basic Tests (No Server Required):**
+**Basic Tests (Require Running Server):**
 - `test_rpc_client_instantiation` - Verifies client creation
 - `test_send_raw_transaction_rejects_empty` - Tests empty transaction handling
 - `test_send_raw_transaction_rejects_invalid` - Tests invalid transaction handling
@@ -50,20 +50,21 @@ just stop-all
 - `test_send_bundle_with_replacement_uuid` - Tests bundle replacement functionality
 - `test_send_bundle_with_multiple_transactions` - Tests bundle with multiple transactions
 
-**Note:** Integration tests require:
-1. `RUN_NODE_TESTS=1` environment variable to run
-2. TIPS services running (`just start-all`)
-3. An Ethereum node running at port 2222 (configured via `TIPS_INGRESS_RPC_MEMPOOL`)
+**Note:** 
+- Basic tests require TIPS services running (`just start-all`)
+- Integration tests also require:
+  1. `RUN_NODE_TESTS=1` environment variable to run
+  2. An Ethereum node running at port 2222 (configured via `TIPS_INGRESS_RPC_MEMPOOL`)
 
-**If you set `RUN_NODE_TESTS=1` but the Ethereum node is not running**, the integration tests will **fail**. This is intentional - setting the environment variable asserts you have the full stack ready.
+**All tests will fail if dependencies are not available.** This ensures test failures are real failures, not silently skipped tests.
 
 ### Running Specific Tests
 
 ```bash
-# Run only basic tests (no server needed)
+# Run only basic tests (requires: just start-all)
 cargo test --package tips-e2e-tests
 
-# Run all tests including integration tests (requires: just start-all)
+# Run all tests including integration tests (requires: Ethereum node + just start-all)
 RUN_NODE_TESTS=1 cargo test --package tips-e2e-tests
 
 # Run a specific integration test
@@ -72,10 +73,8 @@ RUN_NODE_TESTS=1 cargo test --package tips-e2e-tests test_send_bundle_with_valid
 
 ## Notes
 
-- Tests expect services running on `localhost:8080` (ingress-rpc)
-- Basic tests work without any services running (gracefully handle connection errors)
-- Integration tests **require** `RUN_NODE_TESTS=1` environment variable to run
-- If `RUN_NODE_TESTS=1` is set, integration tests will **fail** if the Ethereum node is not running
-- The ingress-rpc service expects an Ethereum node at port 2222 (configurable via `TIPS_INGRESS_RPC_MEMPOOL`)
-- To run integration tests successfully: Start Ethereum node → `just start-all` → `RUN_NODE_TESTS=1 cargo test`
+- All tests require TIPS services running on `localhost:8080` (ingress-rpc)
+- Integration tests also require an Ethereum node at port 2222
+- Tests will fail if required services are not running
+- To run integration tests: Start Ethereum node → `just start-all` → `RUN_NODE_TESTS=1 cargo test`
 

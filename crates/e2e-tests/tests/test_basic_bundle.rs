@@ -19,12 +19,6 @@ async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
     assert!(result.is_err(), "Empty transaction should be rejected");
 
     let error_msg = result.unwrap_err().to_string();
-    // If server isn't running, just pass the test
-    if error_msg.contains("connection") || error_msg.contains("error sending request") {
-        println!("Server not running. Start with: just start-all");
-        return Ok(());
-    }
-    // Otherwise, verify we get the expected validation error
     assert!(
         error_msg.contains("RPC error") || error_msg.contains("empty"),
         "Error should mention empty data or be an RPC error, got: {}",
@@ -44,12 +38,6 @@ async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
     assert!(result.is_err(), "Invalid transaction should be rejected");
 
     let error_msg = result.unwrap_err().to_string();
-    // If server isn't running, just pass the test
-    if error_msg.contains("connection") || error_msg.contains("error sending request") {
-        println!("Server not running. Start with: just start-all");
-        return Ok(());
-    }
-    // Otherwise, verify we get the expected validation error
     assert!(
         error_msg.contains("RPC error")
             || error_msg.contains("decode")
@@ -104,27 +92,17 @@ async fn test_send_bundle_rejects_empty() -> Result<()> {
 
     let result = client.send_bundle(empty_bundle).await;
 
-    match result {
-        Ok(_) => {
-            // Empty bundles might be allowed - test passed
-            Ok(())
-        }
-        Err(e) => {
-            let error_msg = e.to_string();
-            // If we get a connection error, server isn't running - that's ok
-            if error_msg.contains("connection") {
-                println!("Server not running. Start with: just start-all");
-                return Ok(());
-            }
-            // If we get validation error, that's expected behavior
-            if error_msg.contains("RPC error") || error_msg.contains("validation") {
-                return Ok(());
-            }
-            // Any other error - just log and pass (server might handle empty bundles)
-            println!("Empty bundle response: {}", error_msg);
-            Ok(())
-        }
-    }
+    // Empty bundles should be rejected
+    assert!(result.is_err(), "Empty bundle should be rejected");
+    
+    let error_msg = result.unwrap_err().to_string();
+    assert!(
+        error_msg.contains("RPC error") || error_msg.contains("empty") || error_msg.contains("validation"),
+        "Error should mention validation failure, got: {}",
+        error_msg
+    );
+
+    Ok(())
 }
 
 #[tokio::test]
