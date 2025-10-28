@@ -94,10 +94,12 @@ async fn test_send_bundle_rejects_empty() -> Result<()> {
 
     // Empty bundles should be rejected
     assert!(result.is_err(), "Empty bundle should be rejected");
-    
+
     let error_msg = result.unwrap_err().to_string();
     assert!(
-        error_msg.contains("RPC error") || error_msg.contains("empty") || error_msg.contains("validation"),
+        error_msg.contains("RPC error")
+            || error_msg.contains("empty")
+            || error_msg.contains("validation"),
         "Error should mention validation failure, got: {}",
         error_msg
     );
