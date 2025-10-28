@@ -103,8 +103,30 @@ services:
     volumes:
       - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
       - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
+      - ~/.playground/devnet/l2-genesis.json:/data/l2-genesis.json:ro
       - ~/.playground/devnet:/playground
-    command: ["node", "--datadir", "/playground/tips-node-reth"]
+    command:
+      - node
+      - --datadir
+      - /playground/tips-node-reth
+      - --chain
+      - /data/l2-genesis.json
+      - --http
+      - --http.addr
+      - 0.0.0.0
+      - --http.port
+      - "8545"
+      - --authrpc.addr
+      - 0.0.0.0
+      - --authrpc.port
+      - "8551"
+      - --authrpc.jwtsecret
+      - /data/jwtsecret
+      - --disable-discovery
+    env_file:
+      - .env.docker
+    environment:
+      PLAYGROUND_DIR: /playground
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8545 -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' || exit 1"]
