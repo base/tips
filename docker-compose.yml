@@ -73,36 +73,55 @@ services:
       exit 0;
       "
 
-  node-reth:
-    build:
-      context: ${NODE_RETH_LOCAL_PATH:-.}
-      dockerfile: ${NODE_RETH_DOCKERFILE:-Dockerfile.node-reth}
-      args:
-        NODE_RETH_REF: ${NODE_RETH_REF:-tips}
+# Ethereum Nodes in TIPS
+# ======================
+#
+# ┌─────────────────────┬──────────────────────────────────┬─────────────────────────────────────┐
+# │ Component           │ Production                       │ Local Development                   │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ Sequencer           │                                  │                                     │
+# │  - Consensus Layer  │ "consensus" container running    │ builder-playground op-node          │
+# │                     │ op-node                          │ (runs separately within Docker)     │
+# │  - Execution Layer  │ "execution" container running    │ builder-playground op-geth          │
+# │                     │ base/node-reth                   │ (runs separately within Docker)     │
+# │  - Builder          │ "builder" container running      │ op-rbuilder                         │
+# │                     │ op-rbuilder                      │ (runs on host machine)              │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ RPC Node            │                                  │                                     │
+# │  - Consensus Layer  │ "consensus" container running    │ node-reth-consensus (container)     │
+# │                     │ op-node                          │                                     │
+# │  - Execution Layer  │ "execution" container running    │ node-reth-execution (container)     │
+# │                     │ base/node-reth                   │                                     │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ L1 Dependencies     │ Externally hosted L1 node        │ builder-playground el + beacon      │
+# │                     │                                  │ (el: 8545, beacon: 3500)            │
+# └─────────────────────┴──────────────────────────────────┴─────────────────────────────────────┘
+
+  node-reth-execution:
     image: node-reth:latest
-    container_name: tips-node-reth
-    ports:
-      - "2222:8545"
-      - "2223:8546"
-      - "1115:1115"
-      - "30303:30303"
+    container_name: tips-node-reth-execution
     volumes:
-      - ./data/node-reth:/data
-    command: >
-      node
-      --datadir /data
-      --chain base-sepolia
-      --http
-      --http.addr 0.0.0.0
-      --http.port 8545
-      --http.api eth,net,web3,txpool,base
-      --ws
-      --ws.addr 0.0.0.0
-      --ws.port 8546
-      --ws.api eth,net,web3,txpool,base
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+      - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
+      - ~/.playground/devnet:/playground
+    command: ["node", "--datadir", "/playground/tips-node-reth"]
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8545 -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  node-reth-consensus:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7
+    container_name: tips-node-reth-consensus
+    depends_on:
+      node-reth-execution:
+        condition: service_healthy
+    volumes:
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+      - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
+    env_file:
+      - .env.docker
+    environment:
+      OP_NODE_L2_ENGINE_RPC: http://node-reth-execution:8551
