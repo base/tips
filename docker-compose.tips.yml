@@ -11,7 +11,8 @@ services:
     env_file:
       - .env.docker
     volumes:
-      - ./docker/ingress-kafka-properties:/app/docker/ingress-kafka-properties:ro
+      - ./docker/ingress-bundles-kafka-properties:/app/docker/ingress-bundles-kafka-properties:ro
+      - ./docker/ingress-audit-kafka-properties:/app/docker/ingress-audit-kafka-properties:ro
     restart: unless-stopped
 
   audit:
