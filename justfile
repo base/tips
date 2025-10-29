@@ -22,7 +22,16 @@ sync: deps-reset
     ###    REFORMAT   ###
     just fix
 
-sync-env:
+playground-env:
+    #!/bin/bash
+    HOST_IP=$(docker run --rm alpine nslookup host.docker.internal | awk '/Address: / && $2 !~ /:/ {print $2; exit}')
+    PEER_ID=$(grep 'started p2p host' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)
+    echo "BUILDER_PLAYGROUND_HOST_IP=$HOST_IP" > .env.playground
+    echo "BUILDER_PLAYGROUND_PEER_ID=$PEER_ID" >> .env.playground
+    echo "OP_NODE_P2P_STATIC=/ip4/$HOST_IP/tcp/9003/p2p/$PEER_ID" >> .env.playground
+    cat .env.playground
+
+sync-env: playground-env
     cp .env.example .env
     cp .env.example ./ui/.env
     cp .env.example .env.docker
@@ -30,6 +39,8 @@ sync-env:
     sed -i '' 's/localhost:9092/host.docker.internal:9094/g' ./.env.docker
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
+    # Append playground-specific P2P config
+    cat .env.playground >> .env.docker
 
 stop-all:
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && rm -rf data/
