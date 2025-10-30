@@ -74,7 +74,7 @@ where
     Queue: QueuePublisher + Sync + Send + 'static,
     Audit: BundleEventPublisher + Sync + Send + 'static,
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
-    N: Network, 
+    N: Network,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         let bundle_with_metadata = self.validate_bundle(bundle).await?;

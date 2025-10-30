@@ -1,8 +1,8 @@
 use alloy_primitives::{Address, Bytes, U256, keccak256};
 use anyhow::Result;
 use jsonrpsee::server::Server;
-use op_alloy_network;
 use rdkafka::ClientConfig;
+use tips_audit::publisher::LoggingBundleEventPublisher;
 use tips_e2e_tests::client::TipsRpcClient;
 use tips_e2e_tests::fixtures::{create_signed_transaction, create_test_signer};
 use tips_e2e_tests::mock_provider::MockProvider;
@@ -17,9 +17,10 @@ async fn start_test_server() -> Result<(String, tokio::task::JoinHandle<()>)> {
         .set("bootstrap.servers", "localhost:9092")
         .create()?;
     let queue = KafkaQueuePublisher::new(kafka_config, "test-topic".to_string());
+    let audit_publisher = LoggingBundleEventPublisher::new();
 
-    let service: IngressService<KafkaQueuePublisher, MockProvider, op_alloy_network::Optimism> =
-        IngressService::new(mock_provider, false, queue, 10800);
+    let service: IngressService<KafkaQueuePublisher, LoggingBundleEventPublisher, MockProvider> =
+        IngressService::new(mock_provider, false, queue, audit_publisher, 10800);
 
     let server = Server::builder().build("127.0.0.1:0").await?;
     let addr = server.local_addr()?;
