@@ -6892,6 +6892,7 @@ dependencies = [
  "op-alloy-flz",
  "op-alloy-rpc-types",
  "serde",
+ "serde_json",
  "tracing",
  "tracing-subscriber 0.3.20",
  "uuid",
