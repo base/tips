@@ -67,8 +67,10 @@ where
     Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
-        let mut bundle_with_metadata = self.validate_bundle(&bundle).await?;
-        bundle_with_metadata.set_meter_bundle_response(self.meter_bundle(&bundle).await?);
+        self.validate_bundle(&bundle).await?;
+        let meter_bundle_response = self.meter_bundle(&bundle).await?;
+        let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
         let bundle_hash = bundle_with_metadata.bundle_hash();
         if let Err(e) = self
@@ -122,9 +124,8 @@ where
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let mut bundle_with_metadata = BundleWithMetadata::load(bundle)
+        let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        bundle_with_metadata.set_meter_bundle_response(meter_bundle_response);
         let bundle_hash = bundle_with_metadata.bundle_hash();
 
         if let Err(e) = self
@@ -196,7 +197,7 @@ where
         Ok(transaction)
     }
 
-    async fn validate_bundle(&self, bundle: &Bundle) -> RpcResult<BundleWithMetadata> {
+    async fn validate_bundle(&self, bundle: &Bundle) -> RpcResult<()> {
         if bundle.txs.is_empty() {
             return Err(
                 EthApiError::InvalidParams("Bundle cannot have empty transactions".into())
@@ -204,18 +205,16 @@ where
             );
         }
 
-        let bundle_with_metadata = BundleWithMetadata::load(bundle.clone())
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let tx_hashes = bundle_with_metadata.txn_hashes();
-
         let mut total_gas = 0u64;
+        let mut tx_hashes = Vec::new();
         for tx_data in &bundle.txs {
             let transaction = self.validate_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
+            tx_hashes.push(transaction.tx_hash());
         }
         validate_bundle(bundle, total_gas, tx_hashes)?;
 
-        Ok(bundle_with_metadata)
+        Ok(())
     }
 
     /// `meter_bundle` is used to determine how long a bundle will take to execute. A bundle that

@@ -73,11 +73,14 @@ pub struct BundleWithMetadata {
     bundle: Bundle,
     uuid: Uuid,
     transactions: Vec<OpTxEnvelope>,
-    meter_bundle_response: Option<MeterBundleResponse>,
+    meter_bundle_response: MeterBundleResponse,
 }
 
 impl BundleWithMetadata {
-    pub fn load(mut bundle: Bundle) -> Result<Self, String> {
+    pub fn load(
+        mut bundle: Bundle,
+        meter_bundle_response: MeterBundleResponse,
+    ) -> Result<Self, String> {
         let uuid = bundle
             .replacement_uuid
             .clone()
@@ -100,7 +103,7 @@ impl BundleWithMetadata {
             bundle,
             transactions,
             uuid,
-            meter_bundle_response: None,
+            meter_bundle_response,
         })
     }
 
@@ -145,10 +148,6 @@ impl BundleWithMetadata {
             .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
             .sum()
     }
-
-    pub fn set_meter_bundle_response(&mut self, meter_bundle_response: MeterBundleResponse) {
-        self.meter_bundle_response = Some(meter_bundle_response);
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,6 +186,24 @@ pub struct MeterBundleResponse {
     pub state_root_time_us: u128,
 }
 
+impl Default for MeterBundleResponse {
+    fn default() -> Self {
+        Self {
+            bundle_gas_price: "0".to_string(),
+            bundle_hash: B256::default(),
+            coinbase_diff: "0".to_string(),
+            eth_sent_to_coinbase: "0".to_string(),
+            gas_fees: "0".to_string(),
+            results: vec![],
+            state_block_number: 0,
+            state_flashblock_index: None,
+            total_gas_used: 0,
+            total_execution_time_us: 0,
+            state_root_time_us: 0,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -206,12 +223,15 @@ mod tests {
         let tx1_bytes = tx1.encoded_2718();
         let tx2_bytes = tx2.encoded_2718();
 
-        let bundle = BundleWithMetadata::load(Bundle {
-            replacement_uuid: None,
-            txs: vec![tx1_bytes.clone().into()],
-            block_number: 1,
-            ..Default::default()
-        })
+        let bundle = BundleWithMetadata::load(
+            Bundle {
+                replacement_uuid: None,
+                txs: vec![tx1_bytes.clone().into()],
+                block_number: 1,
+                ..Default::default()
+            },
+            MeterBundleResponse::default(),
+        )
         .unwrap();
 
         assert!(!bundle.uuid().is_nil());
@@ -234,12 +254,15 @@ mod tests {
         assert_eq!(bundle.bundle_hash(), expected_bundle_hash_single);
 
         let uuid = Uuid::new_v4();
-        let bundle = BundleWithMetadata::load(Bundle {
-            replacement_uuid: Some(uuid.to_string()),
-            txs: vec![tx1_bytes.clone().into(), tx2_bytes.clone().into()],
-            block_number: 1,
-            ..Default::default()
-        })
+        let bundle = BundleWithMetadata::load(
+            Bundle {
+                replacement_uuid: Some(uuid.to_string()),
+                txs: vec![tx1_bytes.clone().into(), tx2_bytes.clone().into()],
+                block_number: 1,
+                ..Default::default()
+            },
+            MeterBundleResponse::default(),
+        )
         .unwrap();
 
         assert_eq!(*bundle.uuid(), uuid);
