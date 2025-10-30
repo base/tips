@@ -11,7 +11,9 @@ use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
-use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse};
+use tips_core::{
+    BLOCK_TIME, Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse,
+};
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
@@ -65,8 +67,8 @@ where
     Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
-        let bundle_with_metadata = self.validate_bundle(&bundle).await?;
-        self.meter_bundle(&bundle).await?;
+        let mut bundle_with_metadata = self.validate_bundle(&bundle).await?;
+        bundle_with_metadata.set_meter_bundle_response(self.meter_bundle(&bundle).await?);
 
         let bundle_hash = bundle_with_metadata.bundle_hash();
         if let Err(e) = self
@@ -118,10 +120,11 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
-        self.meter_bundle(&bundle).await?;
+        let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let bundle_with_metadata = BundleWithMetadata::load(bundle)
+        let mut bundle_with_metadata = BundleWithMetadata::load(bundle)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        bundle_with_metadata.set_meter_bundle_response(meter_bundle_response);
         let bundle_hash = bundle_with_metadata.bundle_hash();
 
         if let Err(e) = self
@@ -215,7 +218,10 @@ where
         Ok(bundle_with_metadata)
     }
 
-    async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<()> {
+    /// `meter_bundle` is used to determine how long a bundle will take to execute. A bundle that
+    /// is within `BLOCK_TIME` will return the `MeterBundleResponse` that can be passed along
+    /// to the builder.
+    async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
         let res: MeterBundleResponse = self
             .provider
             .client()
@@ -223,12 +229,13 @@ where
             .await
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        // if simulation takes longer than 2s, we don't include and just error to user
-        if res.total_execution_time_us > 2000000 {
+        // we can save some builder payload building computation by not including bundles
+        // that we know will take longer than the block time to execute
+        if res.total_execution_time_us > BLOCK_TIME {
             return Err(
                 EthApiError::InvalidParams("Bundle simulation took too long".into()).into_rpc_err(),
             );
         }
-        Ok(())
+        Ok(res)
     }
 }

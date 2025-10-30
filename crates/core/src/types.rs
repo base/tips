@@ -7,6 +7,9 @@ use op_alloy_flz::tx_estimated_size_fjord_bytes;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Block time in microseconds
+pub const BLOCK_TIME: u128 = 2_000_000;
+
 #[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Bundle {
@@ -70,6 +73,7 @@ pub struct BundleWithMetadata {
     bundle: Bundle,
     uuid: Uuid,
     transactions: Vec<OpTxEnvelope>,
+    meter_bundle_response: Option<MeterBundleResponse>,
 }
 
 impl BundleWithMetadata {
@@ -96,6 +100,7 @@ impl BundleWithMetadata {
             bundle,
             transactions,
             uuid,
+            meter_bundle_response: None,
         })
     }
 
@@ -139,6 +144,10 @@ impl BundleWithMetadata {
             .iter()
             .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
             .sum()
+    }
+
+    pub fn set_meter_bundle_response(&mut self, meter_bundle_response: MeterBundleResponse) {
+        self.meter_bundle_response = Some(meter_bundle_response);
     }
 }
 
