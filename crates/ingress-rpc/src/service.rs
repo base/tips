@@ -10,6 +10,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use reth_rpc_eth_types::EthApiError;
 use std::marker::PhantomData;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
 use tracing::{info, warn};
 
@@ -31,19 +32,20 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue, Provider, N = op_alloy_network::Optimism>
+pub struct IngressService<Queue, Audit, Provider, N = op_alloy_network::Optimism>
 where
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
     N: Network,
 {
     provider: Provider,
     dual_write_mempool: bool,
-    queue: Queue,
+    bundle_queue: Queue,
+    audit_publisher: Audit,
     send_transaction_default_lifetime_seconds: u64,
     _phantom: PhantomData<N>,
 }
 
-impl<Queue, Provider, N> IngressService<Queue, Provider, N>
+impl<Queue, Audit, Provider, N> IngressService<Queue, Audit, Provider, N>
 where
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
     N: Network,
@@ -52,12 +54,14 @@ where
         provider: Provider,
         dual_write_mempool: bool,
         queue: Queue,
+        audit_publisher: Audit,
         send_transaction_default_lifetime_seconds: u64,
     ) -> Self {
         Self {
             provider,
             dual_write_mempool,
-            queue,
+            bundle_queue: queue,
+            audit_publisher,
             send_transaction_default_lifetime_seconds,
             _phantom: PhantomData,
         }
@@ -65,19 +69,20 @@ where
 }
 
 #[async_trait]
-impl<Queue, Provider, N> IngressApiServer for IngressService<Queue, Provider, N>
+impl<Queue, Audit, Provider, N> IngressApiServer for IngressService<Queue, Audit, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
+    Audit: BundleEventPublisher + Sync + Send + 'static,
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
-    N: Network,
+    N: Network, 
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         let bundle_with_metadata = self.validate_bundle(bundle).await?;
 
         let bundle_hash = bundle_with_metadata.bundle_hash();
         if let Err(e) = self
-            .queue
-            .publish(bundle_with_metadata.bundle(), &bundle_hash)
+            .bundle_queue
+            .publish(&bundle_with_metadata, &bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -89,6 +94,14 @@ where
             bundle_hash = %bundle_hash,
             tx_count = bundle_with_metadata.transactions().len(),
         );
+
+        let audit_event = BundleEvent::Received {
+            bundle_id: *bundle_with_metadata.uuid(),
+            bundle: bundle_with_metadata.bundle().clone(),
+        };
+        if let Err(e) = self.audit_publisher.publish(audit_event).await {
+            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+        }
 
         Ok(BundleHash { bundle_hash })
     }
@@ -120,9 +133,10 @@ where
         let bundle_with_metadata = BundleWithMetadata::load(bundle)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
         let bundle_hash = bundle_with_metadata.bundle_hash();
+
         if let Err(e) = self
-            .queue
-            .publish(bundle_with_metadata.bundle(), &bundle_hash)
+            .bundle_queue
+            .publish(&bundle_with_metadata, &bundle_hash)
             .await
         {
             warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
@@ -149,13 +163,22 @@ where
             }
         }
 
+        let audit_event = BundleEvent::Received {
+            bundle_id: *bundle_with_metadata.uuid(),
+            bundle: bundle_with_metadata.bundle().clone(),
+        };
+        if let Err(e) = self.audit_publisher.publish(audit_event).await {
+            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+        }
+
         Ok(transaction.tx_hash())
     }
 }
 
-impl<Queue, Provider, N> IngressService<Queue, Provider, N>
+impl<Queue, Audit, Provider, N> IngressService<Queue, Audit, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
+    Audit: BundleEventPublisher + Sync + Send + 'static,
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
     N: Network,
 {

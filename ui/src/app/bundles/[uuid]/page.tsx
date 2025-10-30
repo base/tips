@@ -7,40 +7,6 @@ interface PageProps {
   params: Promise<{ uuid: string }>;
 }
 
-function formatEventType(eventType: string): string {
-  switch (eventType) {
-    case "ReceivedBundle":
-      return "Bundle Received";
-    case "CancelledBundle":
-      return "Bundle Cancelled";
-    case "BuilderMined":
-      return "Builder Mined";
-    case "FlashblockInclusion":
-      return "Flashblock Inclusion";
-    case "BlockInclusion":
-      return "Block Inclusion";
-    default:
-      return eventType;
-  }
-}
-
-function getEventStatus(eventType: string): { color: string; bgColor: string } {
-  switch (eventType) {
-    case "ReceivedBundle":
-      return { color: "text-blue-600", bgColor: "bg-blue-100" };
-    case "CancelledBundle":
-      return { color: "text-red-600", bgColor: "bg-red-100" };
-    case "BuilderMined":
-      return { color: "text-yellow-600", bgColor: "bg-yellow-100" };
-    case "FlashblockInclusion":
-      return { color: "text-purple-600", bgColor: "bg-purple-100" };
-    case "BlockInclusion":
-      return { color: "text-green-600", bgColor: "bg-green-100" };
-    default:
-      return { color: "text-gray-600", bgColor: "bg-gray-100" };
-  }
-}
-
 export default function BundlePage({ params }: PageProps) {
   const [uuid, setUuid] = useState<string>("");
   const [data, setData] = useState<BundleHistoryResponse | null>(null);
@@ -111,23 +77,19 @@ export default function BundlePage({ params }: PageProps) {
       {data && (
         <div className="flex flex-col gap-6">
           {(() => {
-            const allTransactions = new Set<string>();
+            const transactions = new Set<string>();
 
             data.history.forEach((event) => {
-              if (event.event === "Created") {
-                event.data?.bundle?.revertingTxHashes?.forEach((tx) => {
-                  allTransactions.add(tx);
-                });
-              }
+              event.data?.bundle?.revertingTxHashes?.forEach((tx) => {
+                transactions.add(tx);
+              });
             });
 
-            const uniqueTransactions = Array.from(allTransactions.values());
-
-            return uniqueTransactions.length > 0 ? (
+            return transactions.size > 0 ? (
               <div className="border rounded-lg p-4 bg-white/5">
                 <h2 className="text-xl font-semibold mb-3">Transactions</h2>
                 <ul className="space-y-2">
-                  {uniqueTransactions.map((tx) => (
+                  {Array.from(transactions).map((tx) => (
                     <li key={tx}>{tx}</li>
                   ))}
                 </ul>
@@ -141,7 +103,6 @@ export default function BundlePage({ params }: PageProps) {
             {data.history.length > 0 ? (
               <div className="space-y-4">
                 {data.history.map((event, index) => {
-                  const { color, bgColor } = getEventStatus(event.event);
                   return (
                     <div
                       key={`${event.data?.key}-${index}`}
@@ -150,9 +111,9 @@ export default function BundlePage({ params }: PageProps) {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex flex-col gap-1">
                           <span
-                            className={`px-2 py-1 rounded text-sm font-medium ${color} ${bgColor}`}
+                            className={`px-2 py-1 rounded text-sm font-medium bg-gray-200`}
                           >
-                            {formatEventType(event.event)}
+                            {event.event}
                           </span>
                           <span className="text-xs text-gray-500">
                             {event.data?.timestamp

@@ -2,9 +2,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
-use tips_core::{Bundle, BundleWithMetadata};
+use std::fmt::Debug;
+use tips_core::BundleWithMetadata;
 use tokio::sync::mpsc;
-use tracing::{debug, error};
+use tracing::{error, trace};
 
 #[async_trait]
 pub trait BundleSource {
@@ -14,6 +15,12 @@ pub trait BundleSource {
 pub struct KafkaBundleSource {
     queue_consumer: StreamConsumer,
     publisher: mpsc::UnboundedSender<BundleWithMetadata>,
+}
+
+impl Debug for KafkaBundleSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "KafkaBundleSource")
+    }
 }
 
 impl KafkaBundleSource {
@@ -45,28 +52,21 @@ impl BundleSource for KafkaBundleSource {
                         }
                     };
 
-                    let bundle: Bundle = match serde_json::from_slice(payload) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            error!(error = %e, "Failed to deserialize bundle");
-                            continue;
-                        }
-                    };
+                    let bundle_with_metadata: BundleWithMetadata =
+                        match serde_json::from_slice(payload) {
+                            Ok(b) => b,
+                            Err(e) => {
+                                error!(error = %e, "Failed to deserialize bundle");
+                                continue;
+                            }
+                        };
 
-                    debug!(
-                        bundle = ?bundle,
+                    trace!(
+                        bundle = ?bundle_with_metadata,
                         offset = message.offset(),
                         partition = message.partition(),
                         "Received bundle from Kafka"
                     );
-
-                    let bundle_with_metadata = match BundleWithMetadata::load(bundle) {
-                        Ok(b) => b,
-                        Err(e) => {
-                            error!(error = %e, "Failed to load bundle");
-                            continue;
-                        }
-                    };
 
                     if let Err(e) = self.publisher.send(bundle_with_metadata) {
                         error!(error = ?e, "Failed to publish bundle to queue");
