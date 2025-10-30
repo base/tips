@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 tips-audit = { workspace = true }
 tips-core = { workspace = true }
+tips-ingress-rpc = { path = "../ingress-rpc" }
 
 alloy-primitives = { workspace = true }
 alloy-rpc-types = { workspace = true }
@@ -19,6 +20,9 @@ alloy-signer-local = { workspace = true }
 alloy-signer = "1.0.37"
 alloy-consensus = { workspace = true }
 alloy-network = "1.0.37"
+
+op-alloy-network = { workspace = true }
+op-alloy-consensus = { workspace = true }
 
 tokio = { workspace = true }
 async-trait = { workspace = true }
@@ -42,6 +46,8 @@ url = { workspace = true }
 reqwest = { version = "0.12.12", features = ["json"] }
 bytes = { workspace = true }
 hex = "0.4.3"
+jsonrpsee = { workspace = true }
+op-revm = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

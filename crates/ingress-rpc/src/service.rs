@@ -1,14 +1,14 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
-use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
+use alloy_provider::{Network, Provider as AlloyProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
 use op_alloy_consensus::OpTxEnvelope;
-use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
+use std::marker::PhantomData;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
 use tracing::{info, warn};
@@ -31,16 +31,25 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue> {
-    provider: RootProvider<Optimism>,
+pub struct IngressService<Queue, Provider, N = op_alloy_network::Optimism>
+where
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
+    N: Network,
+{
+    provider: Provider,
     dual_write_mempool: bool,
     queue: Queue,
     send_transaction_default_lifetime_seconds: u64,
+    _phantom: PhantomData<N>,
 }
 
-impl<Queue> IngressService<Queue> {
+impl<Queue, Provider, N> IngressService<Queue, Provider, N>
+where
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
+    N: Network,
+{
     pub fn new(
-        provider: RootProvider<Optimism>,
+        provider: Provider,
         dual_write_mempool: bool,
         queue: Queue,
         send_transaction_default_lifetime_seconds: u64,
@@ -50,14 +59,17 @@ impl<Queue> IngressService<Queue> {
             dual_write_mempool,
             queue,
             send_transaction_default_lifetime_seconds,
+            _phantom: PhantomData,
         }
     }
 }
 
 #[async_trait]
-impl<Queue> IngressApiServer for IngressService<Queue>
+impl<Queue, Provider, N> IngressApiServer for IngressService<Queue, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
+    N: Network,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         let bundle_with_metadata = self.validate_bundle(bundle).await?;
@@ -141,9 +153,11 @@ where
     }
 }
 
-impl<Queue> IngressService<Queue>
+impl<Queue, Provider, N> IngressService<Queue, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
+    N: Network,
 {
     async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {

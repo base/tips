@@ -1,17 +1,58 @@
-use alloy_primitives::{Address, Bytes, U256};
+use alloy_primitives::{Address, Bytes, U256, keccak256};
 use anyhow::Result;
+use jsonrpsee::server::Server;
+use op_alloy_network;
+use rdkafka::ClientConfig;
 use tips_e2e_tests::client::TipsRpcClient;
 use tips_e2e_tests::fixtures::{create_signed_transaction, create_test_signer};
+use tips_e2e_tests::mock_provider::MockProvider;
+use tips_ingress_rpc::queue::KafkaQueuePublisher;
+use tips_ingress_rpc::service::{IngressApiServer, IngressService};
+
+/// Start a test server with mock provider and return its URL
+async fn start_test_server() -> Result<(String, tokio::task::JoinHandle<()>)> {
+    let mock_provider = MockProvider::new();
+
+    let kafka_config = ClientConfig::new()
+        .set("bootstrap.servers", "localhost:9092")
+        .create()?;
+    let queue = KafkaQueuePublisher::new(kafka_config, "test-topic".to_string());
+
+    let service: IngressService<KafkaQueuePublisher, MockProvider, op_alloy_network::Optimism> =
+        IngressService::new(mock_provider, false, queue, 10800);
+
+    let server = Server::builder().build("127.0.0.1:0").await?;
+    let addr = server.local_addr()?;
+    let url = format!("http://{}", addr);
+
+    let handle = tokio::spawn(async move {
+        server.start(service.into_rpc()).stopped().await;
+    });
+
+    Ok((url, handle))
+}
 
 #[tokio::test]
 async fn test_rpc_client_instantiation() -> Result<()> {
-    let _client = TipsRpcClient::new("http://localhost:8080");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+        return Ok(());
+    }
+
+    let (url, _handle) = start_test_server().await?;
+    let _client = TipsRpcClient::new(&url);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
-    let client = TipsRpcClient::new("http://localhost:8080");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+        return Ok(());
+    }
+
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
 
     let empty_tx = Bytes::new();
     let result = client.send_raw_transaction(empty_tx).await;
@@ -30,7 +71,13 @@ async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
-    let client = TipsRpcClient::new("http://localhost:8080");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+        return Ok(());
+    }
+
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
 
     let invalid_tx = Bytes::from(vec![0x01, 0x02, 0x03]);
     let result = client.send_raw_transaction(invalid_tx).await;
@@ -51,11 +98,13 @@ async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_valid_transaction() -> Result<()> {
-    if std::env::var("RUN_NODE_TESTS").is_err() {
-        eprintln!("skipping test_send_valid_transaction (set RUN_NODE_TESTS=1 to run)");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
         return Ok(());
     }
-    let client = TipsRpcClient::new("http://localhost:8080");
+
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
     let signer = create_test_signer();
 
     let to = Address::from([0x11; 20]);
@@ -74,9 +123,15 @@ async fn test_send_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_rejects_empty() -> Result<()> {
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+        return Ok(());
+    }
+
     use tips_core::Bundle;
 
-    let client = TipsRpcClient::new("http://localhost:8080");
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
 
     let empty_bundle = Bundle {
         txs: vec![],
@@ -109,14 +164,15 @@ async fn test_send_bundle_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_valid_transaction() -> Result<()> {
-    if std::env::var("RUN_NODE_TESTS").is_err() {
-        eprintln!("skipping test_send_bundle_with_valid_transaction (set RUN_NODE_TESTS=1 to run)");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
         return Ok(());
     }
 
     use tips_core::Bundle;
 
-    let client = TipsRpcClient::new("http://localhost:8080");
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
     let signer = create_test_signer();
 
     // Create a valid signed transaction
@@ -129,12 +185,15 @@ async fn test_send_bundle_with_valid_transaction() -> Result<()> {
     let signed_tx =
         create_signed_transaction(&signer, to, value, nonce, gas_limit, gas_price).await?;
 
+    // Compute transaction hash for reverting_tx_hashes
+    let tx_hash = keccak256(&signed_tx);
+
     let bundle = Bundle {
         txs: vec![signed_tx],
         block_number: 1,
         min_timestamp: None,
         max_timestamp: None,
-        reverting_tx_hashes: vec![],
+        reverting_tx_hashes: vec![tx_hash],
         replacement_uuid: None,
         dropping_tx_hashes: vec![],
         flashblock_number_min: None,
@@ -157,15 +216,16 @@ async fn test_send_bundle_with_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
-    if std::env::var("RUN_NODE_TESTS").is_err() {
-        eprintln!("skipping test_send_bundle_with_replacement_uuid (set RUN_NODE_TESTS=1 to run)");
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
         return Ok(());
     }
 
     use tips_core::Bundle;
     use uuid::Uuid;
 
-    let client = TipsRpcClient::new("http://localhost:8080");
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
     let signer = create_test_signer();
 
     let signed_tx = create_signed_transaction(
@@ -178,6 +238,9 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
     )
     .await?;
 
+    // Compute transaction hash for reverting_tx_hashes
+    let tx_hash = keccak256(&signed_tx);
+
     let replacement_uuid = Uuid::new_v4();
 
     let bundle = Bundle {
@@ -186,7 +249,7 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
         replacement_uuid: Some(replacement_uuid.to_string()),
         min_timestamp: None,
         max_timestamp: None,
-        reverting_tx_hashes: vec![],
+        reverting_tx_hashes: vec![tx_hash],
         dropping_tx_hashes: vec![],
         flashblock_number_min: None,
         flashblock_number_max: None,
@@ -204,16 +267,15 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
-    if std::env::var("RUN_NODE_TESTS").is_err() {
-        eprintln!(
-            "skipping test_send_bundle_with_multiple_transactions (set RUN_NODE_TESTS=1 to run)"
-        );
+    if std::env::var("RUN_E2E_TESTS").is_err() {
+        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
         return Ok(());
     }
 
     use tips_core::Bundle;
 
-    let client = TipsRpcClient::new("http://localhost:8080");
+    let (url, _handle) = start_test_server().await?;
+    let client = TipsRpcClient::new(&url);
     let signer = create_test_signer();
 
     // Create multiple signed transactions with different nonces
@@ -247,12 +309,17 @@ async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
     )
     .await?;
 
+    // Compute transaction hashes for reverting_tx_hashes
+    let tx1_hash = keccak256(&tx1);
+    let tx2_hash = keccak256(&tx2);
+    let tx3_hash = keccak256(&tx3);
+
     let bundle = Bundle {
         txs: vec![tx1, tx2, tx3],
         block_number: 1,
         min_timestamp: None,
         max_timestamp: None,
-        reverting_tx_hashes: vec![],
+        reverting_tx_hashes: vec![tx1_hash, tx2_hash, tx3_hash],
         replacement_uuid: None,
         dropping_tx_hashes: vec![],
         flashblock_number_min: None,

@@ -4,30 +4,20 @@ End-to-end tests for the TIPS (Transaction Inclusion Protocol Service) system.
 
 ## Prerequisites
 
-- Docker Desktop (running)
-- [just](https://github.com/casey/just) command runner: `brew install just`
+- Docker (running) - for Kafka
 - Rust toolchain
+
+**Note:** These tests use a mock provider and do not require an Optimism/Ethereum node to run
 
 ## Running All Tests
 
 From the repository root:
 
 ```bash
-# 1. Set up environment variables (first time only)
-just sync-env
-
-# 2. Start all TIPS services
+# 1. Start TIPS services
 just start-all
-
-# 3. Run tests
-cd crates/e2e-tests
-cargo test 
-```
-
-## Stopping Services
-
-```bash
-just stop-all
+# Run tests
+RUN_E2E_TESTS=1 cargo test --package tips-e2e-tests
 ```
 
 ## Test Structure
@@ -50,31 +40,14 @@ just stop-all
 - `test_send_bundle_with_replacement_uuid` - Tests bundle replacement functionality
 - `test_send_bundle_with_multiple_transactions` - Tests bundle with multiple transactions
 
-**Note:** 
-- Basic tests require TIPS services running (`just start-all`)
-- Integration tests also require:
-  1. `RUN_NODE_TESTS=1` environment variable to run
-  2. An Ethereum node running at port 2222 (configured via `TIPS_INGRESS_RPC_MEMPOOL`)
-
-**All tests will fail if dependencies are not available.** This ensures test failures are real failures, not silently skipped tests.
-
-### Running Specific Tests
-
-```bash
-# Run only basic tests (requires: just start-all)
-cargo test --package tips-e2e-tests
-
-# Run all tests including integration tests (requires: Ethereum node + just start-all)
-RUN_NODE_TESTS=1 cargo test --package tips-e2e-tests
-
-# Run a specific integration test
-RUN_NODE_TESTS=1 cargo test --package tips-e2e-tests test_send_bundle_with_valid_transaction
-```
 
 ## Notes
 
-- All tests require TIPS services running on `localhost:8080` (ingress-rpc)
-- Integration tests also require an Ethereum node at port 2222
-- Tests will fail if required services are not running
-- To run integration tests: Start Ethereum node → `just start-all` → `RUN_NODE_TESTS=1 cargo test`
+- Tests start their own ingress-rpc server instance with a mock provider
+- The mock provider returns generous balances (100 ETH) and minimal L1 costs for all addresses
+- Only Kafka is required as an external dependency (for the queue)
+
+## Architecture
+
+The tests use a `MockProvider` that implements the validation traits (`AccountInfoLookup` and `L1BlockInfoLookup`) but returns static mock data instead of querying a real blockchain. This allows tests to run quickly without external node dependencies while still testing the core validation and RPC logic.
 
