@@ -19,12 +19,13 @@ impl From<Vec<Bytes>> for BundleTransactions {
 }
 
 impl BundleTransactions {
-    pub fn bundle_hash(&self) -> B256 {
+    pub fn bundle_hash(&self) -> Result<B256, String> {
         let mut concatenated = Vec::new();
-        for tx in self.0.iter() {
-            concatenated.extend_from_slice(tx);
+        let txs = self.transactions()?;
+        for tx in txs.iter() {
+            concatenated.extend_from_slice(tx.tx_hash().as_slice());
         }
-        keccak256(&concatenated)
+        Ok(keccak256(&concatenated))
     }
 
     /// Get transaction hashes for all transactions in the bundle
@@ -251,7 +252,10 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(bundle_txs.bundle_hash(), expected_bundle_hash_single);
+        assert_eq!(
+            bundle_txs.bundle_hash().unwrap(),
+            expected_bundle_hash_single
+        );
 
         let uuid = Uuid::new_v4();
         let bundle = BundleWithMetadata::load(
@@ -282,7 +286,10 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(bundle_txs2.bundle_hash(), expected_bundle_hash_double);
+        assert_eq!(
+            bundle_txs2.bundle_hash().unwrap(),
+            expected_bundle_hash_double
+        );
     }
 
     #[test]
