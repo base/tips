@@ -35,11 +35,6 @@ async fn start_test_server() -> Result<(String, tokio::task::JoinHandle<()>)> {
 
 #[tokio::test]
 async fn test_rpc_client_instantiation() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
-        return Ok(());
-    }
-
     let (url, _handle) = start_test_server().await?;
     let _client = TipsRpcClient::new(&url);
     Ok(())
@@ -47,11 +42,6 @@ async fn test_rpc_client_instantiation() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
-        return Ok(());
-    }
-
     let (url, _handle) = start_test_server().await?;
     let client = TipsRpcClient::new(&url);
 
@@ -72,11 +62,6 @@ async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
-        return Ok(());
-    }
-
     let (url, _handle) = start_test_server().await?;
     let client = TipsRpcClient::new(&url);
 
@@ -99,8 +84,10 @@ async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_valid_transaction() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+        eprintln!(
+            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+        );
         return Ok(());
     }
 
@@ -124,11 +111,6 @@ async fn test_send_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_rejects_empty() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
-        return Ok(());
-    }
-
     use tips_core::Bundle;
 
     let (url, _handle) = start_test_server().await?;
@@ -165,8 +147,10 @@ async fn test_send_bundle_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_valid_transaction() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+        eprintln!(
+            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+        );
         return Ok(());
     }
 
@@ -217,8 +201,10 @@ async fn test_send_bundle_with_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+        eprintln!(
+            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+        );
         return Ok(());
     }
 
@@ -268,8 +254,10 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
-    if std::env::var("RUN_E2E_TESTS").is_err() {
-        eprintln!("skipping e2e tests (set RUN_E2E_TESTS=1 to run)");
+    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+        eprintln!(
+            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+        );
         return Ok(());
     }
 
