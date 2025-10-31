@@ -1,14 +1,14 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
-use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
+use alloy_provider::{Network, Provider as AlloyProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
 use op_alloy_consensus::OpTxEnvelope;
-use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
+use std::marker::PhantomData;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{
@@ -34,17 +34,26 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue, Audit> {
-    provider: RootProvider<Optimism>,
+pub struct IngressService<Queue, Audit, Provider, N = op_alloy_network::Optimism>
+where
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
+    N: Network,
+{
+    provider: Provider,
     dual_write_mempool: bool,
     bundle_queue: Queue,
     audit_publisher: Audit,
     send_transaction_default_lifetime_seconds: u64,
+    _phantom: PhantomData<N>,
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit> {
+impl<Queue, Audit, Provider, N> IngressService<Queue, Audit, Provider, N>
+where
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
+    N: Network,
+{
     pub fn new(
-        provider: RootProvider<Optimism>,
+        provider: Provider,
         dual_write_mempool: bool,
         queue: Queue,
         audit_publisher: Audit,
@@ -56,15 +65,18 @@ impl<Queue, Audit> IngressService<Queue, Audit> {
             bundle_queue: queue,
             audit_publisher,
             send_transaction_default_lifetime_seconds,
+            _phantom: PhantomData,
         }
     }
 }
 
 #[async_trait]
-impl<Queue, Audit> IngressApiServer for IngressService<Queue, Audit>
+impl<Queue, Audit, Provider, N> IngressApiServer for IngressService<Queue, Audit, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
     Audit: BundleEventPublisher + Sync + Send + 'static,
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
+    N: Network,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
@@ -169,10 +181,12 @@ where
     }
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit>
+impl<Queue, Audit, Provider, N> IngressService<Queue, Audit, Provider, N>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
     Audit: BundleEventPublisher + Sync + Send + 'static,
+    Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N> + Sync + Send + 'static,
+    N: Network,
 {
     async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
