@@ -98,13 +98,14 @@ services:
 # └─────────────────────┴──────────────────────────────────┴─────────────────────────────────────┘
 
   node-reth-execution:
-    image: node-reth:latest
+    image: ghcr.io/base/node-reth:latest
     container_name: tips-node-reth-execution
     volumes:
       - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
       - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
       - ~/.playground/devnet/l2-genesis.json:/data/l2-genesis.json:ro
       - ~/.playground/devnet:/playground
+    entrypoint: ["/app/base-reth-node"]
     command:
       - node
       - --datadir
@@ -127,6 +128,8 @@ services:
       - .env.docker
     environment:
       PLAYGROUND_DIR: /playground
+      RETH_CHAIN: /data/l2-genesis.json
+      NODE_TYPE: base
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:8545 -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' || exit 1"]
