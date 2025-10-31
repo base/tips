@@ -19,6 +19,7 @@ Thumbs.db
 # Environment variables
 .env
 .env.docker
+.env.playground
 /ui/.env
 
 # Claude

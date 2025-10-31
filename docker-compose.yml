@@ -72,3 +72,81 @@ services:
       /usr/bin/mc anonymous set public minio/tips;
       exit 0;
       "
+
+# Ethereum Nodes in TIPS
+# ======================
+#
+# ┌─────────────────────┬──────────────────────────────────┬─────────────────────────────────────┐
+# │ Component           │ Production                       │ Local Development                   │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ Sequencer           │                                  │                                     │
+# │  - Consensus Layer  │ "consensus" container running    │ builder-playground op-node          │
+# │                     │ op-node                          │ (runs separately within Docker)     │
+# │  - Execution Layer  │ "execution" container running    │ builder-playground op-geth          │
+# │                     │ base/node-reth                   │ (runs separately within Docker)     │
+# │  - Builder          │ "builder" container running      │ op-rbuilder                         │
+# │                     │ op-rbuilder                      │ (runs on host machine)              │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ RPC Node            │                                  │                                     │
+# │  - Consensus Layer  │ "consensus" container running    │ node-reth-consensus (container)     │
+# │                     │ op-node                          │                                     │
+# │  - Execution Layer  │ "execution" container running    │ node-reth-execution (container)     │
+# │                     │ base/node-reth                   │                                     │
+# ├─────────────────────┼──────────────────────────────────┼─────────────────────────────────────┤
+# │ L1 Dependencies     │ Externally hosted L1 node        │ builder-playground el + beacon      │
+# │                     │                                  │ (el: 8545, beacon: 3500)            │
+# └─────────────────────┴──────────────────────────────────┴─────────────────────────────────────┘
+
+  node-reth-execution:
+    image: ghcr.io/base/node-reth:latest
+    container_name: tips-node-reth-execution
+    volumes:
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+      - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
+      - ~/.playground/devnet/l2-genesis.json:/data/l2-genesis.json:ro
+      - ~/.playground/devnet:/playground
+    entrypoint: ["/app/base-reth-node"]
+    command:
+      - node
+      - --datadir
+      - /playground/tips-node-reth
+      - --chain
+      - /data/l2-genesis.json
+      - --http
+      - --http.addr
+      - 0.0.0.0
+      - --http.port
+      - "8545"
+      - --authrpc.addr
+      - 0.0.0.0
+      - --authrpc.port
+      - "8551"
+      - --authrpc.jwtsecret
+      - /data/jwtsecret
+      - --disable-discovery
+    env_file:
+      - .env.docker
+    environment:
+      PLAYGROUND_DIR: /playground
+      RETH_CHAIN: /data/l2-genesis.json
+      NODE_TYPE: base
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8545 -X POST -H 'Content-Type: application/json' -d '{\"jsonrpc\":\"2.0\",\"method\":\"eth_blockNumber\",\"params\":[],\"id\":1}' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  node-reth-consensus:
+    image: us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7
+    container_name: tips-node-reth-consensus
+    depends_on:
+      node-reth-execution:
+        condition: service_healthy
+    volumes:
+      - ~/.playground/devnet/jwtsecret:/data/jwtsecret:ro
+      - ~/.playground/devnet/rollup.json:/data/rollup.json:ro
+    env_file:
+      - .env.docker
+    environment:
+      OP_NODE_L2_ENGINE_RPC: http://node-reth-execution:8551
