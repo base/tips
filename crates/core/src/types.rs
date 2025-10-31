@@ -134,7 +134,6 @@ pub struct CancelBundle {
 pub struct BundleWithMetadata {
     bundle: Bundle,
     uuid: Uuid,
-    transactions: Vec<OpTxEnvelope>,
     meter_bundle_response: MeterBundleResponse,
 }
 
@@ -152,18 +151,8 @@ impl BundleWithMetadata {
 
         bundle.replacement_uuid = Some(uuid.to_string());
 
-        let transactions: Vec<OpTxEnvelope> = bundle
-            .txs
-            .iter()
-            .map(|b| {
-                OpTxEnvelope::decode_2718_exact(b)
-                    .map_err(|e| format!("failed to decode transaction: {e}"))
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
         Ok(BundleWithMetadata {
             bundle,
-            transactions,
             uuid,
             meter_bundle_response,
         })
