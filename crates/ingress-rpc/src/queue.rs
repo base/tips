@@ -99,7 +99,7 @@ mod tests {
         let bundle_with_metadata =
             BundleWithMetadata::load(bundle.clone(), create_test_meter_bundle_response()).unwrap();
         let bundle_txs: BundleTransactions = bundle.txs.into();
-        let bundle_hash = bundle_txs.bundle_hash();
+        let bundle_hash = bundle_txs.bundle_hash().unwrap();
 
         let start = Instant::now();
         let result = publisher.publish(&bundle_with_metadata, &bundle_hash).await;

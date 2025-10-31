@@ -77,7 +77,9 @@ where
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
         let bundle_txs: BundleTransactions = bundle_with_metadata.bundle().txs.clone().into();
-        let bundle_hash = bundle_txs.bundle_hash();
+        let bundle_hash = bundle_txs
+            .bundle_hash()
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
         if let Err(e) = self
             .bundle_queue
             .publish(&bundle_with_metadata, &bundle_hash)
@@ -131,7 +133,9 @@ where
         let bundle_with_metadata = BundleWithMetadata::load(bundle.clone(), meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
         let bundle_txs: BundleTransactions = bundle.txs.into();
-        let bundle_hash = bundle_txs.bundle_hash();
+        let bundle_hash = bundle_txs
+            .bundle_hash()
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
         if let Err(e) = self
             .bundle_queue
