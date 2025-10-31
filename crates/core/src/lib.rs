@@ -6,5 +6,6 @@ pub mod types;
 pub mod test_utils;
 
 pub use types::{
-    BLOCK_TIME, Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse,
+    BLOCK_TIME, Bundle, BundleHash, BundleProperties, BundleWithMetadata, CancelBundle,
+    MeterBundleResponse,
 };

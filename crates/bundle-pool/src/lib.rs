@@ -8,7 +8,7 @@ use tracing::error;
 
 pub use pool::{Action, BundleStore, InMemoryBundlePool, ProcessedBundle};
 pub use source::KafkaBundleSource;
-pub use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
+pub use tips_core::{Bundle, BundleWithMetadata, CancelBundle};
 
 pub fn connect_sources_to_pool<S, P>(
     sources: Vec<S>,
