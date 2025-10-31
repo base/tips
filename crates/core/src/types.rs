@@ -10,6 +10,10 @@ use uuid::Uuid;
 /// Block time in microseconds
 pub const BLOCK_TIME: u128 = 2_000_000;
 
+pub trait BundleProperties {
+    fn bundle_hash(&self) -> B256;
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Bundle {
@@ -54,6 +58,26 @@ pub struct Bundle {
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dropping_tx_hashes: Vec<TxHash>,
+}
+
+impl BundleProperties for Bundle {
+    fn bundle_hash(&self) -> B256 {
+        let transactions: Vec<OpTxEnvelope> = self
+            .txs
+            .iter()
+            .map(|b| {
+                OpTxEnvelope::decode_2718_exact(b)
+                    .map_err(|e| format!("failed to decode transaction: {e}"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .expect("failed to decode transactions");
+
+        let mut concatenated = Vec::new();
+        for tx in transactions {
+            concatenated.extend_from_slice(tx.tx_hash().as_slice());
+        }
+        keccak256(&concatenated)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,14 +139,6 @@ impl BundleWithMetadata {
         &self.uuid
     }
 
-    pub fn bundle_hash(&self) -> B256 {
-        let mut concatenated = Vec::new();
-        for tx in self.transactions() {
-            concatenated.extend_from_slice(tx.tx_hash().as_slice());
-        }
-        keccak256(&concatenated)
-    }
-
     pub fn txn_hashes(&self) -> Vec<TxHash> {
         self.transactions().iter().map(|t| t.tx_hash()).collect()
     }
@@ -147,6 +163,12 @@ impl BundleWithMetadata {
             .iter()
             .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
             .sum()
+    }
+}
+
+impl BundleProperties for BundleWithMetadata {
+    fn bundle_hash(&self) -> B256 {
+        self.bundle.bundle_hash()
     }
 }
 

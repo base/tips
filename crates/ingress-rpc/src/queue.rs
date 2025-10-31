@@ -75,7 +75,9 @@ impl QueuePublisher for KafkaQueuePublisher {
 mod tests {
     use super::*;
     use rdkafka::config::ClientConfig;
-    use tips_core::{Bundle, BundleWithMetadata, test_utils::create_test_meter_bundle_response};
+    use tips_core::{
+        Bundle, BundleProperties, BundleWithMetadata, test_utils::create_test_meter_bundle_response,
+    };
     use tokio::time::{Duration, Instant};
 
     fn create_test_bundle() -> Bundle {

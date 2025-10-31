@@ -12,7 +12,8 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{
-    BLOCK_TIME, Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse,
+    BLOCK_TIME, Bundle, BundleHash, BundleProperties, BundleWithMetadata, CancelBundle,
+    MeterBundleResponse,
 };
 use tracing::{info, warn};
 
