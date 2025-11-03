@@ -405,7 +405,7 @@ mod tests {
             } => {
                 assert_eq!(key, "test-key");
                 assert_eq!(*ts, 1234567890);
-                assert_eq!(b.block_number, bundle.block_number);
+                assert_eq!(b.params.block_number, bundle.params.block_number);
             }
             _ => panic!("Expected Created event"),
         }

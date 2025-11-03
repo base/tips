@@ -10,66 +10,70 @@ use uuid::Uuid;
 /// Block time in microseconds
 pub const BLOCK_TIME: u128 = 2_000_000;
 
-pub struct BundleTransactions(Vec<Bytes>);
+#[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleTransactions(Vec<OpTxEnvelope>);
 
-impl From<Vec<Bytes>> for BundleTransactions {
-    fn from(txs: Vec<Bytes>) -> Self {
+impl From<Vec<OpTxEnvelope>> for BundleTransactions {
+    fn from(txs: Vec<OpTxEnvelope>) -> Self {
         BundleTransactions(txs)
     }
 }
 
-impl BundleTransactions {
-    pub fn bundle_hash(&self) -> Result<B256, String> {
-        let mut concatenated = Vec::new();
-        let txs = self.transactions()?;
-        for tx in txs.iter() {
-            concatenated.extend_from_slice(tx.tx_hash().as_slice());
-        }
-        Ok(keccak256(&concatenated))
-    }
-
-    /// Get transaction hashes for all transactions in the bundle
-    pub fn txn_hashes(&self) -> Result<Vec<TxHash>, String> {
-        self.transactions()?
-            .iter()
-            .map(|t| Ok(t.tx_hash()))
-            .collect()
-    }
-
-    /// Get sender addresses for all transactions in the bundle
-    pub fn senders(&self) -> Result<Vec<Address>, String> {
-        self.transactions()?
-            .iter()
-            .map(|t| {
-                t.recover_signer()
-                    .map_err(|e| format!("failed to recover signer: {e}"))
-            })
-            .collect()
-    }
-
-    /// Get total gas limit for all transactions in the bundle
-    pub fn gas_limit(&self) -> Result<u64, String> {
-        Ok(self.transactions()?.iter().map(|t| t.gas_limit()).sum())
-    }
-
-    /// Get total data availability size for all transactions in the bundle
-    pub fn da_size(&self) -> Result<u64, String> {
-        Ok(self
-            .transactions()?
-            .iter()
-            .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
-            .sum())
-    }
-
-    /// Decode all transactions from bytes to OpTxEnvelope
-    pub fn transactions(&self) -> Result<Vec<OpTxEnvelope>, String> {
-        self.0
+impl TryFrom<Vec<Bytes>> for BundleTransactions {
+    type Error = &'static str;
+    fn try_from(txs: Vec<Bytes>) -> Result<Self, Self::Error> {
+        let transactions = txs
             .iter()
             .map(|b| {
                 OpTxEnvelope::decode_2718_exact(b)
                     .map_err(|e| format!("failed to decode transaction: {e}"))
             })
-            .collect()
+            .collect::<Result<Vec<OpTxEnvelope>, _>>();
+
+        match transactions {
+            Ok(transactions) => Ok(BundleTransactions(transactions)),
+            Err(_) => Err("failed to decode transactions"),
+        }
+    }
+}
+
+impl From<BundleTransactions> for Vec<Bytes> {
+    fn from(txs: BundleTransactions) -> Self {
+        txs.0.iter().map(|t| t.encoded_2718().into()).collect()
+    }
+}
+
+impl BundleTransactions {
+    pub fn bundle_hash(&self) -> B256 {
+        let mut concatenated = Vec::new();
+        for tx in self.0.iter() {
+            concatenated.extend_from_slice(tx.tx_hash().as_slice());
+        }
+        keccak256(&concatenated)
+    }
+
+    /// Get transaction hashes for all transactions in the bundle
+    pub fn txn_hashes(&self) -> Vec<TxHash> {
+        self.0.iter().map(|t| t.tx_hash()).collect()
+    }
+
+    /// Get sender addresses for all transactions in the bundle
+    pub fn senders(&self) -> Vec<Address> {
+        self.0.iter().map(|t| t.recover_signer().unwrap()).collect()
+    }
+
+    /// Get total gas limit for all transactions in the bundle
+    pub fn gas_limit(&self) -> u64 {
+        self.0.iter().map(|t| t.gas_limit()).sum()
+    }
+
+    /// Get total data availability size for all transactions in the bundle
+    pub fn da_size(&self) -> u64 {
+        self.0
+            .iter()
+            .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
+            .sum()
     }
 }
 
@@ -78,6 +82,13 @@ impl BundleTransactions {
 pub struct Bundle {
     pub txs: Vec<Bytes>,
 
+    #[serde(flatten)]
+    pub params: BundleParams,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleParams {
     #[serde(with = "alloy_serde::quantity")]
     pub block_number: u64,
 
@@ -133,9 +144,20 @@ pub struct CancelBundle {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BundleWithMetadata {
-    bundle: Bundle,
     uuid: Uuid,
+    params: BundleParams,
     meter_bundle_response: MeterBundleResponse,
+
+    pub txs: BundleTransactions,
+}
+
+impl From<BundleWithMetadata> for Bundle {
+    fn from(bundle_with_metadata: BundleWithMetadata) -> Self {
+        Bundle {
+            txs: bundle_with_metadata.txs.into(),
+            params: bundle_with_metadata.params.clone(),
+        }
+    }
 }
 
 impl BundleWithMetadata {
@@ -144,27 +166,29 @@ impl BundleWithMetadata {
         meter_bundle_response: MeterBundleResponse,
     ) -> Result<Self, String> {
         let uuid = bundle
+            .params
             .replacement_uuid
             .clone()
             .unwrap_or_else(|| Uuid::new_v4().to_string());
 
         let uuid = Uuid::parse_str(uuid.as_str()).map_err(|_| format!("Invalid UUID: {uuid}"))?;
 
-        bundle.replacement_uuid = Some(uuid.to_string());
+        bundle.params.replacement_uuid = Some(uuid.to_string());
 
+        let txs: BundleTransactions = bundle
+            .txs
+            .try_into()
+            .map_err(|e| format!("failed to convert transactions: {e}"))?;
         Ok(BundleWithMetadata {
-            bundle,
             uuid,
+            params: bundle.params.clone(),
+            txs,
             meter_bundle_response,
         })
     }
 
     pub fn uuid(&self) -> &Uuid {
         &self.uuid
-    }
-
-    pub fn bundle(&self) -> &Bundle {
-        &self.bundle
     }
 }
 
@@ -224,10 +248,12 @@ mod tests {
 
         let bundle = BundleWithMetadata::load(
             Bundle {
-                replacement_uuid: None,
                 txs: vec![tx1_bytes.clone().into()],
-                block_number: 1,
-                ..Default::default()
+                params: BundleParams {
+                    replacement_uuid: None,
+                    block_number: 1,
+                    ..Default::default()
+                },
             },
             create_test_meter_bundle_response(),
         )
@@ -235,14 +261,14 @@ mod tests {
 
         assert!(!bundle.uuid().is_nil());
         assert_eq!(
-            bundle.bundle.replacement_uuid,
+            bundle.params.replacement_uuid,
             Some(bundle.uuid().to_string())
         );
-        let bundle_txs: BundleTransactions = bundle.bundle().txs.clone().into();
-        assert_eq!(bundle_txs.txn_hashes().unwrap().len(), 1);
-        assert_eq!(bundle_txs.txn_hashes().unwrap()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs.senders().unwrap().len(), 1);
-        assert_eq!(bundle_txs.senders().unwrap()[0], alice.address());
+        let bundle_txs: BundleTransactions = bundle.txs.into();
+        assert_eq!(bundle_txs.txn_hashes().len(), 1);
+        assert_eq!(bundle_txs.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle_txs.senders().len(), 1);
+        assert_eq!(bundle_txs.senders()[0], alice.address());
 
         // Bundle hashes are keccack256(...txnHashes)
         let expected_bundle_hash_single = {
@@ -251,32 +277,31 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(
-            bundle_txs.bundle_hash().unwrap(),
-            expected_bundle_hash_single
-        );
+        assert_eq!(bundle_txs.bundle_hash(), expected_bundle_hash_single);
 
         let uuid = Uuid::new_v4();
         let bundle = BundleWithMetadata::load(
             Bundle {
-                replacement_uuid: Some(uuid.to_string()),
                 txs: vec![tx1_bytes.clone().into(), tx2_bytes.clone().into()],
-                block_number: 1,
-                ..Default::default()
+                params: BundleParams {
+                    replacement_uuid: Some(uuid.to_string()),
+                    block_number: 1,
+                    ..Default::default()
+                },
             },
             create_test_meter_bundle_response(),
         )
         .unwrap();
 
         assert_eq!(*bundle.uuid(), uuid);
-        assert_eq!(bundle.bundle.replacement_uuid, Some(uuid.to_string()));
-        let bundle_txs2: BundleTransactions = bundle.bundle().txs.clone().into();
-        assert_eq!(bundle_txs2.txn_hashes().unwrap().len(), 2);
-        assert_eq!(bundle_txs2.txn_hashes().unwrap()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs2.txn_hashes().unwrap()[1], tx2.tx_hash());
-        assert_eq!(bundle_txs2.senders().unwrap().len(), 2);
-        assert_eq!(bundle_txs2.senders().unwrap()[0], alice.address());
-        assert_eq!(bundle_txs2.senders().unwrap()[1], alice.address());
+        assert_eq!(bundle.params.replacement_uuid, Some(uuid.to_string()));
+        let bundle_txs2: BundleTransactions = bundle.txs.into();
+        assert_eq!(bundle_txs2.txn_hashes().len(), 2);
+        assert_eq!(bundle_txs2.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle_txs2.txn_hashes()[1], tx2.tx_hash());
+        assert_eq!(bundle_txs2.senders().len(), 2);
+        assert_eq!(bundle_txs2.senders()[0], alice.address());
+        assert_eq!(bundle_txs2.senders()[1], alice.address());
 
         let expected_bundle_hash_double = {
             let mut hasher = Keccak256::default();
@@ -285,10 +310,7 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(
-            bundle_txs2.bundle_hash().unwrap(),
-            expected_bundle_hash_double
-        );
+        assert_eq!(bundle_txs2.bundle_hash(), expected_bundle_hash_double);
     }
 
     #[test]

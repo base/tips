@@ -12,8 +12,8 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{
-    BLOCK_TIME, Bundle, BundleHash, BundleTransactions, BundleWithMetadata, CancelBundle,
-    MeterBundleResponse,
+    BLOCK_TIME, Bundle, BundleHash, BundleParams, BundleTransactions, BundleWithMetadata,
+    CancelBundle, MeterBundleResponse,
 };
 use tracing::{info, warn};
 
@@ -76,10 +76,8 @@ where
         let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        let bundle_txs: BundleTransactions = bundle_with_metadata.bundle().txs.clone().into();
-        let bundle_hash = bundle_txs
-            .bundle_hash()
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let bundle_txs: BundleTransactions = bundle_with_metadata.txs.clone().into();
+        let bundle_hash = bundle_txs.bundle_hash();
         if let Err(e) = self
             .bundle_queue
             .publish(&bundle_with_metadata, &bundle_hash)
@@ -96,7 +94,7 @@ where
 
         let audit_event = BundleEvent::Received {
             bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.bundle().clone(),
+            bundle: bundle_with_metadata.clone().into(),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
             warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
@@ -124,18 +122,18 @@ where
 
         let bundle = Bundle {
             txs: vec![data.clone()],
-            max_timestamp: Some(expiry_timestamp),
-            reverting_tx_hashes: vec![transaction.tx_hash()],
-            ..Default::default()
+            params: BundleParams {
+                max_timestamp: Some(expiry_timestamp),
+                reverting_tx_hashes: vec![transaction.tx_hash()],
+                ..Default::default()
+            },
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
         let bundle_with_metadata = BundleWithMetadata::load(bundle.clone(), meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_txs: BundleTransactions = bundle.txs.into();
-        let bundle_hash = bundle_txs
-            .bundle_hash()
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let bundle_txs: BundleTransactions = bundle_with_metadata.txs.clone().into();
+        let bundle_hash = bundle_txs.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
@@ -168,7 +166,7 @@ where
 
         let audit_event = BundleEvent::Received {
             bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.bundle().clone(),
+            bundle: bundle_with_metadata.clone().into(),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
             warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);

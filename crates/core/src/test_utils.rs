@@ -1,4 +1,4 @@
-use crate::{Bundle, BundleWithMetadata, MeterBundleResponse};
+use crate::{Bundle, BundleParams, BundleWithMetadata, MeterBundleResponse};
 use alloy_consensus::SignableTransaction;
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::network::TxSignerSync;
@@ -33,10 +33,12 @@ pub fn create_test_bundle(
 
     let bundle = Bundle {
         txs,
-        block_number: block_number.unwrap_or(0),
-        min_timestamp,
-        max_timestamp,
-        ..Default::default()
+        params: BundleParams {
+            block_number: block_number.unwrap_or(0),
+            min_timestamp,
+            max_timestamp,
+            ..Default::default()
+        },
     };
     let meter_bundle_response = create_test_meter_bundle_response();
 
