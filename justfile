@@ -22,7 +22,16 @@ sync: deps-reset
     ###    REFORMAT   ###
     just fix
 
-sync-env:
+playground-env:
+    #!/bin/bash
+    HOST_IP=$(docker run --rm alpine nslookup host.docker.internal | awk '/Address: / && $2 !~ /:/ {print $2; exit}')
+    PEER_ID=$(grep 'started p2p host' ~/.playground/devnet/logs/op-node.log | sed -n 's/.*peerID=\([^ ]*\).*/\1/p' | head -1)
+    echo "BUILDER_PLAYGROUND_HOST_IP=$HOST_IP" > .env.playground
+    echo "BUILDER_PLAYGROUND_PEER_ID=$PEER_ID" >> .env.playground
+    echo "OP_NODE_P2P_STATIC=/ip4/$HOST_IP/tcp/9003/p2p/$PEER_ID" >> .env.playground
+    cat .env.playground
+
+sync-env: playground-env
     cp .env.example .env
     cp .env.example ./ui/.env
     cp .env.example .env.docker
@@ -30,18 +39,20 @@ sync-env:
     sed -i '' 's/localhost:9092/host.docker.internal:9094/g' ./.env.docker
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
+    # Append playground-specific P2P config
+    cat .env.playground >> .env.docker
 
 stop-all:
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && docker compose down && docker compose rm && rm -rf data/
 
 # Start every service running in docker, useful for demos
-start-all: stop-all
+start-all: stop-all ensure-node-reth-image
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d
 
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
-start-except programs: stop-all
+start-except programs: stop-all ensure-node-reth-image
     #!/bin/bash
-    all_services=(kafka kafka-setup minio minio-setup ingress-rpc audit ui)
+    all_services=(kafka kafka-setup minio minio-setup node-reth-execution node-reth-consensus ingress-rpc audit ui)
     exclude_services=({{ programs }})
     
     # Create result array with services not in exclude list
@@ -58,7 +69,7 @@ start-except programs: stop-all
             result_services+=("$service")
         fi
     done
-    
+
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
 ### RUN SERVICES ###
@@ -73,12 +84,6 @@ audit:
 
 ingress-rpc:
     cargo run --bin tips-ingress-rpc
-
-maintenance:
-    cargo run --bin tips-maintenance
-
-ingress-writer:
-    cargo run --bin tips-ingress-writer
 
 ui:
     cd ui && yarn dev
@@ -105,3 +110,44 @@ send-txn:
     hash=$(curl -s {{ ingress_url }} -X POST   -H "Content-Type: application/json" --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" | jq -r ".result")
     cast receipt $hash -r {{ sequencer_url }} | grep status
     cast receipt $hash -r {{ builder_url }} | grep status
+
+# Build node-reth Docker image
+# Args:
+#   ref: Git ref to build from GitHub (default: "main")
+#   local: Local path to build from (default: "" = use GitHub)
+# Examples:
+#   just build-node-reth                     # Build from GitHub main branch
+#   just build-node-reth ref=v1.2.3          # Build from GitHub tag v1.2.3
+#   just build-node-reth local=../node-reth  # Build from local checkout
+# Tags created: node-reth:latest and node-reth:<commit-hash> (adds -dirty suffix if local working tree has changes)
+build-node-reth ref="main" local="":
+    #!/bin/bash
+    if [ -z "{{ local }}" ]; then
+        echo "Building node-reth from GitHub ref: {{ ref }}"
+        # Get the commit hash for the ref
+        COMMIT_HASH=$(git ls-remote https://github.com/base/node-reth.git {{ ref }} | cut -f1 | cut -c1-8)
+        echo "Commit hash: $COMMIT_HASH"
+        docker build -t node-reth:latest -t node-reth:$COMMIT_HASH \
+            -f https://raw.githubusercontent.com/base/node-reth/{{ ref }}/Dockerfile \
+            https://github.com/base/node-reth.git#{{ ref }}
+    else
+        echo "Building node-reth from local path: {{ local }}"
+        # Get the commit hash from local repo
+        cd {{ local }}
+        COMMIT_HASH=$(git rev-parse --short=8 HEAD)
+        # Check if working tree is dirty
+        if ! git diff-index --quiet HEAD --; then
+            COMMIT_HASH="${COMMIT_HASH}-dirty"
+        fi
+        echo "Commit hash: $COMMIT_HASH"
+        docker build -t node-reth:latest -t node-reth:$COMMIT_HASH -f {{ local }}/Dockerfile {{ local }}
+    fi
+
+ensure-node-reth-image:
+    #!/bin/bash
+    if ! docker image inspect node-reth:latest >/dev/null 2>&1; then
+        echo "node-reth:latest image not found, building..."
+        just build-node-reth
+    else
+        echo "node-reth:latest image already exists"
+    fi
