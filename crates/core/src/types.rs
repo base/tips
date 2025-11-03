@@ -146,9 +146,8 @@ pub struct CancelBundle {
 pub struct BundleWithMetadata {
     uuid: Uuid,
     params: BundleParams,
+    txs: BundleTransactions,
     meter_bundle_response: MeterBundleResponse,
-
-    pub txs: BundleTransactions,
 }
 
 impl From<BundleWithMetadata> for Bundle {
@@ -189,6 +188,10 @@ impl BundleWithMetadata {
 
     pub fn uuid(&self) -> &Uuid {
         &self.uuid
+    }
+
+    pub fn txs(&self) -> &BundleTransactions {
+        &self.txs
     }
 }
 
