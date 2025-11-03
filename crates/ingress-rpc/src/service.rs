@@ -12,8 +12,8 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{
-    BLOCK_TIME, Bundle, BundleHash, BundleParams, BundleTransactions, BundleWithMetadata,
-    CancelBundle, MeterBundleResponse,
+    BLOCK_TIME, Bundle, BundleHash, BundleParams, BundleWithMetadata, CancelBundle,
+    MeterBundleResponse,
 };
 use tracing::{info, warn};
 
@@ -76,8 +76,7 @@ where
         let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        let bundle_txs: BundleTransactions = bundle_with_metadata.txs.clone().into();
-        let bundle_hash = bundle_txs.bundle_hash();
+        let bundle_hash = bundle_with_metadata.txs.bundle_hash();
         if let Err(e) = self
             .bundle_queue
             .publish(&bundle_with_metadata, &bundle_hash)
@@ -132,8 +131,7 @@ where
 
         let bundle_with_metadata = BundleWithMetadata::load(bundle.clone(), meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_txs: BundleTransactions = bundle_with_metadata.txs.clone().into();
-        let bundle_hash = bundle_txs.bundle_hash();
+        let bundle_hash = bundle_with_metadata.txs.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
