@@ -21,19 +21,16 @@ impl From<Vec<OpTxEnvelope>> for BundleTransactions {
 }
 
 impl TryFrom<Vec<Bytes>> for BundleTransactions {
-    type Error = &'static str;
+    type Error = String;
     fn try_from(txs: Vec<Bytes>) -> Result<Self, Self::Error> {
         let transactions = txs
             .iter()
-            .map(|b| {
-                OpTxEnvelope::decode_2718_exact(b)
-                    .map_err(|e| format!("failed to decode transaction: {e}"))
-            })
+            .map(|b| OpTxEnvelope::decode_2718_exact(b))
             .collect::<Result<Vec<OpTxEnvelope>, _>>();
 
         match transactions {
             Ok(transactions) => Ok(BundleTransactions(transactions)),
-            Err(_) => Err("failed to decode transactions"),
+            Err(e) => Err(format!("failed to decode transactions: {e}")),
         }
     }
 }
