@@ -85,12 +85,6 @@ audit:
 ingress-rpc:
     cargo run --bin tips-ingress-rpc
 
-maintenance:
-    cargo run --bin tips-maintenance
-
-ingress-writer:
-    cargo run --bin tips-ingress-writer
-
 ui:
     cd ui && yarn dev
 
