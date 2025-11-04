@@ -88,12 +88,12 @@ export async function getTransactionMetadataByHash(
 
 export interface BundleEvent {
   event: string;
-  data?: {
+  data: {
+    key: string;
+    timestamp: number;
     bundle?: {
       revertingTxHashes: Array<string>;
     };
-    key: string;
-    timestamp: number;
   };
 }
 
