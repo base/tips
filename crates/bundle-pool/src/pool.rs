@@ -111,9 +111,10 @@ impl BundleStore for InMemoryBundlePool {
             };
 
             if let Some(event) = event
-                && let Err(e) = self.audit_log.send(event) {
-                    warn!(error = %e, "Failed to send event to audit log");
-                }
+                && let Err(e) = self.audit_log.send(event)
+            {
+                warn!(error = %e, "Failed to send event to audit log");
+            }
         }
 
         for p in processed.iter() {
@@ -139,9 +140,10 @@ impl BundleStore for InMemoryBundlePool {
             };
 
             if let Some(event) = event
-                && let Err(e) = self.audit_log.send(event) {
-                    warn!(error = %e, "Failed to send event to audit log");
-                }
+                && let Err(e) = self.audit_log.send(event)
+            {
+                warn!(error = %e, "Failed to send event to audit log");
+            }
         }
         inner.flashblocks_in_block.remove(&number);
     }

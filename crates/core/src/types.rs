@@ -183,7 +183,6 @@ pub struct MeterBundleResponse {
     pub state_flashblock_index: Option<u64>,
     pub total_gas_used: u64,
     pub total_execution_time_us: u128,
-    pub state_root_time_us: u128,
 }
 
 #[cfg(test)]
