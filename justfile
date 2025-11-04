@@ -84,12 +84,15 @@ ui:
     cd ui && yarn dev
 
 sequencer_url := "http://localhost:8547"
+validator_url := "http://localhost:8549"
 builder_url := "http://localhost:2222"
 ingress_url := "http://localhost:8080"
 
 get-blocks:
     echo "Sequencer"
     cast bn -r {{ sequencer_url }}
+    echo "Validator"
+    cast bn -r {{ validator_url }}
     echo "Builder"
     cast bn -r {{ builder_url }}
 
