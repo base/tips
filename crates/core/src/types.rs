@@ -239,8 +239,8 @@ impl BundleTxs for AcceptedBundle {
 }
 
 impl AcceptedBundle {
-    pub fn load(
-        mut bundle: Bundle,
+    pub fn new(
+        mut bundle: ParsedBundle,
         meter_bundle_response: MeterBundleResponse,
     ) -> Result<Self, String> {
         let uuid = bundle
@@ -252,23 +252,9 @@ impl AcceptedBundle {
 
         bundle.replacement_uuid = Some(uuid.to_string());
 
-        let txs: Vec<Recovered<OpTxEnvelope>> = bundle
-            .txs
-            .into_iter()
-            .map(|tx| {
-                OpTxEnvelope::decode_2718_exact(tx.iter().as_slice())
-                    .map_err(|e| format!("Failed to decode transaction: {e:?}"))
-                    .and_then(|tx| {
-                        tx.try_into_recovered().map_err(|e| {
-                            format!("Failed to convert transaction to recovered: {e:?}")
-                        })
-                    })
-            })
-            .collect::<Result<Vec<Recovered<OpTxEnvelope>>, String>>()?;
-
         Ok(AcceptedBundle {
             uuid,
-            txs,
+            txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
             flashblock_number_max: bundle.flashblock_number_max,
@@ -340,24 +326,25 @@ mod tests {
         let tx1_bytes = tx1.encoded_2718();
         let tx2_bytes = tx2.encoded_2718();
 
-        let bundle = AcceptedBundle::load(
+        let bundle = AcceptedBundle::new(
             Bundle {
                 txs: vec![tx1_bytes.clone().into()],
                 block_number: 1,
                 replacement_uuid: None,
                 ..Default::default()
-            },
+            }
+            .try_into()
+            .unwrap(),
             create_test_meter_bundle_response(),
         )
         .unwrap();
 
         assert!(!bundle.uuid().is_nil());
         assert_eq!(bundle.replacement_uuid, Some(bundle.uuid().to_string()));
-        let bundle_txs: ParsedBundle = bundle.into();
-        assert_eq!(bundle_txs.txn_hashes().len(), 1);
-        assert_eq!(bundle_txs.txn_hashes()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs.senders().len(), 1);
-        assert_eq!(bundle_txs.senders()[0], alice.address());
+        assert_eq!(bundle.txn_hashes().len(), 1);
+        assert_eq!(bundle.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle.senders().len(), 1);
+        assert_eq!(bundle.senders()[0], alice.address());
 
         // Bundle hashes are keccack256(...txnHashes)
         let expected_bundle_hash_single = {
@@ -366,29 +353,30 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(bundle_txs.bundle_hash(), expected_bundle_hash_single);
+        assert_eq!(bundle.bundle_hash(), expected_bundle_hash_single);
 
         let uuid = Uuid::new_v4();
-        let bundle = AcceptedBundle::load(
+        let bundle = AcceptedBundle::new(
             Bundle {
                 txs: vec![tx1_bytes.clone().into(), tx2_bytes.clone().into()],
                 block_number: 1,
                 replacement_uuid: Some(uuid.to_string()),
                 ..Default::default()
-            },
+            }
+            .try_into()
+            .unwrap(),
             create_test_meter_bundle_response(),
         )
         .unwrap();
 
         assert_eq!(*bundle.uuid(), uuid);
         assert_eq!(bundle.replacement_uuid, Some(uuid.to_string()));
-        let bundle_txs2: ParsedBundle = bundle.into();
-        assert_eq!(bundle_txs2.txn_hashes().len(), 2);
-        assert_eq!(bundle_txs2.txn_hashes()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs2.txn_hashes()[1], tx2.tx_hash());
-        assert_eq!(bundle_txs2.senders().len(), 2);
-        assert_eq!(bundle_txs2.senders()[0], alice.address());
-        assert_eq!(bundle_txs2.senders()[1], alice.address());
+        assert_eq!(bundle.txn_hashes().len(), 2);
+        assert_eq!(bundle.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle.txn_hashes()[1], tx2.tx_hash());
+        assert_eq!(bundle.senders().len(), 2);
+        assert_eq!(bundle.senders()[0], alice.address());
+        assert_eq!(bundle.senders()[1], alice.address());
 
         let expected_bundle_hash_double = {
             let mut hasher = Keccak256::default();
@@ -397,7 +385,7 @@ mod tests {
             hasher.finalize()
         };
 
-        assert_eq!(bundle_txs2.bundle_hash(), expected_bundle_hash_double);
+        assert_eq!(bundle.bundle_hash(), expected_bundle_hash_double);
     }
 
     #[test]

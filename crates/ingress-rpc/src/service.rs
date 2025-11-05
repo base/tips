@@ -11,6 +11,7 @@ use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
+use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, BLOCK_TIME, Bundle, BundleExtensions, BundleHash, CancelBundle,
     MeterBundleResponse,
@@ -73,7 +74,10 @@ where
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
-        let accepted_bundle = AcceptedBundle::load(bundle, meter_bundle_response)
+        let parsed_bundle: ParsedBundle = bundle
+            .try_into()
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
         let bundle_hash = &accepted_bundle.bundle_hash();
@@ -129,7 +133,10 @@ where
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let accepted_bundle = AcceptedBundle::load(bundle, meter_bundle_response)
+        let parsed_bundle: ParsedBundle = bundle
+            .try_into()
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
         let bundle_hash = &accepted_bundle.bundle_hash();
 

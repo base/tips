@@ -16,11 +16,13 @@ pub const TXN_HASH: TxHash =
     b256!("0x4f7ddfc911f5cf85dd15a413f4cbb2a0abe4f1ff275ed13581958c0bcf043c5e");
 
 pub fn create_bundle_from_txn_data() -> AcceptedBundle {
-    AcceptedBundle::load(
+    AcceptedBundle::new(
         Bundle {
             txs: vec![TXN_DATA.clone()],
             ..Default::default()
-        },
+        }
+        .try_into()
+        .unwrap(),
         create_test_meter_bundle_response(),
     )
     .unwrap()
@@ -59,7 +61,7 @@ pub fn create_test_bundle(
     };
     let meter_bundle_response = create_test_meter_bundle_response();
 
-    AcceptedBundle::load(bundle, meter_bundle_response).unwrap()
+    AcceptedBundle::new(bundle.try_into().unwrap(), meter_bundle_response).unwrap()
 }
 
 pub fn create_test_meter_bundle_response() -> MeterBundleResponse {

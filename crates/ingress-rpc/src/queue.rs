@@ -95,8 +95,11 @@ mod tests {
 
         let publisher = KafkaQueuePublisher::new(producer, "tips-ingress-rpc".to_string());
         let bundle = create_test_bundle();
-        let accepted_bundle =
-            AcceptedBundle::load(bundle, create_test_meter_bundle_response()).unwrap();
+        let accepted_bundle = AcceptedBundle::new(
+            bundle.try_into().unwrap(),
+            create_test_meter_bundle_response(),
+        )
+        .unwrap();
         let bundle_hash = &accepted_bundle.bundle_hash();
 
         let start = Instant::now();
