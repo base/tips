@@ -245,11 +245,10 @@ impl BundleTxs for AcceptedBundle {
     }
 }
 
-#[allow(clippy::redundant_closure)]
 impl AcceptedBundle {
     pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
         AcceptedBundle {
-            uuid: bundle.replacement_uuid.unwrap_or_else(|| Uuid::new_v4()),
+            uuid: bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4),
             txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
