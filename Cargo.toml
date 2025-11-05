@@ -16,9 +16,9 @@ tips-bundle-pool = { path = "crates/bundle-pool" }
 tips-core = { path = "crates/core" }
 
 # Reth
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2" }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2" }
-reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.8.2" }
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0" }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0" }
+reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0" }
 
 # alloy
 alloy-primitives = { version = "1.3.1", default-features = false, features = [
@@ -30,9 +30,9 @@ alloy-provider = { version = "1.0.37" }
 alloy-serde = "1.0.41"
 
 # op-alloy
-op-alloy-network = { version = "0.20.0", default-features = false }
-op-alloy-consensus = { version = "0.20.0", features = ["k256", "serde"] }
-op-alloy-rpc-types = { version = "0.20.0", default-features = true}
+op-alloy-network = { version = "0.22.0", default-features = false }
+op-alloy-consensus = { version = "0.22.0", features = ["k256", "serde"] }
+op-alloy-rpc-types = { version = "0.22.0", default-features = true}
 op-alloy-flz = {  version = "0.13.1" }
 
 tokio = { version = "1.47.1", features = ["full"] }
@@ -60,6 +60,6 @@ bytes = { version = "1.8.0", features = ["serde"] }
 
 # tips-ingress
 backon = "1.5.2"
-op-revm = { version = "10.1.0", default-features = false }
+op-revm = { version = "12.0.0", default-features = false }
 revm-context-interface = "10.2.0"
 alloy-signer-local = "1.0.36"
