@@ -84,8 +84,7 @@ async fn test_events_appended() -> Result<(), Box<dyn std::error::Error + Send +
     let bundle_id = Uuid::new_v4();
     let bundle = create_bundle_from_txn_data();
 
-    let events = vec![
-        create_test_event(
+    let events = [create_test_event(
             "test-key-1",
             1234567890,
             BundleEvent::Received {
@@ -97,8 +96,7 @@ async fn test_events_appended() -> Result<(), Box<dyn std::error::Error + Send +
             "test-key-2",
             1234567891,
             BundleEvent::Cancelled { bundle_id },
-        ),
-    ];
+        )];
 
     for (idx, event) in events.iter().enumerate() {
         writer.archive_event(event.clone()).await?;

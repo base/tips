@@ -20,16 +20,14 @@ async fn test_kafka_publisher_s3_archiver_integration()
         S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
     let test_bundle_id = Uuid::new_v4();
-    let test_events = vec![
-        BundleEvent::Received {
+    let test_events = [BundleEvent::Received {
             bundle_id: test_bundle_id,
             bundle: Box::new(create_bundle_from_txn_data()),
         },
         BundleEvent::Dropped {
             bundle_id: test_bundle_id,
             reason: DropReason::TimedOut,
-        },
-    ];
+        }];
 
     let publisher = KafkaBundleEventPublisher::new(harness.kafka_producer, topic.to_string());
 
