@@ -73,13 +73,13 @@ where
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
-        let bundle_with_metadata = AcceptedBundle::load(bundle, meter_bundle_response)
+        let accepted_bundle = AcceptedBundle::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        let bundle_hash = &bundle_with_metadata.bundle_hash();
+        let bundle_hash = &accepted_bundle.bundle_hash();
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, bundle_hash)
+            .publish(&accepted_bundle, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -92,11 +92,11 @@ where
         );
 
         let audit_event = BundleEvent::Received {
-            bundle_id: *bundle_with_metadata.uuid(),
-            bundle: Box::new(bundle_with_metadata.clone()),
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: Box::new(accepted_bundle.clone()),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
         }
 
         Ok(BundleHash {
@@ -129,13 +129,13 @@ where
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let bundle_with_metadata = AcceptedBundle::load(bundle, meter_bundle_response)
+        let accepted_bundle = AcceptedBundle::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_hash = &bundle_with_metadata.bundle_hash();
+        let bundle_hash = &accepted_bundle.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, bundle_hash)
+            .publish(&accepted_bundle, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
@@ -163,11 +163,11 @@ where
         }
 
         let audit_event = BundleEvent::Received {
-            bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.clone().into(),
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: accepted_bundle.clone().into(),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
         }
 
         Ok(transaction.tx_hash())

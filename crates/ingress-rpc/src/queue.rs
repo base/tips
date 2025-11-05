@@ -95,12 +95,12 @@ mod tests {
 
         let publisher = KafkaQueuePublisher::new(producer, "tips-ingress-rpc".to_string());
         let bundle = create_test_bundle();
-        let bundle_with_metadata =
+        let accepted_bundle =
             AcceptedBundle::load(bundle, create_test_meter_bundle_response()).unwrap();
-        let bundle_hash = &bundle_with_metadata.bundle_hash();
+        let bundle_hash = &accepted_bundle.bundle_hash();
 
         let start = Instant::now();
-        let result = publisher.publish(&bundle_with_metadata, bundle_hash).await;
+        let result = publisher.publish(&accepted_bundle, bundle_hash).await;
         let elapsed = start.elapsed();
 
         // the backoff tries at minimum 100ms, so verify we tried at least once

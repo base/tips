@@ -52,8 +52,7 @@ impl BundleSource for KafkaBundleSource {
                         }
                     };
 
-                    let bundle_with_metadata: AcceptedBundle = match serde_json::from_slice(payload)
-                    {
+                    let accepted_bundle: AcceptedBundle = match serde_json::from_slice(payload) {
                         Ok(b) => b,
                         Err(e) => {
                             error!(error = %e, "Failed to deserialize bundle");
@@ -62,13 +61,13 @@ impl BundleSource for KafkaBundleSource {
                     };
 
                     trace!(
-                        bundle = ?bundle_with_metadata,
+                        bundle = ?accepted_bundle,
                         offset = message.offset(),
                         partition = message.partition(),
                         "Received bundle from Kafka"
                     );
 
-                    if let Err(e) = self.publisher.send(bundle_with_metadata) {
+                    if let Err(e) = self.publisher.send(accepted_bundle) {
                         error!(error = ?e, "Failed to publish bundle to queue");
                     }
                 }
