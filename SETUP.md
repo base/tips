@@ -27,7 +27,27 @@ cd op-rbuilder
 git checkout tips-prototype
 ```
 
-## Step 2: Start builder-playground
+## Step 2: Start TIPS Infrastructure
+
+```bash
+cd tips
+
+# Copy the .env.example to your own .env
+cp .env.example .env
+
+# Sync and start all TIPS services
+just sync
+just start-all
+```
+
+This will:
+- Reset and start Docker containers (Kafka, MinIO, node-reth services)
+- Start the TIPS ingress RPC service
+- Start the audit service
+- Start the bundle pool service
+- Start the UI
+
+## Step 3: Start builder-playground
 
 The builder-playground provides the L1/L2 blockchain infrastructure.
 
@@ -43,7 +63,7 @@ Keep this terminal running. The playground will:
 - Provide blockchain infrastructure for TIPS
 - Expose services on various ports
 
-## Step 3: Start op-rbuilder
+## Step 4: Start op-rbuilder
 
 The op-rbuilder handles block building for the L2.
 
@@ -59,53 +79,14 @@ Keep this terminal running. The builder will:
 - Handle block building requests
 - Expose builder API on port 4444
 
-## Step 4: Start TIPS Infrastructure
-
-Now start the TIPS services.
-
-```bash
-cd tips
-
-# Sync and start all TIPS services
-just sync
-just start-all
-```
-
-This will:
-- Reset and start Docker containers (Kafka, MinIO, node-reth services)
-- Start the TIPS ingress RPC service
-- Start the audit service
-- Start the bundle pool service
-- Start the UI
-
-## Step 5: Verify Everything is Running
-
-Check that all services are healthy:
-
-```bash
-# Check Docker containers
-docker ps
-
-# Check TIPS services are responding
-curl http://localhost:8080/health  # Ingress RPC
-curl http://localhost:7000         # MinIO console
-curl http://localhost:3000         # TIPS UI
-```
-
-You should see:
-- Kafka, MinIO, and node-reth containers running
-- TIPS services responding to health checks
-- Builder-playground blockchain running
-- op-rbuilder connected and building blocks
-
-## Step 6: Send Test Transactions
+## Step 5: Access the UI and send a test transaction
 
 Once everything is running, you can test the system:
 
 ```bash
 cd tips
 
-# Send a test transaction through TIPS
+# Send a test transaction
 just send-txn
 ```
 
@@ -141,28 +122,6 @@ When everything is running, you'll have:
 | Kafka | 9092 | Message broker |
 | op-rbuilder | 4444 | Block builder API |
 | builder-playground | Various | L1/L2 blockchain infrastructure |
-
-## Troubleshooting
-
-### Builder-playground not starting
-- Ensure Go 1.21+ is installed
-- Check that no other services are using the same ports
-- Try `go mod tidy` in the builder-playground directory
-
-### op-rbuilder connection issues
-- Verify you're on the `tips-prototype` branch
-- Ensure builder-playground is fully started before starting op-rbuilder
-- Check that port 4444 is not in use by other services
-
-### TIPS services failing
-- Run `just sync` to reset Docker containers
-- Check Docker daemon is running
-- Verify all required ports are available
-
-### Transaction submission failing
-- Ensure all three components (playground, builder, TIPS) are running
-- Check service health endpoints
-- Review logs: `docker logs <container-name>`
 
 ## Development Workflow
 
