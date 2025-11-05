@@ -182,43 +182,43 @@ pub struct AcceptedBundle {
 }
 
 pub trait BundleTxs {
-    fn transactions(self) -> Vec<Recovered<OpTxEnvelope>>;
+    fn transactions(&self) -> &Vec<Recovered<OpTxEnvelope>>;
 }
 
 pub trait BundleExtensions {
-    fn bundle_hash(self) -> B256;
-    fn txn_hashes(self) -> Vec<TxHash>;
-    fn senders(self) -> Vec<Address>;
-    fn gas_limit(self) -> u64;
-    fn da_size(self) -> u64;
+    fn bundle_hash(&self) -> B256;
+    fn txn_hashes(&self) -> Vec<TxHash>;
+    fn senders(&self) -> Vec<Address>;
+    fn gas_limit(&self) -> u64;
+    fn da_size(&self) -> u64;
 }
 
 impl<T: BundleTxs> BundleExtensions for T {
-    fn bundle_hash(self) -> B256 {
+    fn bundle_hash(&self) -> B256 {
         let parsed = self.transactions();
         let mut concatenated = Vec::new();
-        for tx in &parsed {
+        for tx in parsed {
             concatenated.extend_from_slice(tx.tx_hash().as_slice());
         }
         keccak256(&concatenated)
     }
 
-    fn txn_hashes(self) -> Vec<TxHash> {
+    fn txn_hashes(&self) -> Vec<TxHash> {
         self.transactions().iter().map(|t| t.tx_hash()).collect()
     }
 
-    fn senders(self) -> Vec<Address> {
+    fn senders(&self) -> Vec<Address> {
         self.transactions()
             .iter()
             .map(|t| t.recover_signer().unwrap())
             .collect()
     }
 
-    fn gas_limit(self) -> u64 {
+    fn gas_limit(&self) -> u64 {
         self.transactions().iter().map(|t| t.gas_limit()).sum()
     }
 
-    fn da_size(self) -> u64 {
+    fn da_size(&self) -> u64 {
         self.transactions()
             .iter()
             .map(|t| tx_estimated_size_fjord_bytes(&t.encoded_2718()))
@@ -227,14 +227,14 @@ impl<T: BundleTxs> BundleExtensions for T {
 }
 
 impl BundleTxs for ParsedBundle {
-    fn transactions(self) -> Vec<Recovered<OpTxEnvelope>> {
-        self.txs
+    fn transactions(&self) -> &Vec<Recovered<OpTxEnvelope>> {
+        &self.txs
     }
 }
 
 impl BundleTxs for AcceptedBundle {
-    fn transactions(self) -> Vec<Recovered<OpTxEnvelope>> {
-        self.txs
+    fn transactions(&self) -> &Vec<Recovered<OpTxEnvelope>> {
+        &self.txs
     }
 }
 
@@ -354,10 +354,10 @@ mod tests {
         assert!(!bundle.uuid().is_nil());
         assert_eq!(bundle.replacement_uuid, Some(bundle.uuid().to_string()));
         let bundle_txs: ParsedBundle = bundle.into();
-        assert_eq!(bundle_txs.clone().txn_hashes().len(), 1);
-        assert_eq!(bundle_txs.clone().txn_hashes()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs.clone().senders().len(), 1);
-        assert_eq!(bundle_txs.clone().senders()[0], alice.address());
+        assert_eq!(bundle_txs.txn_hashes().len(), 1);
+        assert_eq!(bundle_txs.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle_txs.senders().len(), 1);
+        assert_eq!(bundle_txs.senders()[0], alice.address());
 
         // Bundle hashes are keccack256(...txnHashes)
         let expected_bundle_hash_single = {
@@ -383,12 +383,12 @@ mod tests {
         assert_eq!(*bundle.uuid(), uuid);
         assert_eq!(bundle.replacement_uuid, Some(uuid.to_string()));
         let bundle_txs2: ParsedBundle = bundle.into();
-        assert_eq!(bundle_txs2.clone().txn_hashes().len(), 2);
-        assert_eq!(bundle_txs2.clone().txn_hashes()[0], tx1.tx_hash());
-        assert_eq!(bundle_txs2.clone().txn_hashes()[1], tx2.tx_hash());
-        assert_eq!(bundle_txs2.clone().senders().len(), 2);
-        assert_eq!(bundle_txs2.clone().senders()[0], alice.address());
-        assert_eq!(bundle_txs2.clone().senders()[1], alice.address());
+        assert_eq!(bundle_txs2.txn_hashes().len(), 2);
+        assert_eq!(bundle_txs2.txn_hashes()[0], tx1.tx_hash());
+        assert_eq!(bundle_txs2.txn_hashes()[1], tx2.tx_hash());
+        assert_eq!(bundle_txs2.senders().len(), 2);
+        assert_eq!(bundle_txs2.senders()[0], alice.address());
+        assert_eq!(bundle_txs2.senders()[1], alice.address());
 
         let expected_bundle_hash_double = {
             let mut hasher = Keccak256::default();

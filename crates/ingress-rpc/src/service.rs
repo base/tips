@@ -76,10 +76,10 @@ where
         let bundle_with_metadata = AcceptedBundle::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        let bundle_hash = bundle_with_metadata.clone().bundle_hash();
+        let bundle_hash = &bundle_with_metadata.bundle_hash();
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata.clone(), &bundle_hash)
+            .publish(&bundle_with_metadata, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -99,7 +99,9 @@ where
             warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
         }
 
-        Ok(BundleHash { bundle_hash })
+        Ok(BundleHash {
+            bundle_hash: *bundle_hash,
+        })
     }
 
     async fn cancel_bundle(&self, _request: CancelBundle) -> RpcResult<()> {
@@ -127,13 +129,13 @@ where
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let bundle_with_metadata = AcceptedBundle::load(bundle.clone(), meter_bundle_response)
+        let bundle_with_metadata = AcceptedBundle::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_hash = bundle_with_metadata.clone().bundle_hash();
+        let bundle_hash = &bundle_with_metadata.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, &bundle_hash)
+            .publish(&bundle_with_metadata, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
