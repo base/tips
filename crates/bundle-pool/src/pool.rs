@@ -42,6 +42,7 @@ pub trait BundleStore {
     fn on_new_block(&mut self, number: u64, hash: TxHash);
 }
 
+#[derive(Clone)]
 struct BundleData {
     flashblocks_in_block: HashMap<u64, Vec<ProcessedBundle>>,
     bundles: HashMap<Uuid, AcceptedBundle>,
