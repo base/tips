@@ -5,7 +5,7 @@ use tips_audit::{
     storage::{BundleEventS3Reader, S3EventReaderWriter},
     types::{BundleEvent, DropReason},
 };
-use tips_core::test_utils::create_test_bundle;
+use tips_core::test_utils::create_bundle_from_txn_data;
 use uuid::Uuid;
 mod common;
 use common::TestHarness;
@@ -23,7 +23,7 @@ async fn test_kafka_publisher_s3_archiver_integration()
     let test_events = vec![
         BundleEvent::Received {
             bundle_id: test_bundle_id,
-            bundle: Box::new(create_test_bundle(vec![], None, None, None)),
+            bundle: Box::new(create_bundle_from_txn_data()),
         },
         BundleEvent::Dropped {
             bundle_id: test_bundle_id,

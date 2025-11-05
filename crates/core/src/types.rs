@@ -11,6 +11,7 @@ use uuid::Uuid;
 /// Block time in microseconds
 pub const BLOCK_TIME: u128 = 2_000_000;
 
+/// `Bundle` is the type that mirrors `EthSendBundle` and is used for the API.
 #[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct Bundle {
@@ -57,6 +58,7 @@ pub struct Bundle {
     pub dropping_tx_hashes: Vec<TxHash>,
 }
 
+/// `ParsedBundle` is the type that contains utility methods for the `Bundle` type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedBundle {
     pub txs: Vec<Recovered<OpTxEnvelope>>,
@@ -129,6 +131,7 @@ pub struct CancelBundle {
     pub replacement_uuid: String,
 }
 
+/// `AcceptedBundle` is the type that is sent over the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcceptedBundle {
     pub uuid: Uuid,

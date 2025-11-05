@@ -10,8 +10,7 @@ use uuid::Uuid;
 
 mod common;
 use common::TestHarness;
-use tips_core::test_utils::TXN_HASH;
-use tips_core::test_utils::create_bundle_from_txn_data;
+use tips_core::test_utils::{TXN_HASH, create_bundle_from_txn_data};
 
 fn create_test_event(key: &str, timestamp: i64, bundle_event: BundleEvent) -> Event {
     Event {
