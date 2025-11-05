@@ -177,7 +177,7 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64, tx_hashes: Vec<B256>) -
         .unwrap()
         .as_secs()
         + Duration::from_secs(3600).as_secs();
-    if let Some(max_timestamp) = bundle.params.max_timestamp
+    if let Some(max_timestamp) = bundle.max_timestamp
         && max_timestamp > valid_timestamp_window
     {
         return Err(EthApiError::InvalidParams(
@@ -203,7 +203,7 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64, tx_hashes: Vec<B256>) -
     }
 
     // Partial transaction dropping is not supported, `dropping_tx_hashes` must be empty
-    if !bundle.params.dropping_tx_hashes.is_empty() {
+    if !bundle.dropping_tx_hashes.is_empty() {
         return Err(EthApiError::InvalidParams(
             "Partial transaction dropping is not supported".into(),
         )
@@ -211,7 +211,7 @@ pub fn validate_bundle(bundle: &Bundle, bundle_gas: u64, tx_hashes: Vec<B256>) -
     }
 
     // revert protection: all transaction hashes must be in `reverting_tx_hashes`
-    let reverting_tx_hashes_set: HashSet<_> = bundle.params.reverting_tx_hashes.iter().collect();
+    let reverting_tx_hashes_set: HashSet<_> = bundle.reverting_tx_hashes.iter().collect();
     let tx_hashes_set: HashSet<_> = tx_hashes.iter().collect();
     if reverting_tx_hashes_set != tx_hashes_set {
         return Err(EthApiError::InvalidParams(
@@ -238,7 +238,6 @@ mod tests {
     use op_alloy_network::eip2718::Encodable2718;
     use revm_context_interface::transaction::{AccessList, AccessListItem};
     use std::time::{SystemTime, UNIX_EPOCH};
-    use tips_core::BundleParams;
 
     fn create_account(nonce: u64, balance: U256) -> AccountInfo {
         AccountInfo {
@@ -532,10 +531,8 @@ mod tests {
         let too_far_in_the_future = current_time + 3601;
         let bundle = Bundle {
             txs: vec![],
-            params: BundleParams {
-                max_timestamp: Some(too_far_in_the_future),
-                ..Default::default()
-            },
+            max_timestamp: Some(too_far_in_the_future),
+            ..Default::default()
         };
         assert_eq!(
             validate_bundle(&bundle, 0, vec![]),
@@ -583,13 +580,8 @@ mod tests {
 
         let bundle = Bundle {
             txs: encoded_txs,
-            params: BundleParams {
-                block_number: 0,
-                min_timestamp: None,
-                max_timestamp: None,
-                reverting_tx_hashes: vec![],
-                ..Default::default()
-            },
+            max_timestamp: None,
+            ..Default::default()
         };
 
         // Test should fail due to exceeding gas limit
@@ -636,13 +628,14 @@ mod tests {
 
         let bundle = Bundle {
             txs: encoded_txs,
-            params: BundleParams {
-                block_number: 0,
-                min_timestamp: None,
-                max_timestamp: None,
-                reverting_tx_hashes: vec![],
-                ..Default::default()
-            },
+            block_number: 0,
+            flashblock_number_min: None,
+            flashblock_number_max: None,
+            min_timestamp: None,
+            max_timestamp: None,
+            reverting_tx_hashes: vec![],
+            replacement_uuid: None,
+            dropping_tx_hashes: vec![],
         };
 
         // Test should fail due to exceeding gas limit
@@ -658,10 +651,8 @@ mod tests {
     async fn test_err_bundle_partial_transaction_dropping_not_supported() {
         let bundle = Bundle {
             txs: vec![],
-            params: BundleParams {
-                dropping_tx_hashes: vec![B256::random()],
-                ..Default::default()
-            },
+            dropping_tx_hashes: vec![B256::random()],
+            ..Default::default()
         };
         assert_eq!(
             validate_bundle(&bundle, 0, vec![]),
@@ -707,13 +698,8 @@ mod tests {
 
         let bundle = Bundle {
             txs: encoded_txs,
-            params: BundleParams {
-                block_number: 0,
-                min_timestamp: None,
-                max_timestamp: None,
-                reverting_tx_hashes: tx_hashes[..2].to_vec(),
-                ..Default::default()
-            },
+            reverting_tx_hashes: tx_hashes[..2].to_vec(),
+            ..Default::default()
         };
 
         // Test should fail due to exceeding gas limit

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::{ClientConfig, Message};
 use std::fmt::Debug;
-use tips_core::BundleWithMetadata;
+use tips_core::AcceptedBundle;
 use tokio::sync::mpsc;
 use tracing::{error, trace};
 
@@ -14,7 +14,7 @@ pub trait BundleSource {
 
 pub struct KafkaBundleSource {
     queue_consumer: StreamConsumer,
-    publisher: mpsc::UnboundedSender<BundleWithMetadata>,
+    publisher: mpsc::UnboundedSender<AcceptedBundle>,
 }
 
 impl Debug for KafkaBundleSource {
@@ -27,7 +27,7 @@ impl KafkaBundleSource {
     pub fn new(
         client_config: ClientConfig,
         topic: String,
-        publisher: mpsc::UnboundedSender<BundleWithMetadata>,
+        publisher: mpsc::UnboundedSender<AcceptedBundle>,
     ) -> Result<Self> {
         let queue_consumer: StreamConsumer = client_config.create()?;
         queue_consumer.subscribe(&[topic.as_str()])?;
@@ -52,14 +52,14 @@ impl BundleSource for KafkaBundleSource {
                         }
                     };
 
-                    let bundle_with_metadata: BundleWithMetadata =
-                        match serde_json::from_slice(payload) {
-                            Ok(b) => b,
-                            Err(e) => {
-                                error!(error = %e, "Failed to deserialize bundle");
-                                continue;
-                            }
-                        };
+                    let bundle_with_metadata: AcceptedBundle = match serde_json::from_slice(payload)
+                    {
+                        Ok(b) => b,
+                        Err(e) => {
+                            error!(error = %e, "Failed to deserialize bundle");
+                            continue;
+                        }
+                    };
 
                     trace!(
                         bundle = ?bundle_with_metadata,

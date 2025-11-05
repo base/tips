@@ -31,7 +31,7 @@ alloy-serde = "1.0.41"
 
 # op-alloy
 op-alloy-network = { version = "0.20.0", default-features = false }
-op-alloy-consensus = { version = "0.20.0", features = ["k256"] }
+op-alloy-consensus = { version = "0.20.0", features = ["k256", "serde"] }
 op-alloy-rpc-types = { version = "0.20.0", default-features = true}
 op-alloy-flz = {  version = "0.13.1" }
 

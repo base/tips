@@ -12,7 +12,7 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
 use tips_core::{
-    BLOCK_TIME, Bundle, BundleHash, BundleParams, BundleWithMetadata, CancelBundle,
+    AcceptedBundle, BLOCK_TIME, Bundle, BundleExtensions, BundleHash, CancelBundle,
     MeterBundleResponse,
 };
 use tracing::{info, warn};
@@ -73,13 +73,13 @@ where
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
-        let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
+        let bundle_with_metadata = AcceptedBundle::load(bundle, meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
 
-        let bundle_hash = bundle_with_metadata.txs().bundle_hash();
+        let bundle_hash = bundle_with_metadata.clone().bundle_hash();
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, &bundle_hash)
+            .publish(&bundle_with_metadata.clone(), &bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -93,7 +93,7 @@ where
 
         let audit_event = BundleEvent::Received {
             bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.clone().into(),
+            bundle: Box::new(bundle_with_metadata.clone()),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
             warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
@@ -121,17 +121,20 @@ where
 
         let bundle = Bundle {
             txs: vec![data.clone()],
-            params: BundleParams {
-                max_timestamp: Some(expiry_timestamp),
-                reverting_tx_hashes: vec![transaction.tx_hash()],
-                ..Default::default()
-            },
+            block_number: 0,
+            flashblock_number_min: None,
+            flashblock_number_max: None,
+            min_timestamp: None,
+            max_timestamp: Some(expiry_timestamp),
+            reverting_tx_hashes: vec![transaction.tx_hash()],
+            replacement_uuid: None,
+            dropping_tx_hashes: vec![],
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let bundle_with_metadata = BundleWithMetadata::load(bundle.clone(), meter_bundle_response)
+        let bundle_with_metadata = AcceptedBundle::load(bundle.clone(), meter_bundle_response)
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_hash = bundle_with_metadata.txs().bundle_hash();
+        let bundle_hash = bundle_with_metadata.clone().bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
