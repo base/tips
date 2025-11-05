@@ -61,7 +61,6 @@ pub struct Bundle {
 /// `ParsedBundle` is the type that contains utility methods for the `Bundle` type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedBundle {
-    pub uuid: Uuid,
     pub txs: Vec<Recovered<OpTxEnvelope>>,
     pub block_number: u64,
     pub flashblock_number_min: Option<u64>,
@@ -69,7 +68,7 @@ pub struct ParsedBundle {
     pub min_timestamp: Option<u64>,
     pub max_timestamp: Option<u64>,
     pub reverting_tx_hashes: Vec<TxHash>,
-    pub replacement_uuid: Option<String>,
+    pub replacement_uuid: Option<Uuid>,
     pub dropping_tx_hashes: Vec<TxHash>,
 }
 
@@ -98,7 +97,6 @@ impl TryFrom<Bundle> for ParsedBundle {
         let uuid = Uuid::parse_str(uuid.as_str()).map_err(|_| format!("Invalid UUID: {uuid}"))?;
 
         Ok(ParsedBundle {
-            uuid,
             txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -106,7 +104,7 @@ impl TryFrom<Bundle> for ParsedBundle {
             min_timestamp: bundle.min_timestamp,
             max_timestamp: bundle.max_timestamp,
             reverting_tx_hashes: bundle.reverting_tx_hashes,
-            replacement_uuid: Some(uuid.to_string()),
+            replacement_uuid: Some(uuid),
             dropping_tx_hashes: bundle.dropping_tx_hashes,
         })
     }
@@ -115,7 +113,6 @@ impl TryFrom<Bundle> for ParsedBundle {
 impl From<AcceptedBundle> for ParsedBundle {
     fn from(accepted_bundle: AcceptedBundle) -> Self {
         Self {
-            uuid: accepted_bundle.uuid,
             txs: accepted_bundle.txs,
             block_number: accepted_bundle.block_number,
             flashblock_number_min: accepted_bundle.flashblock_number_min,
@@ -183,7 +180,7 @@ pub struct AcceptedBundle {
     pub reverting_tx_hashes: Vec<TxHash>,
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub replacement_uuid: Option<String>,
+    pub replacement_uuid: Option<Uuid>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dropping_tx_hashes: Vec<TxHash>,
@@ -248,10 +245,11 @@ impl BundleTxs for AcceptedBundle {
     }
 }
 
+#[allow(clippy::redundant_closure)]
 impl AcceptedBundle {
     pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
         AcceptedBundle {
-            uuid: bundle.uuid,
+            uuid: bundle.replacement_uuid.unwrap_or_else(|| Uuid::new_v4()),
             txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -337,7 +335,7 @@ mod tests {
         );
 
         assert!(!bundle.uuid().is_nil());
-        assert_eq!(bundle.replacement_uuid, Some(bundle.uuid().to_string()));
+        assert_eq!(bundle.replacement_uuid, Some(*bundle.uuid()));
         assert_eq!(bundle.txn_hashes().len(), 1);
         assert_eq!(bundle.txn_hashes()[0], tx1.tx_hash());
         assert_eq!(bundle.senders().len(), 1);
@@ -366,7 +364,7 @@ mod tests {
         );
 
         assert_eq!(*bundle.uuid(), uuid);
-        assert_eq!(bundle.replacement_uuid, Some(uuid.to_string()));
+        assert_eq!(bundle.replacement_uuid, Some(uuid));
         assert_eq!(bundle.txn_hashes().len(), 2);
         assert_eq!(bundle.txn_hashes()[0], tx1.tx_hash());
         assert_eq!(bundle.txn_hashes()[1], tx2.tx_hash());
