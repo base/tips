@@ -95,22 +95,6 @@ This will:
 - Process it through the ingress → audit → bundle pool pipeline
 - Send it to the builder for inclusion in blocks
 
-## Service Architecture
-
-When everything is running, you'll have:
-
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ builder-        │    │ op-rbuilder     │    │ TIPS            │
-│ playground      │◄──►│ (tips-prototype)│◄──►│ (this repo)     │
-│                 │    │                 │    │                 │
-│ - L1/L2 nodes   │    │ - Block builder │    │ - Ingress RPC   │
-│ - Infrastructure│    │ - Port 4444     │    │ - Audit service │
-└─────────────────┘    └─────────────────┘    │ - Bundle pool   │
-                                              │ - UI (port 3000)│
-                                              └─────────────────┘
-```
-
 ## Ports Reference
 
 | Service | Port | Description |
