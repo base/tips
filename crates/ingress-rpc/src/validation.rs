@@ -580,7 +580,10 @@ mod tests {
 
         let bundle = Bundle {
             txs: encoded_txs,
+            block_number: 0,
+            min_timestamp: None,
             max_timestamp: None,
+            reverting_tx_hashes: vec![],
             ..Default::default()
         };
 
@@ -629,13 +632,10 @@ mod tests {
         let bundle = Bundle {
             txs: encoded_txs,
             block_number: 0,
-            flashblock_number_min: None,
-            flashblock_number_max: None,
             min_timestamp: None,
             max_timestamp: None,
             reverting_tx_hashes: vec![],
-            replacement_uuid: None,
-            dropping_tx_hashes: vec![],
+            ..Default::default()
         };
 
         // Test should fail due to exceeding gas limit
@@ -698,6 +698,9 @@ mod tests {
 
         let bundle = Bundle {
             txs: encoded_txs,
+            block_number: 0,
+            min_timestamp: None,
+            max_timestamp: None,
             reverting_tx_hashes: tx_hashes[..2].to_vec(),
             ..Default::default()
         };
