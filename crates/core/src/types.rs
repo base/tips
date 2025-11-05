@@ -246,9 +246,8 @@ impl BundleTxs for AcceptedBundle {
 
 impl AcceptedBundle {
     pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
-        let uuid = bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4);
         AcceptedBundle {
-            uuid,
+            uuid: bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4),
             txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -256,7 +255,7 @@ impl AcceptedBundle {
             min_timestamp: bundle.min_timestamp,
             max_timestamp: bundle.max_timestamp,
             reverting_tx_hashes: bundle.reverting_tx_hashes,
-            replacement_uuid: Some(uuid),
+            replacement_uuid: bundle.replacement_uuid,
             dropping_tx_hashes: bundle.dropping_tx_hashes,
             meter_bundle_response,
         }
@@ -334,7 +333,7 @@ mod tests {
         );
 
         assert!(!bundle.uuid().is_nil());
-        assert_eq!(bundle.replacement_uuid, Some(*bundle.uuid()));
+        assert_eq!(bundle.replacement_uuid, None); // we're fine with bundles that don't have a replacement UUID
         assert_eq!(bundle.txn_hashes().len(), 1);
         assert_eq!(bundle.txn_hashes()[0], tx1.tx_hash());
         assert_eq!(bundle.senders().len(), 1);
