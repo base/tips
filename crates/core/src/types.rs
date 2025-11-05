@@ -246,8 +246,9 @@ impl BundleTxs for AcceptedBundle {
 
 impl AcceptedBundle {
     pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
+        let uuid = bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4);
         AcceptedBundle {
-            uuid: bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4),
+            uuid,
             txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -255,7 +256,7 @@ impl AcceptedBundle {
             min_timestamp: bundle.min_timestamp,
             max_timestamp: bundle.max_timestamp,
             reverting_tx_hashes: bundle.reverting_tx_hashes,
-            replacement_uuid: bundle.replacement_uuid,
+            replacement_uuid: Some(uuid),
             dropping_tx_hashes: bundle.dropping_tx_hashes,
             meter_bundle_response,
         }
