@@ -61,6 +61,7 @@ pub struct Bundle {
 /// `ParsedBundle` is the type that contains utility methods for the `Bundle` type.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ParsedBundle {
+    pub uuid: Uuid,
     pub txs: Vec<Recovered<OpTxEnvelope>>,
     pub block_number: u64,
     pub flashblock_number_min: Option<u64>,
@@ -89,7 +90,15 @@ impl TryFrom<Bundle> for ParsedBundle {
             })
             .collect::<Result<Vec<Recovered<OpTxEnvelope>>, String>>()?;
 
+        let uuid = bundle
+            .replacement_uuid
+            .clone()
+            .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+        let uuid = Uuid::parse_str(uuid.as_str()).map_err(|_| format!("Invalid UUID: {uuid}"))?;
+
         Ok(ParsedBundle {
+            uuid,
             txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -97,7 +106,7 @@ impl TryFrom<Bundle> for ParsedBundle {
             min_timestamp: bundle.min_timestamp,
             max_timestamp: bundle.max_timestamp,
             reverting_tx_hashes: bundle.reverting_tx_hashes,
-            replacement_uuid: bundle.replacement_uuid,
+            replacement_uuid: Some(uuid.to_string()),
             dropping_tx_hashes: bundle.dropping_tx_hashes,
         })
     }
@@ -106,6 +115,7 @@ impl TryFrom<Bundle> for ParsedBundle {
 impl From<AcceptedBundle> for ParsedBundle {
     fn from(accepted_bundle: AcceptedBundle) -> Self {
         Self {
+            uuid: accepted_bundle.uuid,
             txs: accepted_bundle.txs,
             block_number: accepted_bundle.block_number,
             flashblock_number_min: accepted_bundle.flashblock_number_min,
@@ -239,21 +249,9 @@ impl BundleTxs for AcceptedBundle {
 }
 
 impl AcceptedBundle {
-    pub fn new(
-        mut bundle: ParsedBundle,
-        meter_bundle_response: MeterBundleResponse,
-    ) -> Result<Self, String> {
-        let uuid = bundle
-            .replacement_uuid
-            .clone()
-            .unwrap_or_else(|| Uuid::new_v4().to_string());
-
-        let uuid = Uuid::parse_str(uuid.as_str()).map_err(|_| format!("Invalid UUID: {uuid}"))?;
-
-        bundle.replacement_uuid = Some(uuid.to_string());
-
-        Ok(AcceptedBundle {
-            uuid,
+    pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
+        AcceptedBundle {
+            uuid: bundle.uuid,
             txs: bundle.txs,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
@@ -264,7 +262,7 @@ impl AcceptedBundle {
             replacement_uuid: bundle.replacement_uuid,
             dropping_tx_hashes: bundle.dropping_tx_hashes,
             meter_bundle_response,
-        })
+        }
     }
 
     pub fn uuid(&self) -> &Uuid {
@@ -336,8 +334,7 @@ mod tests {
             .try_into()
             .unwrap(),
             create_test_meter_bundle_response(),
-        )
-        .unwrap();
+        );
 
         assert!(!bundle.uuid().is_nil());
         assert_eq!(bundle.replacement_uuid, Some(bundle.uuid().to_string()));
@@ -366,8 +363,7 @@ mod tests {
             .try_into()
             .unwrap(),
             create_test_meter_bundle_response(),
-        )
-        .unwrap();
+        );
 
         assert_eq!(*bundle.uuid(), uuid);
         assert_eq!(bundle.replacement_uuid, Some(uuid.to_string()));

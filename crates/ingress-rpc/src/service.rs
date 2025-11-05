@@ -77,8 +77,7 @@ where
         let parsed_bundle: ParsedBundle = bundle
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
         let bundle_hash = &accepted_bundle.bundle_hash();
         if let Err(e) = self
@@ -136,8 +135,7 @@ where
         let parsed_bundle: ParsedBundle = bundle
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
         let bundle_hash = &accepted_bundle.bundle_hash();
 
         if let Err(e) = self

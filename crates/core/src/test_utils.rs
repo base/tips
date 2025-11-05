@@ -25,7 +25,6 @@ pub fn create_bundle_from_txn_data() -> AcceptedBundle {
         .unwrap(),
         create_test_meter_bundle_response(),
     )
-    .unwrap()
 }
 
 pub fn create_transaction(from: PrivateKeySigner, nonce: u64, to: Address) -> OpTxEnvelope {
@@ -61,7 +60,7 @@ pub fn create_test_bundle(
     };
     let meter_bundle_response = create_test_meter_bundle_response();
 
-    AcceptedBundle::new(bundle.try_into().unwrap(), meter_bundle_response).unwrap()
+    AcceptedBundle::new(bundle.try_into().unwrap(), meter_bundle_response)
 }
 
 pub fn create_test_meter_bundle_response() -> MeterBundleResponse {

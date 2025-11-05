@@ -98,8 +98,7 @@ mod tests {
         let accepted_bundle = AcceptedBundle::new(
             bundle.try_into().unwrap(),
             create_test_meter_bundle_response(),
-        )
-        .unwrap();
+        );
         let bundle_hash = &accepted_bundle.bundle_hash();
 
         let start = Instant::now();
