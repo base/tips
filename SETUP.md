@@ -16,10 +16,13 @@ Clone the three repositories you'll need:
 
 ```bash
 # Clone TIPS (this repository)
-git clone https://github.com/your-org/tips.git
+git clone https://github.com/base/tips.git
 
 # Clone builder-playground in a separate directory
 git clone https://github.com/flashbots/builder-playground.git
+cd builder-playground
+git remote add danyal git@github.com:danyalprout/builder-playground.git # TODO: change this once it's upstreamed
+git checkout danyal/base-overlay
 
 # Clone op-rbuilder in a separate directory
 git clone https://github.com/base/op-rbuilder.git
@@ -32,10 +35,7 @@ git checkout tips-prototype
 ```bash
 cd tips
 
-# Copy the .env.example to your own .env
-cp .env.example .env
-
-# Sync and start all TIPS services
+# Sync (and load env vars) and start all TIPS services
 just sync
 just start-all
 ```
@@ -55,7 +55,7 @@ The builder-playground provides the L1/L2 blockchain infrastructure.
 cd builder-playground
 
 # Start the playground
-go run main.go cook opstack --external-builder http://host.docker.internal:4444 --enable-latest-fork 0
+go run main.go cook opstack --external-builder http://host.docker.internal:4444/ --enable-latest-fork 0 --flashblocks --base-overlay --flashblocks-builder ws://host.docker.internal:1111/ws
 ```
 
 Keep this terminal running. The playground will:
@@ -106,6 +106,12 @@ This will:
 | Kafka | 9092 | Message broker |
 | op-rbuilder | 4444 | Block builder API |
 | builder-playground | Various | L1/L2 blockchain infrastructure |
+
+If you want to get information regarding the sequencer, validator, and builder, you can run:
+
+```bash
+just get-blocks
+```
 
 ## Development Workflow
 
