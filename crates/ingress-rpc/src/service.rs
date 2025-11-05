@@ -121,14 +121,9 @@ where
 
         let bundle = Bundle {
             txs: vec![data.clone()],
-            block_number: 0,
-            flashblock_number_min: None,
-            flashblock_number_max: None,
-            min_timestamp: None,
             max_timestamp: Some(expiry_timestamp),
             reverting_tx_hashes: vec![transaction.tx_hash()],
-            replacement_uuid: None,
-            dropping_tx_hashes: vec![],
+            ..Default::default()
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 

@@ -53,13 +53,9 @@ pub fn create_test_bundle(
     let bundle = Bundle {
         txs,
         block_number: block_number.unwrap_or(0),
-        flashblock_number_min: None,
-        flashblock_number_max: None,
         min_timestamp,
         max_timestamp,
-        reverting_tx_hashes: vec![],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
+        ..Default::default()
     };
     let meter_bundle_response = create_test_meter_bundle_response();
 
