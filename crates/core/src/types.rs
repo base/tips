@@ -73,17 +73,20 @@ pub struct ParsedBundle {
 impl TryFrom<Bundle> for ParsedBundle {
     type Error = String;
     fn try_from(bundle: Bundle) -> Result<Self, Self::Error> {
-        // TODO: better error handling
         let txs: Vec<Recovered<OpTxEnvelope>> = bundle
             .txs
             .into_iter()
             .map(|tx| {
                 OpTxEnvelope::decode_2718_exact(tx.iter().as_slice())
-                    .unwrap()
-                    .try_into_recovered()
-                    .unwrap()
+                    .map_err(|e| format!("Failed to decode transaction: {e:?}"))
+                    .and_then(|tx| {
+                        tx.try_into_recovered().map_err(|e| {
+                            format!("Failed to convert transaction to recovered: {e:?}")
+                        })
+                    })
             })
-            .collect();
+            .collect::<Result<Vec<Recovered<OpTxEnvelope>>, String>>()?;
+
         Ok(ParsedBundle {
             txs,
             block_number: bundle.block_number,
@@ -246,13 +249,19 @@ impl AcceptedBundle {
 
         bundle.replacement_uuid = Some(uuid.to_string());
 
-        // TODO: better error handling
         let txs: Vec<Recovered<OpTxEnvelope>> = bundle
             .txs
             .into_iter()
-            .map(|tx| OpTxEnvelope::decode_2718_exact(tx.iter().as_slice()))
-            .map(|tx| tx.unwrap().try_into_recovered().unwrap())
-            .collect();
+            .map(|tx| {
+                OpTxEnvelope::decode_2718_exact(tx.iter().as_slice())
+                    .map_err(|e| format!("Failed to decode transaction: {e:?}"))
+                    .and_then(|tx| {
+                        tx.try_into_recovered().map_err(|e| {
+                            format!("Failed to convert transaction to recovered: {e:?}")
+                        })
+                    })
+            })
+            .collect::<Result<Vec<Recovered<OpTxEnvelope>>, String>>()?;
 
         Ok(AcceptedBundle {
             uuid,
