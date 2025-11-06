@@ -16,9 +16,11 @@ use tips_core::{
     AcceptedBundle, BLOCK_TIME, Bundle, BundleExtensions, BundleHash, CancelBundle,
     MeterBundleResponse,
 };
+use tokio::time::Instant;
 use tracing::{info, warn};
 
 use crate::queue::QueuePublisher;
+use crate::record_histogram;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 
 #[rpc(server, namespace = "eth")]
@@ -231,12 +233,16 @@ where
     /// is within `BLOCK_TIME` will return the `MeterBundleResponse` that can be passed along
     /// to the builder.
     async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
+        let start = Instant::now();
         let res: MeterBundleResponse = self
             .simulation_provider
             .client()
             .request("base_meterBundle", (bundle,))
             .await
             .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
+        let elapsed = start.elapsed();
+        record_histogram(elapsed, "base_meterBundle".to_string());
 
         // we can save some builder payload building computation by not including bundles
         // that we know will take longer than the block time to execute

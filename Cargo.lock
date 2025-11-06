@@ -6947,6 +6947,7 @@ dependencies = [
  "clap",
  "dotenvy",
  "jsonrpsee",
+ "metrics",
  "op-alloy-consensus",
  "op-alloy-network",
  "op-revm",
