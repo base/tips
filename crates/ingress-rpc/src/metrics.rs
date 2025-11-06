@@ -8,13 +8,13 @@ pub fn record_histogram(rpc_latency: Duration, rpc: String) {
         .record(rpc_latency.as_secs_f64());
 }
 
-/// Metrics for the `reth_tips_ingress_rpc` component.
+/// Metrics for the `tips_ingress_rpc` component.
 /// Conventions:
 /// - Durations are recorded in seconds (histograms).
 /// - Counters are monotonic event counts.
 /// - Gauges reflect the current value/state.
 #[derive(Metrics, Clone)]
-#[metrics(scope = "reth_tips_ingress_rpc")]
+#[metrics(scope = "tips_ingress_rpc")]
 pub struct Metrics {
     #[metric(describe = "Duration of validate_tx")]
     pub validate_tx_duration: Histogram,
