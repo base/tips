@@ -67,4 +67,4 @@ alloy-signer-local = "1.0.36"
 # Misc
 metrics = "0.24.1"
 metrics-derive = "0.1"
-metrics-exporter-prometheus = "0.17.2"
+metrics-exporter-prometheus = { version = "0.17.0", features = ["http-listener"]}

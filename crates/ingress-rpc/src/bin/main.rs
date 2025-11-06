@@ -1,18 +1,20 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
-use metrics_exporter_prometheus::PrometheusBuilder;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 use tips_audit::KafkaBundleEventPublisher;
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger;
 use tips_ingress_rpc::queue::KafkaQueuePublisher;
+use tips_ingress_rpc::metrics::init_prometheus_exporter;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService};
 use tracing::info;
 use url::Url;
+
+use tips_ingress_rpc::metrics::Metrics;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -73,12 +75,8 @@ struct Config {
     simulation_rpc: Url,
 
     /// Port to bind the Prometheus metrics server to
-    #[arg(long, env = "TIPS_INGRESS_METRICS_PORT", default_value = "9090")]
-    metrics_port: u16,
-
-    /// Address to bind the Prometheus metrics server to
-    #[arg(long, env = "TIPS_INGRESS_METRICS_ADDRESS", default_value = "0.0.0.0")]
-    metrics_address: IpAddr,
+    #[arg(long, env = "TIPS_INGRESS_METRICS_ADDR", default_value = "0.0.0.0:9000")]
+    metrics_addr: SocketAddr,
 }
 
 #[tokio::main]
@@ -90,15 +88,9 @@ async fn main() -> anyhow::Result<()> {
     init_logger(&config.log_level);
 
     // Initialize Prometheus metrics exporter
-    let metrics_bind_addr = format!("{}:{}", config.metrics_address, config.metrics_port);
-    PrometheusBuilder::new()
-        .with_http_listener(
-            metrics_bind_addr
-                .parse::<std::net::SocketAddr>()
-                .expect("Invalid metrics address"),
-        )
-        .install()
+    init_prometheus_exporter(config.metrics_addr)
         .expect("Failed to install Prometheus exporter");
+    let metrics = Metrics::default();
 
     info!(
         message = "Starting ingress service",
@@ -106,8 +98,7 @@ async fn main() -> anyhow::Result<()> {
         port = config.port,
         mempool_url = %config.mempool_url,
         simulation_rpc = %config.simulation_rpc,
-        metrics_address = %config.metrics_address,
-        metrics_port = config.metrics_port
+        metrics_address = %config.metrics_addr,
     );
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
@@ -142,6 +133,7 @@ async fn main() -> anyhow::Result<()> {
         queue,
         audit_publisher,
         config.send_transaction_default_lifetime_seconds,
+        metrics,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 
@@ -152,13 +144,6 @@ async fn main() -> anyhow::Result<()> {
     info!(
         message = "Ingress RPC server started",
         address = %addr
-    );
-
-    info!(
-        message = "Prometheus metrics server started",
-        metrics_address = %config.metrics_address,
-        metrics_port = config.metrics_port,
-        metrics_endpoint = format!("http://{}:{}/metrics", config.metrics_address, config.metrics_port)
     );
 
     handle.stopped().await;

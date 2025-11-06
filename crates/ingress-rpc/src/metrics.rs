@@ -1,5 +1,7 @@
 use metrics::Histogram;
 use metrics_derive::Metrics;
+use metrics_exporter_prometheus::PrometheusBuilder;
+use std::net::SocketAddr;
 use tokio::time::Duration;
 
 /// `record_histogram` lets us record with tags.
@@ -27,4 +29,12 @@ pub struct Metrics {
 
     #[metric(describe = "Duration of send_raw_transaction")]
     pub send_raw_transaction_duration: Histogram,
+}
+
+/// Initialize Prometheus metrics exporter
+pub fn init_prometheus_exporter(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+    PrometheusBuilder::new()
+        .with_http_listener(addr)
+        .install()
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
