@@ -15,7 +15,7 @@ use tips_core::Bundle;
 use tokio::time::Instant;
 use tracing::warn;
 
-use crate::record_histogram;
+use crate::metrics::record_histogram;
 
 const MAX_BUNDLE_GAS: u64 = 25_000_000;
 
@@ -41,8 +41,7 @@ impl AccountInfoLookup for RootProvider<Optimism> {
             .get_account(address)
             .await
             .map_err(|_| EthApiError::Signing(SignError::NoAccount))?;
-        let elapsed = start.elapsed();
-        record_histogram(elapsed, "eth_getAccount".to_string());
+        record_histogram(start.elapsed(), "eth_getAccount".to_string());
 
         Ok(AccountInfo {
             balance: account.balance,
@@ -75,9 +74,7 @@ impl L1BlockInfoLookup for RootProvider<Optimism> {
                 warn!(message = "empty latest block returned");
                 EthApiError::InternalEthError.into_rpc_err()
             })?;
-
-        let elapsed = start.elapsed();
-        record_histogram(elapsed, "eth_getBlockByNumber".to_string());
+        record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
 
         let txs = block.transactions.clone();
         let first_tx = txs.first_transaction().ok_or_else(|| {
