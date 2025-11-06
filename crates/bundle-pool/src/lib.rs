@@ -6,13 +6,13 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tracing::error;
 
-pub use pool::{BundleStore, InMemoryBundlePool};
+pub use pool::{Action, BundleStore, InMemoryBundlePool, ProcessedBundle};
 pub use source::KafkaBundleSource;
-pub use tips_core::{Bundle, BundleHash, BundleWithMetadata, CancelBundle};
+pub use tips_core::{AcceptedBundle, Bundle, CancelBundle};
 
 pub fn connect_sources_to_pool<S, P>(
     sources: Vec<S>,
-    bundle_rx: mpsc::UnboundedReceiver<BundleWithMetadata>,
+    bundle_rx: mpsc::UnboundedReceiver<AcceptedBundle>,
     pool: Arc<Mutex<P>>,
 ) where
     S: BundleSource + Send + 'static,

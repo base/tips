@@ -11,8 +11,10 @@ use reth_rpc_eth_types::EthApiError;
 use std::marker::PhantomData;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::{BundleEvent, BundleEventPublisher};
+use tips_core::types::ParsedBundle;
 use tips_core::{
-    BLOCK_TIME, Bundle, BundleHash, BundleWithMetadata, CancelBundle, MeterBundleResponse,
+    AcceptedBundle, BLOCK_TIME, Bundle, BundleExtensions, BundleHash, CancelBundle,
+    MeterBundleResponse,
 };
 use tracing::{info, warn};
 
@@ -34,12 +36,13 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue, Audit, Provider, N = op_alloy_network::Optimism>
+pub struct IngressService<Queue, Audit, Provider, N = Optimism>
 where
     Provider: AccountInfoLookup + L1BlockInfoLookup + AlloyProvider<N>,
     N: Network,
 {
     provider: Provider,
+    simulation_provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
     bundle_queue: Queue,
     audit_publisher: Audit,
@@ -54,6 +57,7 @@ where
 {
     pub fn new(
         provider: Provider,
+        simulation_provider: RootProvider<Optimism>,
         dual_write_mempool: bool,
         queue: Queue,
         audit_publisher: Audit,
@@ -61,6 +65,7 @@ where
     ) -> Self {
         Self {
             provider,
+            simulation_provider,
             dual_write_mempool,
             bundle_queue: queue,
             audit_publisher,
@@ -81,13 +86,15 @@ where
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
-        let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let parsed_bundle: ParsedBundle = bundle
+            .try_into()
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
-        let bundle_hash = bundle_with_metadata.bundle_hash();
+        let bundle_hash = &accepted_bundle.bundle_hash();
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, &bundle_hash)
+            .publish(&accepted_bundle, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -97,18 +104,19 @@ where
         info!(
             message = "queued bundle",
             bundle_hash = %bundle_hash,
-            tx_count = bundle_with_metadata.transactions().len(),
         );
 
         let audit_event = BundleEvent::Received {
-            bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.bundle().clone(),
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: Box::new(accepted_bundle.clone()),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
         }
 
-        Ok(BundleHash { bundle_hash })
+        Ok(BundleHash {
+            bundle_hash: *bundle_hash,
+        })
     }
 
     async fn cancel_bundle(&self, _request: CancelBundle) -> RpcResult<()> {
@@ -136,13 +144,15 @@ where
         };
         let meter_bundle_response = self.meter_bundle(&bundle).await?;
 
-        let bundle_with_metadata = BundleWithMetadata::load(bundle, meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
-        let bundle_hash = bundle_with_metadata.bundle_hash();
+        let parsed_bundle: ParsedBundle = bundle
+            .try_into()
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
+        let bundle_hash = &accepted_bundle.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
-            .publish(&bundle_with_metadata, &bundle_hash)
+            .publish(&accepted_bundle, bundle_hash)
             .await
         {
             warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
@@ -170,11 +180,11 @@ where
         }
 
         let audit_event = BundleEvent::Received {
-            bundle_id: *bundle_with_metadata.uuid(),
-            bundle: bundle_with_metadata.bundle().clone(),
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: accepted_bundle.clone().into(),
         };
         if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %bundle_with_metadata.uuid(), error = %e);
+            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
         }
 
         Ok(transaction.tx_hash())
@@ -236,7 +246,7 @@ where
     /// to the builder.
     async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
         let res: MeterBundleResponse = self
-            .provider
+            .simulation_provider
             .client()
             .request("base_meterBundle", (bundle,))
             .await
