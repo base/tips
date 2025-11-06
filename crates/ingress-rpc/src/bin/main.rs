@@ -8,13 +8,11 @@ use std::net::{IpAddr, SocketAddr};
 use tips_audit::KafkaBundleEventPublisher;
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger;
-use tips_ingress_rpc::queue::KafkaQueuePublisher;
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
+use tips_ingress_rpc::queue::KafkaQueuePublisher;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService};
 use tracing::info;
 use url::Url;
-
-use tips_ingress_rpc::metrics::Metrics;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -75,7 +73,11 @@ struct Config {
     simulation_rpc: Url,
 
     /// Port to bind the Prometheus metrics server to
-    #[arg(long, env = "TIPS_INGRESS_METRICS_ADDR", default_value = "0.0.0.0:9000")]
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_METRICS_ADDR",
+        default_value = "0.0.0.0:9002"
+    )]
     metrics_addr: SocketAddr,
 }
 
@@ -87,10 +89,7 @@ async fn main() -> anyhow::Result<()> {
 
     init_logger(&config.log_level);
 
-    // Initialize Prometheus metrics exporter
-    init_prometheus_exporter(config.metrics_addr)
-        .expect("Failed to install Prometheus exporter");
-    let metrics = Metrics::default();
+    init_prometheus_exporter(config.metrics_addr).expect("Failed to install Prometheus exporter");
 
     info!(
         message = "Starting ingress service",
@@ -133,7 +132,6 @@ async fn main() -> anyhow::Result<()> {
         queue,
         audit_publisher,
         config.send_transaction_default_lifetime_seconds,
-        metrics,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 

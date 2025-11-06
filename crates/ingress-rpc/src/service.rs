@@ -56,7 +56,6 @@ impl<Queue, Audit> IngressService<Queue, Audit> {
         queue: Queue,
         audit_publisher: Audit,
         send_transaction_default_lifetime_seconds: u64,
-        metrics: Metrics,
     ) -> Self {
         Self {
             provider,
@@ -65,7 +64,7 @@ impl<Queue, Audit> IngressService<Queue, Audit> {
             bundle_queue: queue,
             audit_publisher,
             send_transaction_default_lifetime_seconds,
-            metrics,
+            metrics: Metrics::default(),
         }
     }
 }
