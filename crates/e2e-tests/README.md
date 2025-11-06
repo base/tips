@@ -1,26 +1,46 @@
 # TIPS E2E Tests
 
-End-to-end tests for the TIPS (Transaction Inclusion Protocol Service) system.
+End-to-end integration tests for the TIPS (Transaction Inclusion Protocol Service) system.
 
 ## Prerequisites
 
-- Docker (running) - for Kafka
-- Rust toolchain
+All tests require the full infrastructure from `SETUP.md` running:
+- TIPS ingress service (port 8080) via `just start-all`
+- builder-playground (L1/L2 blockchain) on `danyal/base-overlay` branch
+- op-rbuilder (block builder)
+- Kafka
+- MinIO
 
-**Note:** These tests use a mock provider and do not require an Optimism/Ethereum node to run
+## Running Tests
 
-## Running All Tests
+### Start Infrastructure
 
-From the repository root:
+Follow guidelines in `SETUP.md`
+
+### Run Integration Tests
 
 ```bash
-
-# Run basic tests (no Kafka required)
-cargo test --package tips-e2e-tests
-
-# Run all tests including Kafka queue tests
-KAFKA_QUEUE_TESTS=1 cargo test --package tips-e2e-tests
+cd tips
+INTEGRATION_TESTS=1 cargo test --package tips-e2e-tests -- --nocapture
 ```
+
+All 8 tests will run:
+- `test_rpc_client_instantiation` - Verifies client creation
+- `test_send_raw_transaction_rejects_empty` - Tests empty transaction rejection
+- `test_send_raw_transaction_rejects_invalid` - Tests invalid transaction rejection
+- `test_send_bundle_rejects_empty` - Tests empty bundle rejection
+- `test_send_valid_transaction` - End-to-end transaction submission
+- `test_send_bundle_with_valid_transaction` - End-to-end single-transaction bundle
+- `test_send_bundle_with_replacement_uuid` - Bundle replacement with UUID tracking
+- `test_send_bundle_with_multiple_transactions` - Multi-transaction bundle
+
+### Environment Variables
+
+| Variable | Purpose | Default | Required |
+|----------|---------|---------|----------|
+| `INTEGRATION_TESTS` | Enable integration tests | (unset) | Yes |
+| `INGRESS_URL` | TIPS ingress service URL | `http://localhost:8080` | No |
+| `SEQUENCER_URL` | L2 sequencer node | `http://localhost:8547` | No |
 
 ## Test Structure
 
@@ -28,28 +48,10 @@ KAFKA_QUEUE_TESTS=1 cargo test --package tips-e2e-tests
 - `src/fixtures/` - Test data generators (transactions, signers)
 - `tests/` - End-to-end test scenarios
 
-### Test Categories
-
-**Basic Tests (No External Dependencies):**
-- `test_rpc_client_instantiation` - Verifies client creation
-- `test_send_raw_transaction_rejects_empty` - Tests empty transaction handling
-- `test_send_raw_transaction_rejects_invalid` - Tests invalid transaction handling
-- `test_send_bundle_rejects_empty` - Tests empty bundle handling
-
-**Kafka Queue Tests (Require KAFKA_QUEUE_TESTS=1 and Running Kafka):**
-- `test_send_valid_transaction` - Tests valid transaction submission
-- `test_send_bundle_with_valid_transaction` - Tests bundle with single transaction
-- `test_send_bundle_with_replacement_uuid` - Tests bundle replacement functionality
-- `test_send_bundle_with_multiple_transactions` - Tests bundle with multiple transactions
-
-
 ## Notes
 
-- Tests start their own ingress-rpc server instance with a mock provider
-- The mock provider returns large balances (100 ETH) and minimal L1 costs for all addresses
-- Kafka queue provider is required as an external dependency for full e2e tests
-
-## Architecture
-
-The tests use a `MockProvider` that implements the validation traits (`AccountInfoLookup` and `L1BlockInfoLookup`) but returns static mock data instead of querying a real blockchain. This allows tests to run quickly without external node dependencies while still testing the core validation and RPC logic.
+- Tests will be skipped if `INTEGRATION_TESTS` environment variable is not set
+- All tests require the full SETUP.md infrastructure to be running
+- Tests use real nonces fetched from the L2 node, so they adapt to current blockchain state
+- CI/CD setup will be added later to automate infrastructure provisioning
 

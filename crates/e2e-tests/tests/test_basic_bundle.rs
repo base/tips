@@ -1,48 +1,44 @@
 use alloy_primitives::{Address, Bytes, U256, keccak256};
+use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use anyhow::Result;
-use jsonrpsee::server::Server;
-use rdkafka::ClientConfig;
-use tips_audit::publisher::LoggingBundleEventPublisher;
+use op_alloy_network::Optimism;
 use tips_e2e_tests::client::TipsRpcClient;
-use tips_e2e_tests::fixtures::{create_signed_transaction, create_test_signer};
-use tips_e2e_tests::mock_provider::MockProvider;
-use tips_ingress_rpc::queue::KafkaQueuePublisher;
-use tips_ingress_rpc::service::{IngressApiServer, IngressService};
+use tips_e2e_tests::fixtures::{create_funded_signer, create_signed_transaction};
 
-/// Start a test server with mock provider and return its URL
-async fn start_test_server() -> Result<(String, tokio::task::JoinHandle<()>)> {
-    let mock_provider = MockProvider::new();
-
-    let kafka_config = ClientConfig::new()
-        .set("bootstrap.servers", "localhost:9092")
-        .create()?;
-    let queue = KafkaQueuePublisher::new(kafka_config, "test-topic".to_string());
-    let audit_publisher = LoggingBundleEventPublisher::new();
-
-    let service: IngressService<KafkaQueuePublisher, LoggingBundleEventPublisher, MockProvider> =
-        IngressService::new(mock_provider, false, queue, audit_publisher, 10800);
-
-    let server = Server::builder().build("127.0.0.1:0").await?;
-    let addr = server.local_addr()?;
-    let url = format!("http://{}", addr);
-
-    let handle = tokio::spawn(async move {
-        server.start(service.into_rpc()).stopped().await;
-    });
-
-    Ok((url, handle))
+/// Get the URL for integration tests against the production ingress service
+/// This requires the full SETUP.md infrastructure to be running:
+/// - TIPS ingress service (running on port 8080 via `just start-all`)
+/// - builder-playground (on danyal/base-overlay branch, provides L2 node on port 8547)
+/// - op-rbuilder (running on port 4444)
+/// - Kafka (on port 9092)
+fn get_integration_test_url() -> String {
+    std::env::var("INGRESS_URL").unwrap_or_else(|_| "http://localhost:8080".to_string())
 }
 
 #[tokio::test]
 async fn test_rpc_client_instantiation() -> Result<()> {
-    let (url, _handle) = start_test_server().await?;
+    if std::env::var("INTEGRATION_TESTS").is_err() {
+        eprintln!(
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
+        );
+        return Ok(());
+    }
+
+    let url = get_integration_test_url();
     let _client = TipsRpcClient::new(&url);
     Ok(())
 }
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
-    let (url, _handle) = start_test_server().await?;
+    if std::env::var("INTEGRATION_TESTS").is_err() {
+        eprintln!(
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
+        );
+        return Ok(());
+    }
+
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
 
     let empty_tx = Bytes::new();
@@ -62,7 +58,14 @@ async fn test_send_raw_transaction_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
-    let (url, _handle) = start_test_server().await?;
+    if std::env::var("INTEGRATION_TESTS").is_err() {
+        eprintln!(
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
+        );
+        return Ok(());
+    }
+
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
 
     let invalid_tx = Bytes::from(vec![0x01, 0x02, 0x03]);
@@ -84,20 +87,30 @@ async fn test_send_raw_transaction_rejects_invalid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_valid_transaction() -> Result<()> {
-    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+    if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
-            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
         );
         return Ok(());
     }
 
-    let (url, _handle) = start_test_server().await?;
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
-    let signer = create_test_signer();
+    let signer = create_funded_signer();
+
+    // Fetch current nonce from L2 node
+    let sequencer_url =
+        std::env::var("SEQUENCER_URL").unwrap_or_else(|_| "http://localhost:8547".to_string());
+    let sequencer_provider: RootProvider<Optimism> = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .network::<Optimism>()
+        .connect_http(sequencer_url.parse()?);
+    let nonce = sequencer_provider
+        .get_transaction_count(signer.address())
+        .await?;
 
     let to = Address::from([0x11; 20]);
     let value = U256::from(1000);
-    let nonce = 0;
     let gas_limit = 21000;
     let gas_price = 1_000_000_000;
 
@@ -111,9 +124,16 @@ async fn test_send_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_rejects_empty() -> Result<()> {
+    if std::env::var("INTEGRATION_TESTS").is_err() {
+        eprintln!(
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
+        );
+        return Ok(());
+    }
+
     use tips_core::Bundle;
 
-    let (url, _handle) = start_test_server().await?;
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
 
     let empty_bundle = Bundle {
@@ -147,23 +167,33 @@ async fn test_send_bundle_rejects_empty() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_valid_transaction() -> Result<()> {
-    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+    if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
-            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
         );
         return Ok(());
     }
 
     use tips_core::Bundle;
 
-    let (url, _handle) = start_test_server().await?;
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
-    let signer = create_test_signer();
+    let signer = create_funded_signer();
+
+    // Fetch current nonce from L2 node
+    let sequencer_url =
+        std::env::var("SEQUENCER_URL").unwrap_or_else(|_| "http://localhost:8547".to_string());
+    let sequencer_provider: RootProvider<Optimism> = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .network::<Optimism>()
+        .connect_http(sequencer_url.parse()?);
+    let nonce = sequencer_provider
+        .get_transaction_count(signer.address())
+        .await?;
 
     // Create a valid signed transaction
     let to = Address::from([0x11; 20]);
     let value = U256::from(1000);
-    let nonce = 0;
     let gas_limit = 21000;
     let gas_price = 1_000_000_000;
 
@@ -201,9 +231,9 @@ async fn test_send_bundle_with_valid_transaction() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
-    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+    if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
-            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
         );
         return Ok(());
     }
@@ -211,15 +241,26 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
     use tips_core::Bundle;
     use uuid::Uuid;
 
-    let (url, _handle) = start_test_server().await?;
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
-    let signer = create_test_signer();
+    let signer = create_funded_signer();
+
+    // Fetch current nonce from L2 node
+    let sequencer_url =
+        std::env::var("SEQUENCER_URL").unwrap_or_else(|_| "http://localhost:8547".to_string());
+    let sequencer_provider: RootProvider<Optimism> = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .network::<Optimism>()
+        .connect_http(sequencer_url.parse()?);
+    let nonce = sequencer_provider
+        .get_transaction_count(signer.address())
+        .await?;
 
     let signed_tx = create_signed_transaction(
         &signer,
         Address::from([0x22; 20]),
         U256::from(2000),
-        0,
+        nonce,
         21000,
         1_000_000_000,
     )
@@ -254,25 +295,36 @@ async fn test_send_bundle_with_replacement_uuid() -> Result<()> {
 
 #[tokio::test]
 async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
-    if std::env::var("KAFKA_QUEUE_TESTS").is_err() {
+    if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
-            "Skipping Kafka queue tests (set KAFKA_QUEUE_TESTS=1 to run, and make sure the KafkaQueuePublisher is running)"
+            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure SETUP.md infrastructure is running)"
         );
         return Ok(());
     }
 
     use tips_core::Bundle;
 
-    let (url, _handle) = start_test_server().await?;
+    let url = get_integration_test_url();
     let client = TipsRpcClient::new(&url);
-    let signer = create_test_signer();
+    let signer = create_funded_signer();
+
+    // Fetch current nonce from L2 node
+    let sequencer_url =
+        std::env::var("SEQUENCER_URL").unwrap_or_else(|_| "http://localhost:8547".to_string());
+    let sequencer_provider: RootProvider<Optimism> = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .network::<Optimism>()
+        .connect_http(sequencer_url.parse()?);
+    let nonce = sequencer_provider
+        .get_transaction_count(signer.address())
+        .await?;
 
     // Create multiple signed transactions with different nonces
     let tx1 = create_signed_transaction(
         &signer,
         Address::from([0x33; 20]),
         U256::from(1000),
-        0,
+        nonce,
         21000,
         1_000_000_000,
     )
@@ -282,7 +334,7 @@ async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
         &signer,
         Address::from([0x44; 20]),
         U256::from(2000),
-        1,
+        nonce + 1,
         21000,
         1_000_000_000,
     )
@@ -292,7 +344,7 @@ async fn test_send_bundle_with_multiple_transactions() -> Result<()> {
         &signer,
         Address::from([0x55; 20]),
         U256::from(3000),
-        2,
+        nonce + 2,
         21000,
         1_000_000_000,
     )

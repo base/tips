@@ -6,9 +6,19 @@ use op_alloy_network::TxSignerSync;
 use op_alloy_network::eip2718::Encodable2718;
 
 pub fn create_test_signer() -> PrivateKeySigner {
+    // First Anvil account (for unit tests with mock provider)
     "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         .parse()
         .expect("Valid test private key")
+}
+
+/// Create a funded signer for integration tests
+/// This is the same account used in justfile that has funds in builder-playground
+pub fn create_funded_signer() -> PrivateKeySigner {
+    // Second Anvil account - same as in justfile (0x70997970C51812dc3A010C7d01b50e0d17dc79C8)
+    "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
+        .parse()
+        .expect("Valid funded private key")
 }
 
 pub async fn create_signed_transaction(
@@ -20,7 +30,7 @@ pub async fn create_signed_transaction(
     max_fee_per_gas: u128,
 ) -> Result<Bytes> {
     let mut tx = TxEip1559 {
-        chain_id: 8453, // Base chain ID
+        chain_id: 13, // Local builder-playground chain ID
         nonce,
         gas_limit,
         max_fee_per_gas,
