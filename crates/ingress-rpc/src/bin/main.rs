@@ -1,6 +1,7 @@
 use alloy_provider::{ProviderBuilder, RootProvider};
 use clap::Parser;
 use jsonrpsee::server::Server;
+use metrics_exporter_prometheus::PrometheusBuilder;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
@@ -70,6 +71,14 @@ struct Config {
     /// URL of the simulation RPC service for bundle metering
     #[arg(long, env = "TIPS_INGRESS_RPC_SIMULATION")]
     simulation_rpc: Url,
+
+    /// Port to bind the Prometheus metrics server to
+    #[arg(long, env = "TIPS_INGRESS_METRICS_PORT", default_value = "9090")]
+    metrics_port: u16,
+
+    /// Address to bind the Prometheus metrics server to
+    #[arg(long, env = "TIPS_INGRESS_METRICS_ADDRESS", default_value = "0.0.0.0")]
+    metrics_address: IpAddr,
 }
 
 #[tokio::main]
@@ -80,12 +89,25 @@ async fn main() -> anyhow::Result<()> {
 
     init_logger(&config.log_level);
 
+    // Initialize Prometheus metrics exporter
+    let metrics_bind_addr = format!("{}:{}", config.metrics_address, config.metrics_port);
+    PrometheusBuilder::new()
+        .with_http_listener(
+            metrics_bind_addr
+                .parse::<std::net::SocketAddr>()
+                .expect("Invalid metrics address"),
+        )
+        .install()
+        .expect("Failed to install Prometheus exporter");
+
     info!(
         message = "Starting ingress service",
         address = %config.address,
         port = config.port,
         mempool_url = %config.mempool_url,
-        simulation_rpc = %config.simulation_rpc
+        simulation_rpc = %config.simulation_rpc,
+        metrics_address = %config.metrics_address,
+        metrics_port = config.metrics_port
     );
 
     let provider: RootProvider<Optimism> = ProviderBuilder::new()
@@ -130,6 +152,13 @@ async fn main() -> anyhow::Result<()> {
     info!(
         message = "Ingress RPC server started",
         address = %addr
+    );
+
+    info!(
+        message = "Prometheus metrics server started",
+        metrics_address = %config.metrics_address,
+        metrics_port = config.metrics_port,
+        metrics_endpoint = format!("http://{}:{}/metrics", config.metrics_address, config.metrics_port)
     );
 
     handle.stopped().await;

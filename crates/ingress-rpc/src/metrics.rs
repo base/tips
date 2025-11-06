@@ -4,7 +4,7 @@ use tokio::time::Duration;
 
 /// `record_histogram` lets us record with tags.
 pub fn record_histogram(rpc_latency: Duration, rpc: String) {
-    metrics::histogram!("tips_ingress_rpc_rpc_latency", "rpc" => rpc.clone())
+    metrics::histogram!("tips_ingress_rpc_rpc_latency", "rpc" => rpc)
         .record(rpc_latency.as_secs_f64());
 }
 
