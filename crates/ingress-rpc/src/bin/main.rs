@@ -88,6 +88,14 @@ struct Config {
         default_value = "2000"
     )]
     block_time_milliseconds: u64,
+
+    /// Timeout for bundle metering in milliseconds (default: 2000 milliseconds)
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_METER_BUNDLE_TIMEOUT_MS",
+        default_value = "2000"
+    )]
+    meter_bundle_timeout_ms: u64,
 }
 
 #[tokio::main]
@@ -144,6 +152,7 @@ async fn main() -> anyhow::Result<()> {
         audit_tx,
         config.send_transaction_default_lifetime_seconds,
         config.block_time_milliseconds,
+        config.meter_bundle_timeout_ms,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 

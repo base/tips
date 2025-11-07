@@ -16,7 +16,7 @@ use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
 };
 use tokio::sync::mpsc;
-use tokio::time::Instant;
+use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
@@ -47,6 +47,7 @@ pub struct IngressService<Queue> {
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
     block_time_milliseconds: u64,
+    meter_bundle_timeout_ms: u64,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -58,6 +59,7 @@ impl<Queue> IngressService<Queue> {
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         send_transaction_default_lifetime_seconds: u64,
         block_time_milliseconds: u64,
+        meter_bundle_timeout_ms: u64,
     ) -> Self {
         Self {
             provider,
@@ -68,6 +70,7 @@ impl<Queue> IngressService<Queue> {
             send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
             block_time_milliseconds,
+            meter_bundle_timeout_ms,
         }
     }
 }
@@ -255,12 +258,18 @@ where
     /// to the builder.
     async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
         let start = Instant::now();
-        let res: MeterBundleResponse = self
-            .simulation_provider
-            .client()
-            .request("base_meterBundle", (bundle,))
-            .await
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let timeout_duration = Duration::from_millis(self.meter_bundle_timeout_ms);
+        let res: MeterBundleResponse = timeout(
+            timeout_duration,
+            self.simulation_provider
+                .client()
+                .request("base_meterBundle", (bundle,)),
+        )
+        .await
+        .map_err(|_| {
+            EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+        })?
+        .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
         record_histogram(start.elapsed(), "base_meterBundle".to_string());
 
         // we can save some builder payload building computation by not including bundles
