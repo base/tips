@@ -259,6 +259,12 @@ where
     async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
         let start = Instant::now();
         let timeout_duration = Duration::from_millis(self.meter_bundle_timeout_ms);
+
+        // The future we await has the nested type:
+        // Result<
+        //   RpcResult<MeterBundleResponse>, // 1. The inner operation's result
+        //   tokio::time::error::Elapsed     // 2. The outer timeout's result
+        // >
         let res: MeterBundleResponse = timeout(
             timeout_duration,
             self.simulation_provider
@@ -270,6 +276,7 @@ where
             EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
         })?
         .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
         record_histogram(start.elapsed(), "base_meterBundle".to_string());
 
         // we can save some builder payload building computation by not including bundles
