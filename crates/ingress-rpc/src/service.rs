@@ -10,11 +10,12 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tips_audit::{BundleEvent, BundleEventPublisher};
+use tips_audit::{BundleEvent, BundleEventPublisher, connect_audit_to_publisher};
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
 };
+use tokio::sync::mpsc;
 use tokio::time::Instant;
 use tracing::{info, warn};
 
@@ -104,12 +105,14 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
         };
-        let audit_publisher = self.audit_publisher.clone();
-        tokio::spawn(async move {
-            if let Err(e) = audit_publisher.publish(audit_event).await {
-                warn!(message = "Failed to publish audit event", bundle_id = %*accepted_bundle.uuid(), error = %e);
-            }
-        });
+        let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
+        connect_audit_to_publisher(audit_rx, self.audit_publisher.clone());
+        if let Err(e) = audit_tx.send(audit_event) {
+            warn!(message = "Failed to send audit event", error = %e);
+            return Err(
+                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
+            );
+        }
 
         Ok(BundleHash {
             bundle_hash: *bundle_hash,
@@ -181,12 +184,14 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: accepted_bundle.clone().into(),
         };
-        let audit_publisher = self.audit_publisher.clone();
-        tokio::spawn(async move {
-            if let Err(e) = audit_publisher.publish(audit_event).await {
-                warn!(message = "Failed to publish audit event", bundle_id = %*accepted_bundle.uuid(), error = %e);
-            }
-        });
+        let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
+        connect_audit_to_publisher(audit_rx, self.audit_publisher.clone());
+        if let Err(e) = audit_tx.send(audit_event) {
+            warn!(message = "Failed to send audit event", error = %e);
+            return Err(
+                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
+            );
+        }
 
         self.metrics
             .send_raw_transaction_duration
