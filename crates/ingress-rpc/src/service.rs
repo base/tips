@@ -290,3 +290,54 @@ where
         Ok(res)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tips_core::test_utils::create_test_meter_bundle_response;
+
+    #[tokio::test]
+    async fn test_timeout_logic() {
+        let timeout_duration = Duration::from_millis(100);
+
+        // Test a future that takes longer than the timeout
+        let slow_future = async {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            Ok::<MeterBundleResponse, anyhow::Error>(create_test_meter_bundle_response())
+        };
+
+        let result = timeout(timeout_duration, slow_future)
+            .await
+            .map_err(|_| {
+                EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+            })
+            .map_err(|e| e.to_string());
+
+        assert!(result.is_err());
+        let error_string = format!("{:?}", result.unwrap_err());
+        assert!(error_string.contains("Timeout on requesting metering"));
+    }
+
+    #[tokio::test]
+    async fn test_timeout_logic_success() {
+        let timeout_duration = Duration::from_millis(200);
+
+        // Test a future that completes within the timeout
+        let fast_future = async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            Ok::<MeterBundleResponse, anyhow::Error>(create_test_meter_bundle_response())
+        };
+
+        let result = timeout(timeout_duration, fast_future)
+            .await
+            .map_err(|_| {
+                EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+            })
+            .map_err(|e| e.to_string());
+
+        assert!(result.is_ok());
+        // we're assumging that `base_meterBundle` will not error hence the second unwrap
+        let res = result.unwrap().unwrap();
+        assert_eq!(res, create_test_meter_bundle_response());
+    }
+}
