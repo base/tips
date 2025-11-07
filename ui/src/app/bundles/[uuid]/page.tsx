@@ -111,7 +111,7 @@ export default function BundlePage({ params }: PageProps) {
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex flex-col gap-1">
                           <span
-                            className={`px-2 py-1 rounded text-sm font-medium bg-gray-200`}
+                            className={`px-2 py-1 rounded text-sm font-medium bg-gray-200 text-black`}
                           >
                             {event.event}
                           </span>
