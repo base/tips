@@ -19,6 +19,7 @@ use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
+use crate::Config;
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
@@ -54,23 +55,21 @@ impl<Queue> IngressService<Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
-        dual_write_mempool: bool,
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
-        send_transaction_default_lifetime_seconds: u64,
-        block_time_milliseconds: u64,
-        meter_bundle_timeout_ms: u64,
+        config: Config,
     ) -> Self {
         Self {
             provider,
             simulation_provider,
-            dual_write_mempool,
+            dual_write_mempool: config.dual_write_mempool,
             bundle_queue: queue,
             audit_channel,
-            send_transaction_default_lifetime_seconds,
+            send_transaction_default_lifetime_seconds: config
+                .send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
-            block_time_milliseconds,
-            meter_bundle_timeout_ms,
+            block_time_milliseconds: config.block_time_milliseconds,
+            meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
         }
     }
 }
