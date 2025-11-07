@@ -81,13 +81,14 @@ where
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
-        let meter_bundle_response = self.meter_bundle(&bundle).await?;
         let parsed_bundle: ParsedBundle = bundle
+            .clone()
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let bundle_hash = &parsed_bundle.bundle_hash();
+        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
-        let bundle_hash = &accepted_bundle.bundle_hash();
         if let Err(e) = self
             .bundle_queue
             .publish(&accepted_bundle, bundle_hash)
@@ -142,13 +143,17 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
-        let meter_bundle_response = self.meter_bundle(&bundle).await?;
-
         let parsed_bundle: ParsedBundle = bundle
+            .clone()
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        
+        let bundle_hash = &parsed_bundle.bundle_hash();
+        let meter_bundle_response = self
+            .meter_bundle(&bundle, bundle_hash)
+            .await?;
+
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
-        let bundle_hash = &accepted_bundle.bundle_hash();
 
         if let Err(e) = self
             .bundle_queue
@@ -255,7 +260,11 @@ where
     /// `meter_bundle` is used to determine how long a bundle will take to execute. A bundle that
     /// is within `block_time_milliseconds` will return the `MeterBundleResponse` that can be passed along
     /// to the builder.
-    async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
+    async fn meter_bundle(
+        &self,
+        bundle: &Bundle,
+        bundle_hash: &B256,
+    ) -> RpcResult<MeterBundleResponse> {
         let start = Instant::now();
         let timeout_duration = Duration::from_millis(self.meter_bundle_timeout_ms);
 
@@ -272,6 +281,7 @@ where
         )
         .await
         .map_err(|_| {
+            warn!(message = "Timed out on requesting metering", bundle_hash = %bundle_hash);
             EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
         })?
         .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
