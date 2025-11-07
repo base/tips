@@ -79,6 +79,10 @@ struct Config {
         default_value = "0.0.0.0:9002"
     )]
     metrics_addr: SocketAddr,
+
+    /// Configurable block time in seconds (default: 2 seconds)
+    #[arg(long, env = "TIPS_INGRESS_BLOCK_TIME_SECONDS", default_value = "2")]
+    block_time_seconds: u64,
 }
 
 #[tokio::main]
@@ -132,6 +136,7 @@ async fn main() -> anyhow::Result<()> {
         queue,
         audit_publisher,
         config.send_transaction_default_lifetime_seconds,
+        config.block_time_seconds,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 
