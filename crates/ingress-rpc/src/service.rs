@@ -147,11 +147,9 @@ where
             .clone()
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        
+
         let bundle_hash = &parsed_bundle.bundle_hash();
-        let meter_bundle_response = self
-            .meter_bundle(&bundle, bundle_hash)
-            .await?;
+        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
 
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
