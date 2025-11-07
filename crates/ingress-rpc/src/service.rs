@@ -10,7 +10,7 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tips_audit::{BundleEvent, BundleEventPublisher, connect_audit_to_publisher};
+use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
@@ -38,45 +38,44 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue, Audit> {
+pub struct IngressService<Queue> {
     provider: RootProvider<Optimism>,
     simulation_provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
     bundle_queue: Queue,
-    audit_publisher: Audit,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
     block_time_milliseconds: u64,
+    audit_channel: mpsc::UnboundedSender<BundleEvent>,
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit> {
+impl<Queue> IngressService<Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
         dual_write_mempool: bool,
         queue: Queue,
-        audit_publisher: Audit,
         send_transaction_default_lifetime_seconds: u64,
         block_time_milliseconds: u64,
+        audit_channel: mpsc::UnboundedSender<BundleEvent>,
     ) -> Self {
         Self {
             provider,
             simulation_provider,
             dual_write_mempool,
             bundle_queue: queue,
-            audit_publisher,
             send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
             block_time_milliseconds,
+            audit_channel,
         }
     }
 }
 
 #[async_trait]
-impl<Queue, Audit> IngressApiServer for IngressService<Queue, Audit>
+impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
-    Audit: BundleEventPublisher + Sync + Send + 'static + Clone,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
@@ -105,9 +104,7 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
         };
-        let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
-        connect_audit_to_publisher(audit_rx, self.audit_publisher.clone());
-        if let Err(e) = audit_tx.send(audit_event) {
+        if let Err(e) = self.audit_channel.send(audit_event) {
             warn!(message = "Failed to send audit event", error = %e);
             return Err(
                 EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
@@ -184,9 +181,7 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: accepted_bundle.clone().into(),
         };
-        let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
-        connect_audit_to_publisher(audit_rx, self.audit_publisher.clone());
-        if let Err(e) = audit_tx.send(audit_event) {
+        if let Err(e) = self.audit_channel.send(audit_event) {
             warn!(message = "Failed to send audit event", error = %e);
             return Err(
                 EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
@@ -200,10 +195,9 @@ where
     }
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit>
+impl<Queue> IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
-    Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         let start = Instant::now();
