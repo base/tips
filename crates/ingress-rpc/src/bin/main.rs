@@ -141,9 +141,9 @@ async fn main() -> anyhow::Result<()> {
         simulation_provider,
         config.dual_write_mempool,
         queue,
+        audit_tx,
         config.send_transaction_default_lifetime_seconds,
         config.block_time_milliseconds,
-        audit_tx,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
 

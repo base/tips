@@ -43,10 +43,10 @@ pub struct IngressService<Queue> {
     simulation_provider: RootProvider<Optimism>,
     dual_write_mempool: bool,
     bundle_queue: Queue,
+    audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
     block_time_milliseconds: u64,
-    audit_channel: mpsc::UnboundedSender<BundleEvent>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -55,19 +55,19 @@ impl<Queue> IngressService<Queue> {
         simulation_provider: RootProvider<Optimism>,
         dual_write_mempool: bool,
         queue: Queue,
+        audit_channel: mpsc::UnboundedSender<BundleEvent>,
         send_transaction_default_lifetime_seconds: u64,
         block_time_milliseconds: u64,
-        audit_channel: mpsc::UnboundedSender<BundleEvent>,
     ) -> Self {
         Self {
             provider,
             simulation_provider,
             dual_write_mempool,
             bundle_queue: queue,
+            audit_channel,
             send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
             block_time_milliseconds,
-            audit_channel,
         }
     }
 }
