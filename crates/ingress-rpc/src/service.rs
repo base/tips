@@ -104,9 +104,12 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
         };
-        if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
-        }
+        let bundle_id = *accepted_bundle.uuid();
+        tokio::spawn(async move {
+            if let Err(e) = self.audit_publisher.publish(audit_event).await {
+                warn!(message = "Failed to publish audit event", bundle_id = %bundle_id, error = %e);
+            }
+        });
 
         Ok(BundleHash {
             bundle_hash: *bundle_hash,
@@ -178,9 +181,13 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: accepted_bundle.clone().into(),
         };
-        if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
-        }
+        let audit_publisher = self.audit_publisher.clone();
+        let bundle_id = *accepted_bundle.uuid();
+        tokio::spawn(async move {
+            if let Err(e) = audit_publisher.publish(audit_event).await {
+                warn!(message = "Failed to publish audit event", bundle_id = %bundle_id, error = %e);
+            }
+        });
 
         self.metrics
             .send_raw_transaction_duration
