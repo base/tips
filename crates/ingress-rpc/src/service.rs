@@ -75,7 +75,7 @@ impl<Queue, Audit> IngressService<Queue, Audit> {
 impl<Queue, Audit> IngressApiServer for IngressService<Queue, Audit>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
-    Audit: BundleEventPublisher + Sync + Send + 'static,
+    Audit: BundleEventPublisher + Sync + Send + 'static + Clone,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
@@ -104,10 +104,10 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
         };
-        let bundle_id = *accepted_bundle.uuid();
+        let audit_publisher = self.audit_publisher.clone();
         tokio::spawn(async move {
-            if let Err(e) = self.audit_publisher.publish(audit_event).await {
-                warn!(message = "Failed to publish audit event", bundle_id = %bundle_id, error = %e);
+            if let Err(e) = audit_publisher.publish(audit_event).await {
+                warn!(message = "Failed to publish audit event", bundle_id = %*accepted_bundle.uuid(), error = %e);
             }
         });
 
@@ -182,10 +182,9 @@ where
             bundle: accepted_bundle.clone().into(),
         };
         let audit_publisher = self.audit_publisher.clone();
-        let bundle_id = *accepted_bundle.uuid();
         tokio::spawn(async move {
             if let Err(e) = audit_publisher.publish(audit_event).await {
-                warn!(message = "Failed to publish audit event", bundle_id = %bundle_id, error = %e);
+                warn!(message = "Failed to publish audit event", bundle_id = %*accepted_bundle.uuid(), error = %e);
             }
         });
 
