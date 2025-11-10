@@ -3,18 +3,31 @@ pub mod queue;
 pub mod service;
 pub mod validation;
 
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
+use std::str::FromStr;
 use url::Url;
 
-#[derive(ValueEnum, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum TxSubmissionMethod {
-    #[value(name = "mempool")]
     Mempool,
-    #[value(name = "kafka")]
     Kafka,
-    #[value(name = "mempool,kafka")]
     MempoolAndKafka,
+}
+
+impl FromStr for TxSubmissionMethod {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "mempool" => Ok(TxSubmissionMethod::Mempool),
+            "kafka" => Ok(TxSubmissionMethod::Kafka),
+            "mempool,kafka" | "kafka,mempool" => Ok(TxSubmissionMethod::MempoolAndKafka),
+            _ => Err(format!(
+                "Invalid submission method: '{s}'. Valid options: mempool, kafka, mempool,kafka, kafka,mempool"
+            )),
+        }
+    }
 }
 
 #[derive(Parser, Debug, Clone)]
