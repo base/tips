@@ -13,6 +13,8 @@ pub enum TxSubmissionMethod {
     Mempool,
     #[value(name = "kafka")]
     Kafka,
+    #[value(name = "mempool,kafka")]
+    MempoolAndKafka,
 }
 
 #[derive(Parser, Debug, Clone)]

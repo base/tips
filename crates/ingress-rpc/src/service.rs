@@ -131,60 +131,68 @@ where
         let start = Instant::now();
         let transaction = self.validate_tx(&data).await?;
 
-        match self.tx_submission_method {
-            TxSubmissionMethod::Kafka => {
-                let expiry_timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-                    + self.send_transaction_default_lifetime_seconds;
+        let send_to_kafka = matches!(
+            self.tx_submission_method,
+            TxSubmissionMethod::Kafka | TxSubmissionMethod::MempoolAndKafka
+        );
+        let send_to_mempool = matches!(
+            self.tx_submission_method,
+            TxSubmissionMethod::Mempool | TxSubmissionMethod::MempoolAndKafka
+        );
 
-                let bundle = Bundle {
-                    txs: vec![data.clone()],
-                    max_timestamp: Some(expiry_timestamp),
-                    reverting_tx_hashes: vec![transaction.tx_hash()],
-                    ..Default::default()
-                };
-                let parsed_bundle: ParsedBundle = bundle
-                    .clone()
-                    .try_into()
-                    .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        if send_to_kafka {
+            let expiry_timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + self.send_transaction_default_lifetime_seconds;
 
-                let bundle_hash = &parsed_bundle.bundle_hash();
-                let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
+            let bundle = Bundle {
+                txs: vec![data.clone()],
+                max_timestamp: Some(expiry_timestamp),
+                reverting_tx_hashes: vec![transaction.tx_hash()],
+                ..Default::default()
+            };
+            let parsed_bundle: ParsedBundle = bundle
+                .clone()
+                .try_into()
+                .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
 
-                let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
+            let bundle_hash = &parsed_bundle.bundle_hash();
+            let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
 
-                if let Err(e) = self
-                    .bundle_queue
-                    .publish(&accepted_bundle, bundle_hash)
-                    .await
-                {
-                    warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
-                }
+            let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
-                info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
-
-                let audit_event = BundleEvent::Received {
-                    bundle_id: *accepted_bundle.uuid(),
-                    bundle: accepted_bundle.clone().into(),
-                };
-                if let Err(e) = self.audit_channel.send(audit_event) {
-                    warn!(message = "Failed to send audit event", error = %e);
-                }
+            if let Err(e) = self
+                .bundle_queue
+                .publish(&accepted_bundle, bundle_hash)
+                .await
+            {
+                warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
             }
-            TxSubmissionMethod::Mempool => {
-                let response = self
-                    .provider
-                    .send_raw_transaction(data.iter().as_slice())
-                    .await;
-                match response {
-                    Ok(_) => {
-                        info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
-                    }
-                    Err(e) => {
-                        warn!(message = "Failed to send raw transaction to mempool", error = %e);
-                    }
+
+            info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
+
+            let audit_event = BundleEvent::Received {
+                bundle_id: *accepted_bundle.uuid(),
+                bundle: accepted_bundle.clone().into(),
+            };
+            if let Err(e) = self.audit_channel.send(audit_event) {
+                warn!(message = "Failed to send audit event", error = %e);
+            }
+        }
+
+        if send_to_mempool {
+            let response = self
+                .provider
+                .send_raw_transaction(data.iter().as_slice())
+                .await;
+            match response {
+                Ok(_) => {
+                    info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
+                }
+                Err(e) => {
+                    warn!(message = "Failed to send raw transaction to mempool", error = %e);
                 }
             }
         }
