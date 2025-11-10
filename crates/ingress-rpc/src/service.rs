@@ -10,17 +10,19 @@ use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tips_audit::{BundleEvent, BundleEventPublisher};
+use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
 };
-use tokio::time::Instant;
+use tokio::sync::mpsc;
+use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -37,55 +39,56 @@ pub trait IngressApi {
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue, Audit> {
+pub struct IngressService<Queue> {
     provider: RootProvider<Optimism>,
     simulation_provider: RootProvider<Optimism>,
-    dual_write_mempool: bool,
+    tx_submission_method: TxSubmissionMethod,
     bundle_queue: Queue,
-    audit_publisher: Audit,
+    audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
     block_time_milliseconds: u64,
+    meter_bundle_timeout_ms: u64,
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit> {
+impl<Queue> IngressService<Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
-        dual_write_mempool: bool,
         queue: Queue,
-        audit_publisher: Audit,
-        send_transaction_default_lifetime_seconds: u64,
-        block_time_milliseconds: u64,
+        audit_channel: mpsc::UnboundedSender<BundleEvent>,
+        config: Config,
     ) -> Self {
         Self {
             provider,
             simulation_provider,
-            dual_write_mempool,
+            tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
-            audit_publisher,
-            send_transaction_default_lifetime_seconds,
+            audit_channel,
+            send_transaction_default_lifetime_seconds: config
+                .send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
-            block_time_milliseconds,
+            block_time_milliseconds: config.block_time_milliseconds,
+            meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
         }
     }
 }
 
 #[async_trait]
-impl<Queue, Audit> IngressApiServer for IngressService<Queue, Audit>
+impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
-    Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         self.validate_bundle(&bundle).await?;
-        let meter_bundle_response = self.meter_bundle(&bundle).await?;
         let parsed_bundle: ParsedBundle = bundle
+            .clone()
             .try_into()
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let bundle_hash = &parsed_bundle.bundle_hash();
+        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
-        let bundle_hash = &accepted_bundle.bundle_hash();
         if let Err(e) = self
             .bundle_queue
             .publish(&accepted_bundle, bundle_hash)
@@ -104,8 +107,11 @@ where
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
         };
-        if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
+        if let Err(e) = self.audit_channel.send(audit_event) {
+            warn!(message = "Failed to send audit event", error = %e);
+            return Err(
+                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
+            );
         }
 
         Ok(BundleHash {
@@ -125,61 +131,70 @@ where
         let start = Instant::now();
         let transaction = self.validate_tx(&data).await?;
 
-        let expiry_timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs()
-            + self.send_transaction_default_lifetime_seconds;
+        let send_to_kafka = matches!(
+            self.tx_submission_method,
+            TxSubmissionMethod::Kafka | TxSubmissionMethod::MempoolAndKafka
+        );
+        let send_to_mempool = matches!(
+            self.tx_submission_method,
+            TxSubmissionMethod::Mempool | TxSubmissionMethod::MempoolAndKafka
+        );
 
-        let bundle = Bundle {
-            txs: vec![data.clone()],
-            max_timestamp: Some(expiry_timestamp),
-            reverting_tx_hashes: vec![transaction.tx_hash()],
-            ..Default::default()
-        };
-        let meter_bundle_response = self.meter_bundle(&bundle).await?;
+        if send_to_kafka {
+            let expiry_timestamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + self.send_transaction_default_lifetime_seconds;
 
-        let parsed_bundle: ParsedBundle = bundle
-            .try_into()
-            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
-        let bundle_hash = &accepted_bundle.bundle_hash();
+            let bundle = Bundle {
+                txs: vec![data.clone()],
+                max_timestamp: Some(expiry_timestamp),
+                reverting_tx_hashes: vec![transaction.tx_hash()],
+                ..Default::default()
+            };
+            let parsed_bundle: ParsedBundle = bundle
+                .clone()
+                .try_into()
+                .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
 
-        if let Err(e) = self
-            .bundle_queue
-            .publish(&accepted_bundle, bundle_hash)
-            .await
-        {
-            warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
+            let bundle_hash = &parsed_bundle.bundle_hash();
+            let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
+
+            let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
+
+            if let Err(e) = self
+                .bundle_queue
+                .publish(&accepted_bundle, bundle_hash)
+                .await
+            {
+                warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
+            }
+
+            info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
+
+            let audit_event = BundleEvent::Received {
+                bundle_id: *accepted_bundle.uuid(),
+                bundle: accepted_bundle.clone().into(),
+            };
+            if let Err(e) = self.audit_channel.send(audit_event) {
+                warn!(message = "Failed to send audit event", error = %e);
+            }
         }
 
-        info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
-
-        if self.dual_write_mempool {
+        if send_to_mempool {
             let response = self
                 .provider
                 .send_raw_transaction(data.iter().as_slice())
                 .await;
-
             match response {
                 Ok(_) => {
                     info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
-                    warn!(
-                        message = "Failed to send raw transaction to mempool",
-                        error = %e
-                    );
+                    warn!(message = "Failed to send raw transaction to mempool", error = %e);
                 }
             }
-        }
-
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: accepted_bundle.clone().into(),
-        };
-        if let Err(e) = self.audit_publisher.publish(audit_event).await {
-            warn!(message = "Failed to publish audit event", bundle_id = %accepted_bundle.uuid(), error = %e);
         }
 
         self.metrics
@@ -189,10 +204,9 @@ where
     }
 }
 
-impl<Queue, Audit> IngressService<Queue, Audit>
+impl<Queue> IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
-    Audit: BundleEventPublisher + Sync + Send + 'static,
 {
     async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         let start = Instant::now();
@@ -248,14 +262,32 @@ where
     /// `meter_bundle` is used to determine how long a bundle will take to execute. A bundle that
     /// is within `block_time_milliseconds` will return the `MeterBundleResponse` that can be passed along
     /// to the builder.
-    async fn meter_bundle(&self, bundle: &Bundle) -> RpcResult<MeterBundleResponse> {
+    async fn meter_bundle(
+        &self,
+        bundle: &Bundle,
+        bundle_hash: &B256,
+    ) -> RpcResult<MeterBundleResponse> {
         let start = Instant::now();
-        let res: MeterBundleResponse = self
-            .simulation_provider
-            .client()
-            .request("base_meterBundle", (bundle,))
-            .await
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let timeout_duration = Duration::from_millis(self.meter_bundle_timeout_ms);
+
+        // The future we await has the nested type:
+        // Result<
+        //   RpcResult<MeterBundleResponse>, // 1. The inner operation's result
+        //   tokio::time::error::Elapsed     // 2. The outer timeout's result
+        // >
+        let res: MeterBundleResponse = timeout(
+            timeout_duration,
+            self.simulation_provider
+                .client()
+                .request("base_meterBundle", (bundle,)),
+        )
+        .await
+        .map_err(|_| {
+            warn!(message = "Timed out on requesting metering", bundle_hash = %bundle_hash);
+            EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+        })?
+        .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
         record_histogram(start.elapsed(), "base_meterBundle".to_string());
 
         // we can save some builder payload building computation by not including bundles
@@ -267,5 +299,56 @@ where
             );
         }
         Ok(res)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tips_core::test_utils::create_test_meter_bundle_response;
+
+    #[tokio::test]
+    async fn test_timeout_logic() {
+        let timeout_duration = Duration::from_millis(100);
+
+        // Test a future that takes longer than the timeout
+        let slow_future = async {
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            Ok::<MeterBundleResponse, anyhow::Error>(create_test_meter_bundle_response())
+        };
+
+        let result = timeout(timeout_duration, slow_future)
+            .await
+            .map_err(|_| {
+                EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+            })
+            .map_err(|e| e.to_string());
+
+        assert!(result.is_err());
+        let error_string = format!("{:?}", result.unwrap_err());
+        assert!(error_string.contains("Timeout on requesting metering"));
+    }
+
+    #[tokio::test]
+    async fn test_timeout_logic_success() {
+        let timeout_duration = Duration::from_millis(200);
+
+        // Test a future that completes within the timeout
+        let fast_future = async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            Ok::<MeterBundleResponse, anyhow::Error>(create_test_meter_bundle_response())
+        };
+
+        let result = timeout(timeout_duration, fast_future)
+            .await
+            .map_err(|_| {
+                EthApiError::InvalidParams("Timeout on requesting metering".into()).into_rpc_err()
+            })
+            .map_err(|e| e.to_string());
+
+        assert!(result.is_ok());
+        // we're assumging that `base_meterBundle` will not error hence the second unwrap
+        let res = result.unwrap().unwrap();
+        assert_eq!(res, create_test_meter_bundle_response());
     }
 }
