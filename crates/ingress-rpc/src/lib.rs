@@ -4,7 +4,7 @@ pub mod service;
 pub mod validation;
 
 use alloy_primitives::TxHash;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use clap::Parser;
 use op_alloy_network::Optimism;
 use std::net::{IpAddr, SocketAddr};
@@ -121,13 +121,22 @@ pub struct Config {
         default_value = "2000"
     )]
     pub meter_bundle_timeout_ms: u64,
+
+    /// URL of the builder RPC service for setting metering information
+    #[arg(long, env = "TIPS_INGRESS_BUILDER_RPC")]
+    pub builder_rpc: Url,
 }
 
 pub fn connect_ingress_to_builder(
     event_rx: broadcast::Receiver<MeterBundleResponse>,
-    builder: RootProvider<Optimism>,
+    builder_rpc: Url,
 ) {
     tokio::spawn(async move {
+        let builder: RootProvider<Optimism> = ProviderBuilder::new()
+            .disable_recommended_fillers()
+            .network::<Optimism>()
+            .connect_http(builder_rpc);
+
         let mut event_rx = event_rx;
         while let Ok(event) = event_rx.recv().await {
             // we only support one transaction per bundle for now
