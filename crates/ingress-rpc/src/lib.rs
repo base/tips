@@ -3,9 +3,15 @@ pub mod queue;
 pub mod service;
 pub mod validation;
 
+use alloy_primitives::TxHash;
+use alloy_provider::{Provider, RootProvider};
 use clap::Parser;
+use op_alloy_network::Optimism;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
+use tips_core::MeterBundleResponse;
+use tokio::sync::broadcast;
+use tracing::error;
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
@@ -115,4 +121,27 @@ pub struct Config {
         default_value = "2000"
     )]
     pub meter_bundle_timeout_ms: u64,
+}
+
+pub fn connect_ingress_to_builder(
+    event_rx: broadcast::Receiver<MeterBundleResponse>,
+    builder: RootProvider<Optimism>,
+) {
+    tokio::spawn(async move {
+        let mut event_rx = event_rx;
+        while let Ok(event) = event_rx.recv().await {
+            // we only support one transaction per bundle for now
+            let tx_hash = event.results[0].tx_hash;
+            if let Err(e) = builder
+                .client()
+                .request::<(TxHash, MeterBundleResponse), ()>(
+                    "base_setMeteringInformation",
+                    (tx_hash, event),
+                )
+                .await
+            {
+                error!(error = %e, "Failed to set metering information for tx hash: {tx_hash}");
+            }
+        }
+    });
 }
