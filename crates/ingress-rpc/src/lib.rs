@@ -3,9 +3,17 @@ pub mod queue;
 pub mod service;
 pub mod validation;
 
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use std::net::{IpAddr, SocketAddr};
 use url::Url;
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+pub enum TxSubmissionMethod {
+    #[value(name = "mempool")]
+    Mempool,
+    #[value(name = "kafka")]
+    Kafka,
+}
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -22,9 +30,13 @@ pub struct Config {
     #[arg(long, env = "TIPS_INGRESS_RPC_MEMPOOL")]
     pub mempool_url: Url,
 
-    /// Enable dual writing raw transactions to the mempool
-    #[arg(long, env = "TIPS_INGRESS_DUAL_WRITE_MEMPOOL", default_value = "false")]
-    pub dual_write_mempool: bool,
+    /// Method to submit transactions to the mempool
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_TX_SUBMISSION_METHOD",
+        default_value = "mempool"
+    )]
+    pub tx_submission_method: TxSubmissionMethod,
 
     /// Kafka brokers for publishing mempool events
     #[arg(long, env = "TIPS_INGRESS_KAFKA_INGRESS_PROPERTIES_FILE")]

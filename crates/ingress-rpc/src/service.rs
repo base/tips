@@ -19,10 +19,10 @@ use tokio::sync::mpsc;
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
-use crate::Config;
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -42,7 +42,7 @@ pub trait IngressApi {
 pub struct IngressService<Queue> {
     provider: RootProvider<Optimism>,
     simulation_provider: RootProvider<Optimism>,
-    dual_write_mempool: bool,
+    tx_submission_method: TxSubmissionMethod,
     bundle_queue: Queue,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
@@ -62,7 +62,7 @@ impl<Queue> IngressService<Queue> {
         Self {
             provider,
             simulation_provider,
-            dual_write_mempool: config.dual_write_mempool,
+            tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
             audit_channel,
             send_transaction_default_lifetime_seconds: config
@@ -153,44 +153,40 @@ where
 
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
 
-        if let Err(e) = self
-            .bundle_queue
-            .publish(&accepted_bundle, bundle_hash)
-            .await
-        {
-            warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
-        }
-
-        info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
-
-        if self.dual_write_mempool {
-            let response = self
-                .provider
-                .send_raw_transaction(data.iter().as_slice())
-                .await;
-
-            match response {
-                Ok(_) => {
-                    info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
-                }
-                Err(e) => {
-                    warn!(
-                        message = "Failed to send raw transaction to mempool",
-                        error = %e
-                    );
+        match self.tx_submission_method {
+            TxSubmissionMethod::Mempool => {
+                let response = self
+                    .provider
+                    .send_raw_transaction(data.iter().as_slice())
+                    .await;
+                match response {
+                    Ok(_) => {
+                        info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
+                    }
+                    Err(e) => {
+                        warn!(message = "Failed to send raw transaction to mempool", error = %e);
+                    }
                 }
             }
-        }
+            TxSubmissionMethod::Kafka => {
+                if let Err(e) = self
+                    .bundle_queue
+                    .publish(&accepted_bundle, bundle_hash)
+                    .await
+                {
+                    warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
+                }
 
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: accepted_bundle.clone().into(),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-            return Err(
-                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
-            );
+                info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
+
+                let audit_event = BundleEvent::Received {
+                    bundle_id: *accepted_bundle.uuid(),
+                    bundle: accepted_bundle.clone().into(),
+                };
+                if let Err(e) = self.audit_channel.send(audit_event) {
+                    warn!(message = "Failed to send audit event", error = %e);
+                }
+            }
         }
 
         self.metrics
