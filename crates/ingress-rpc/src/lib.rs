@@ -125,6 +125,14 @@ pub struct Config {
     /// URL of the builder RPC service for setting metering information
     #[arg(long, env = "TIPS_INGRESS_BUILDER_RPC")]
     pub builder_rpc: Url,
+
+    /// Maximum number of `MeterBundleResponse`s to buffer in memory
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_MAX_BUFFERED_METER_BUNDLE_RESPONSES",
+        default_value = "100"
+    )]
+    pub max_buffered_meter_bundle_responses: usize,
 }
 
 pub fn connect_ingress_to_builder(

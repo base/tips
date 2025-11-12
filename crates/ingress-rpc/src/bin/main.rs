@@ -66,7 +66,8 @@ async fn main() -> anyhow::Result<()> {
 
     // TODO: when we have multiple builders we can make `builder_rx` mutable and do `.subscribe()` to have multiple consumers
     // of this channel.
-    let (builder_tx, builder_rx) = broadcast::channel::<MeterBundleResponse>(100);
+    let (builder_tx, builder_rx) =
+        broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
     connect_ingress_to_builder(builder_rx, config.builder_rpc);
 
     let service = IngressService::new(
