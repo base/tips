@@ -14,6 +14,7 @@ services:
     volumes:
       - ./docker/ingress-bundles-kafka-properties:/app/docker/ingress-bundles-kafka-properties:ro
       - ./docker/ingress-audit-kafka-properties:/app/docker/ingress-audit-kafka-properties:ro
+      - ./docker/user-operations-kafka-properties:/app/docker/user-operations-kafka-properties:ro
     restart: unless-stopped
 
   audit:

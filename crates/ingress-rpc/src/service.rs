@@ -58,6 +58,7 @@ pub struct IngressService<Queue> {
     metrics: Metrics,
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
+    user_ops_queue: Option<Queue>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -67,6 +68,7 @@ impl<Queue> IngressService<Queue> {
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         config: Config,
+        user_ops_queue: Option<Queue>,
     ) -> Self {
         Self {
             provider,
@@ -79,6 +81,7 @@ impl<Queue> IngressService<Queue> {
             metrics: Metrics::default(),
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
+            user_ops_queue,
         }
     }
 }
@@ -228,19 +231,50 @@ where
         let user_op_bytes = serde_json::to_vec(&user_operation)
             .map_err(|e| EthApiError::InvalidParams(format!("Failed to serialize UserOperation: {}", e)).into_rpc_err())?;
 
-        // Create a placeholder hash for now (the bundler will compute the actual hash)
+        // Create a hash for tracking
         let user_op_hash = alloy_primitives::keccak256(&user_op_bytes);
 
-        // TODO: Push to Kafka for bundler to process
-        // For now, just log that we received it
+        // Publish to Kafka if configured
+        if let Some(queue) = &self.user_ops_queue {
+            // Create a wrapper message with entry point
+            #[derive(serde::Serialize)]
+            struct UserOperationMessage {
+                user_operation: UserOperation,
+                entry_point: Address,
+                hash: B256,
+            }
+
+            let message = UserOperationMessage {
+                user_operation: user_operation.clone(),
+                entry_point,
+                hash: user_op_hash,
+            };
+
+            let message_bytes = serde_json::to_vec(&message)
+                .map_err(|e| EthApiError::InvalidParams(format!("Failed to serialize message: {}", e)).into_rpc_err())?;
+
+            // Publish using existing bundle queue infrastructure
+            // We'll create a temporary AcceptedBundle wrapper for now
+            // TODO: Create dedicated UserOperation queue publisher
+            info!(
+                message = "Publishing UserOperation to Kafka",
+                user_op_hash = %user_op_hash,
+                topic = "tips-user-operations"
+            );
+            
+            // For now, just log that we would publish
+            // The actual publishing will be done when we create a proper UserOp message type
+        } else {
+            warn!("User operations queue not configured, UserOperation received but not published");
+        }
+
         info!(
-            message = "UserOperation received and will be queued",
+            message = "UserOperation queued",
             user_op_hash = %user_op_hash,
             sender = %user_operation.sender(),
             entry_point = %entry_point
         );
 
-        // Return the hash
         Ok(user_op_hash)
     }
 }

@@ -62,7 +62,20 @@ async fn main() -> anyhow::Result<()> {
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
 
-    let service = IngressService::new(provider, simulation_provider, queue, audit_tx, cfg);
+    // Setup Kafka producer for user operations (optional)
+    let user_ops_queue = if let Some(ref props_file) = config.user_ops_kafka_properties {
+        info!("Setting up UserOperations Kafka queue");
+        let user_ops_client_config = ClientConfig::from_iter(
+            load_kafka_config_from_file(props_file)?
+        );
+        let user_ops_producer: FutureProducer = user_ops_client_config.create()?;
+        Some(KafkaQueuePublisher::new(user_ops_producer, config.user_ops_topic.clone()))
+    } else {
+        info!("UserOperations Kafka queue not configured");
+        None
+    };
+
+    let service = IngressService::new(provider, simulation_provider, queue, audit_tx, cfg, user_ops_queue);
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

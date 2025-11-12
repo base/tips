@@ -116,4 +116,16 @@ pub struct Config {
         default_value = "2000"
     )]
     pub meter_bundle_timeout_ms: u64,
+
+    /// Kafka properties file for user operations
+    #[arg(long, env = "TIPS_INGRESS_KAFKA_USER_OPS_PROPERTIES_FILE")]
+    pub user_ops_kafka_properties: Option<String>,
+
+    /// Kafka topic for user operations
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_USER_OPS_TOPIC",
+        default_value = "tips-user-operations"
+    )]
+    pub user_ops_topic: String,
 }
