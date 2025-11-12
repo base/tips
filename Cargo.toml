@@ -7,7 +7,7 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/bundle-pool", "crates/core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core"]
 resolver = "2"
 
 [workspace.dependencies]

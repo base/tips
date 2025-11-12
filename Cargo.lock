@@ -6878,31 +6878,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tips-bundle-pool"
-version = "0.1.0"
-dependencies = [
- "alloy-consensus",
- "alloy-primitives",
- "alloy-provider",
- "alloy-signer",
- "alloy-signer-local",
- "anyhow",
- "async-trait",
- "op-alloy-consensus",
- "op-alloy-rpc-types",
- "rdkafka",
- "serde",
- "serde_json",
- "testcontainers",
- "testcontainers-modules",
- "tips-audit",
- "tips-core",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "tips-core"
 version = "0.1.0"
 dependencies = [
