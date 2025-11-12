@@ -1,6 +1,7 @@
 pub mod metrics;
 pub mod queue;
 pub mod service;
+pub mod user_operation;
 pub mod validation;
 
 use clap::Parser;

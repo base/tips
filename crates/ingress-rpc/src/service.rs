@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{Address, B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -21,6 +21,7 @@ use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
+use crate::user_operation::UserOperation;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
 
@@ -37,6 +38,14 @@ pub trait IngressApi {
     /// Handler for: `eth_sendRawTransaction`
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+
+    /// Handler for EIP-4337: `eth_sendUserOperation`
+    #[method(name = "sendUserOperation")]
+    async fn send_user_operation(
+        &self,
+        user_operation: UserOperation,
+        entry_point: Address,
+    ) -> RpcResult<B256>;
 }
 
 pub struct IngressService<Queue> {
@@ -201,6 +210,38 @@ where
             .send_raw_transaction_duration
             .record(start.elapsed().as_secs_f64());
         Ok(transaction.tx_hash())
+    }
+
+    async fn send_user_operation(
+        &self,
+        user_operation: UserOperation,
+        entry_point: Address,
+    ) -> RpcResult<B256> {
+        info!(
+            sender = %user_operation.sender(),
+            entry_point = %entry_point,
+            nonce = %user_operation.nonce(),
+            "Received sendUserOperation request"
+        );
+
+        // Serialize the UserOperation to JSON bytes
+        let user_op_bytes = serde_json::to_vec(&user_operation)
+            .map_err(|e| EthApiError::InvalidParams(format!("Failed to serialize UserOperation: {}", e)).into_rpc_err())?;
+
+        // Create a placeholder hash for now (the bundler will compute the actual hash)
+        let user_op_hash = alloy_primitives::keccak256(&user_op_bytes);
+
+        // TODO: Push to Kafka for bundler to process
+        // For now, just log that we received it
+        info!(
+            message = "UserOperation received and will be queued",
+            user_op_hash = %user_op_hash,
+            sender = %user_operation.sender(),
+            entry_point = %entry_point
+        );
+
+        // Return the hash
+        Ok(user_op_hash)
     }
 }
 
