@@ -5,7 +5,7 @@
 The AA Bundler service is a bridge between UserOperations and the TIPS bundling pipeline. It:
 
 1. **Consumes** UserOperations from `tips-user-operations` Kafka topic
-2. **Validates** entry points and UserOperation format
+2. **Validates** UserOperation format
 3. **Converts** UserOperations to EntryPoint `handleOps()` transactions
 4. **Creates** bundles from those transactions
 5. **Publishes** to `tips-ingress` Kafka topic for processing
@@ -17,7 +17,6 @@ Kafka: tips-user-operations
   ↓
 AA Bundler Service
   ├─ Consumer (receives UserOps)
-  ├─ Validator (checks entry points)
   ├─ Converter (UserOp → EntryPoint tx)
   └─ Publisher (creates & publishes bundles)
   ↓
@@ -45,7 +44,6 @@ TIPS_AA_BUNDLER_KAFKA_AUDIT_TOPIC=tips-audit
 
 # Bundler Settings
 TIPS_AA_BUNDLER_PRIVATE_KEY=0x...
-TIPS_AA_BUNDLER_ENTRY_POINTS=0x0000000071727De22E5E9d8BAf0edAc6f37da032
 TIPS_AA_BUNDLER_CHAIN_ID=8453
 
 # RPC URLs
@@ -76,7 +74,7 @@ export TIPS_AA_BUNDLER_KAFKA_CONSUMER_PROPERTIES_FILE=docker/aa-bundler-consumer
 export TIPS_AA_BUNDLER_KAFKA_PRODUCER_PROPERTIES_FILE=docker/aa-bundler-producer-kafka-properties
 export TIPS_AA_BUNDLER_KAFKA_AUDIT_PROPERTIES_FILE=docker/audit-kafka-properties
 export TIPS_AA_BUNDLER_PRIVATE_KEY=0x...
-export TIPS_AA_BUNDLER_ENTRY_POINTS=0x0000000071727De22E5E9d8BAf0edAc6f37da032
+export TIPS_AA_BUNDLER_CHAIN_ID=8453
 export TIPS_AA_BUNDLER_RPC_URL=http://localhost:8545
 export TIPS_AA_BUNDLER_SIMULATION_RPC=http://localhost:8545
 
@@ -89,7 +87,6 @@ cargo run --bin tips-aa-bundler
 ### ✅ Completed
 - Kafka consumer for UserOperations
 - UserOperation message parsing
-- Entry point validation
 - Converter module structure
 - Bundle publisher structure
 - Audit logging integration

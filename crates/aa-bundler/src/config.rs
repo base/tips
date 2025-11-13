@@ -1,6 +1,5 @@
 //! Configuration for AA Bundler Service
 
-use alloy_primitives::Address;
 use clap::Parser;
 use url::Url;
 
@@ -47,10 +46,6 @@ pub struct Config {
     #[arg(long, env = "TIPS_AA_BUNDLER_PRIVATE_KEY")]
     pub bundler_private_key: String,
 
-    /// Supported EntryPoint addresses (comma-separated)
-    #[arg(long, env = "TIPS_AA_BUNDLER_ENTRY_POINTS")]
-    pub entry_points: String,
-
     /// Chain ID for transaction signing
     #[arg(long, env = "TIPS_AA_BUNDLER_CHAIN_ID", default_value = "8453")]
     pub chain_id: u64,
@@ -65,22 +60,5 @@ pub struct Config {
 
     #[arg(long, env = "TIPS_AA_BUNDLER_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
-}
-
-impl Config {
-    /// Parse supported entry points from comma-separated string
-    pub fn supported_entry_points(&self) -> Vec<Address> {
-        self.entry_points
-            .split(',')
-            .filter_map(|s| {
-                let trimmed = s.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    trimmed.parse().ok()
-                }
-            })
-            .collect()
-    }
 }
 

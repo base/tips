@@ -43,11 +43,9 @@ async fn main() -> anyhow::Result<()> {
 
     // Initialize converter
     let converter = UserOperationConverter::new(&config.bundler_private_key, config.chain_id)?;
-    let supported_entry_points = config.supported_entry_points();
 
     info!(
         bundler_address = %converter.bundler_address(),
-        supported_entry_points = ?supported_entry_points,
         "Bundler initialized"
     );
 
@@ -94,16 +92,6 @@ async fn main() -> anyhow::Result<()> {
                 hash = %user_op_message.hash,
                 "Processing UserOperation"
             );
-
-            // Check if entry point is supported
-            if !supported_entry_points.contains(&user_op_message.entry_point) {
-                warn!(
-                    entry_point = %user_op_message.entry_point,
-                    supported = ?supported_entry_points,
-                    "Unsupported entry point, skipping UserOperation"
-                );
-                continue;
-            }
 
             // Convert UserOperation to transaction
             match converter.convert_to_transaction(&user_op_message) {
