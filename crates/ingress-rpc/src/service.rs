@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{B256, Bytes, Address};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -12,6 +12,7 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
+use tips_core::user_operation::UserOperation;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
 };
@@ -37,6 +38,13 @@ pub trait IngressApi {
     /// Handler for: `eth_sendRawTransaction`
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+
+    #[method(name = "sendUserOperation")]
+    async fn send_user_operation(
+        &self,
+        user_operation: UserOperation,
+        entry_point: Address,
+    ) -> RpcResult<B256>;
 }
 
 pub struct IngressService<Queue> {
@@ -138,6 +146,16 @@ where
         todo!("implement cancel_bundle")
     }
 
+
+    async fn send_user_operation(&self, user_operation: UserOperation, entry_point: Address) -> RpcResult<B256> {
+        info!(
+            sender = %user_operation.sender(),
+            entry_point = %entry_point,
+            nonce = %user_operation.nonce(),
+            "Received sendUserOperation request"
+        );
+        Ok(B256::default())
+    }
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
         let transaction = self.validate_tx(&data).await?;
