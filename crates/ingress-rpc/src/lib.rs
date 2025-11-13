@@ -83,6 +83,22 @@ pub struct Config {
     )]
     pub audit_topic: String,
 
+    /// Kafka properties file for user operations (optional, defaults to ingress properties)
+    #[arg(long, env = "TIPS_INGRESS_KAFKA_USER_OPS_PROPERTIES_FILE")]
+    pub user_ops_kafka_properties: Option<String>,
+
+    /// Kafka topic for user operations
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_USER_OPS_TOPIC",
+        default_value = "tips-user-operations"
+    )]
+    pub user_ops_topic: String,
+
+    /// Chain ID for user operation hashing
+    #[arg(long, env = "TIPS_CHAIN_ID", default_value = "8453")]
+    pub chain_id: u64,
+
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 

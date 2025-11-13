@@ -10,3 +10,4 @@ pub use types::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, BundleTxs, CancelBundle,
     MeterBundleResponse,
 };
+pub use user_operation::{UserOperation, UserOperationWithMetadata};

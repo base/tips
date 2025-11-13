@@ -12,16 +12,16 @@ use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
-use tips_core::user_operation::UserOperation;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
+    UserOperation, UserOperationWithMetadata,
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
+use crate::queue::{BundleQueuePublisher, UserOperationQueuePublisher};
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
 
@@ -47,24 +47,27 @@ pub trait IngressApi {
     ) -> RpcResult<B256>;
 }
 
-pub struct IngressService<Queue> {
+pub struct IngressService {
     provider: RootProvider<Optimism>,
     simulation_provider: RootProvider<Optimism>,
     tx_submission_method: TxSubmissionMethod,
-    bundle_queue: Queue,
+    bundle_queue: BundleQueuePublisher,
+    user_op_queue: UserOperationQueuePublisher,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
+    chain_id: u64,
 }
 
-impl<Queue> IngressService<Queue> {
+impl IngressService {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
-        queue: Queue,
+        bundle_queue: BundleQueuePublisher,
+        user_op_queue: UserOperationQueuePublisher,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         config: Config,
@@ -73,7 +76,8 @@ impl<Queue> IngressService<Queue> {
             provider,
             simulation_provider,
             tx_submission_method: config.tx_submission_method,
-            bundle_queue: queue,
+            bundle_queue,
+            user_op_queue,
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -81,15 +85,13 @@ impl<Queue> IngressService<Queue> {
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
+            chain_id: config.chain_id,
         }
     }
 }
 
 #[async_trait]
-impl<Queue> IngressApiServer for IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
-{
+impl IngressApiServer for IngressService {
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         // validate the bundle and consume the `bundle` to get an `AcceptedBundle`
         self.validate_bundle(&bundle).await?;
@@ -148,13 +150,36 @@ where
 
 
     async fn send_user_operation(&self, user_operation: UserOperation, entry_point: Address) -> RpcResult<B256> {
+        let user_op_with_meta = UserOperationWithMetadata::new(
+            user_operation.clone(),
+            entry_point,
+            self.chain_id,
+        );
+
         info!(
             sender = %user_operation.sender(),
             entry_point = %entry_point,
             nonce = %user_operation.nonce(),
+            user_op_hash = %user_op_with_meta.user_op_hash,
             "Received sendUserOperation request"
         );
-        Ok(B256::default())
+
+        // Publish to Kafka
+        if let Err(e) = self.user_op_queue.publish(&user_op_with_meta).await {
+            warn!(
+                message = "Failed to publish user operation to queue",
+                user_op_hash = %user_op_with_meta.user_op_hash,
+                error = %e
+            );
+            return Err(EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err());
+        }
+
+        info!(
+            message = "Queued user operation",
+            user_op_hash = %user_op_with_meta.user_op_hash
+        );
+
+        Ok(user_op_with_meta.user_op_hash)
     }
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
@@ -238,10 +263,7 @@ where
     }
 }
 
-impl<Queue> IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
-{
+impl IngressService {
     async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         let start = Instant::now();
         if data.is_empty() {
