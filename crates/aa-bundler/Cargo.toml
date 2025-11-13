@@ -1,0 +1,51 @@
+[package]
+name = "tips-aa-bundler"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+# Workspace dependencies
+tips-core.workspace = true
+tips-audit.workspace = true
+
+# Alloy
+alloy-primitives.workspace = true
+alloy-consensus.workspace = true
+alloy-provider.workspace = true
+alloy-serde.workspace = true
+alloy-signer-local.workspace = true
+
+# OP Stack
+op-alloy-network.workspace = true
+op-alloy-consensus.workspace = true
+
+# Async
+tokio.workspace = true
+async-trait.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+bytes.workspace = true
+
+# Kafka
+rdkafka.workspace = true
+backon.workspace = true
+
+# Logging & Config
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+url.workspace = true
+anyhow.workspace = true
+dotenvy.workspace = true
+
+# Utilities
+uuid.workspace = true
+
+[[bin]]
+name = "tips-aa-bundler"
+path = "src/bin/main.rs"
+

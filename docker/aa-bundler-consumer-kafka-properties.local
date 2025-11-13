@@ -1,0 +1,6 @@
+# Kafka configuration properties for AA bundler consumer (local)
+bootstrap.servers=localhost:9092
+group.id=aa-bundler-consumer-group
+auto.offset.reset=earliest
+enable.auto.commit=true
+

@@ -1,0 +1,23 @@
+[package]
+name = "tips-user-op-pool"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alloy-primitives = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+rdkafka = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+tips-ingress-rpc = { path = "../ingress-rpc" }
+
+[dev-dependencies]
+testcontainers = { workspace = true }
+testcontainers-modules = { workspace = true }
+tips-core = { path = "../core" }
+alloy-signer-local = { workspace = true }
+

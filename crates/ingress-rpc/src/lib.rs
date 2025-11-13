@@ -4,6 +4,9 @@ pub mod service;
 pub mod user_operation;
 pub mod validation;
 
+// Re-export UserOperation types for use by other crates
+pub use user_operation::{UserOperation, UserOperationV06, UserOperationV07};
+
 use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;

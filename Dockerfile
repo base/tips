@@ -23,7 +23,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cargo build && \
     cp target/debug/tips-ingress-rpc /tmp/tips-ingress-rpc && \
-    cp target/debug/tips-audit /tmp/tips-audit
+    cp target/debug/tips-audit /tmp/tips-audit && \
+    cp target/debug/tips-aa-bundler /tmp/tips-aa-bundler
 
 FROM debian:bookworm
 
@@ -33,3 +34,4 @@ WORKDIR /app
 
 COPY --from=builder /tmp/tips-audit /app/tips-audit
 COPY --from=builder /tmp/tips-ingress-rpc /app/tips-ingress-rpc
+COPY --from=builder /tmp/tips-aa-bundler /app/tips-aa-bundler

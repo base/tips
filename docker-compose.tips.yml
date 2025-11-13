@@ -30,6 +30,21 @@ services:
       - ./docker/audit-kafka-properties:/app/docker/audit-kafka-properties:ro
     restart: unless-stopped
 
+  aa-bundler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-aa-bundler"
+    container_name: tips-aa-bundler
+    env_file:
+      - .env.docker
+    volumes:
+      - ./docker/aa-bundler-consumer-kafka-properties:/app/docker/aa-bundler-consumer-kafka-properties:ro
+      - ./docker/aa-bundler-producer-kafka-properties:/app/docker/aa-bundler-producer-kafka-properties:ro
+      - ./docker/audit-kafka-properties:/app/docker/audit-kafka-properties:ro
+    restart: unless-stopped
+
   ui:
     build:
       context: .

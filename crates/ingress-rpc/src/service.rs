@@ -20,7 +20,7 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
+use crate::queue::{KafkaQueuePublisher, QueuePublisher};
 use crate::user_operation::UserOperation;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
@@ -58,7 +58,7 @@ pub struct IngressService<Queue> {
     metrics: Metrics,
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
-    user_ops_queue: Option<Queue>,
+    user_ops_queue: Option<KafkaQueuePublisher>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -68,7 +68,7 @@ impl<Queue> IngressService<Queue> {
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         config: Config,
-        user_ops_queue: Option<Queue>,
+        user_ops_queue: Option<KafkaQueuePublisher>,
     ) -> Self {
         Self {
             provider,
@@ -250,20 +250,38 @@ where
                 hash: user_op_hash,
             };
 
-            let message_bytes = serde_json::to_vec(&message)
-                .map_err(|e| EthApiError::InvalidParams(format!("Failed to serialize message: {}", e)).into_rpc_err())?;
-
-            // Publish using existing bundle queue infrastructure
-            // We'll create a temporary AcceptedBundle wrapper for now
-            // TODO: Create dedicated UserOperation queue publisher
-            info!(
-                message = "Publishing UserOperation to Kafka",
-                user_op_hash = %user_op_hash,
-                topic = "tips-user-operations"
-            );
+            // Serialize and publish directly to Kafka
+            let payload = serde_json::to_vec(&message)
+                .map_err(|e| EthApiError::InvalidParams(format!("Failed to serialize UserOperation: {}", e)).into_rpc_err())?;
             
-            // For now, just log that we would publish
-            // The actual publishing will be done when we create a proper UserOp message type
+            let key = user_op_hash.to_string();
+            let record = rdkafka::producer::FutureRecord::to(&queue.topic)
+                .key(&key)
+                .payload(&payload);
+
+            match queue.producer.send(record, Duration::from_secs(5)).await {
+                Ok((partition, offset)) => {
+                    info!(
+                        message = "Published UserOperation to Kafka",
+                        user_op_hash = %user_op_hash,
+                        sender = %user_operation.sender(),
+                        partition = partition,
+                        offset = offset,
+                        topic = %queue.topic
+                    );
+                }
+                Err((err, _)) => {
+                    warn!(
+                        message = "Failed to publish UserOperation to queue",
+                        user_op_hash = %user_op_hash,
+                        error = %err,
+                        topic = %queue.topic
+                    );
+                    return Err(
+                        EthApiError::InvalidParams("Failed to queue UserOperation".into()).into_rpc_err()
+                    );
+                }
+            }
         } else {
             warn!("User operations queue not configured, UserOperation received but not published");
         }

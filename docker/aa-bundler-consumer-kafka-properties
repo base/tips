@@ -1,0 +1,6 @@
+# Kafka configuration properties for AA bundler consumer
+bootstrap.servers=host.docker.internal:9094
+group.id=aa-bundler-consumer-group
+auto.offset.reset=earliest
+enable.auto.commit=true
+

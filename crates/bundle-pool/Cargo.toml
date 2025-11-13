@@ -8,26 +8,21 @@ repository.workspace = true
 edition.workspace = true
 
 [dependencies]
-tips-core = { workspace = true }
-tips-audit.workspace = true
-uuid.workspace = true
 alloy-primitives.workspace = true
-
-tracing.workspace = true
-tokio.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 rdkafka.workspace = true
+serde.workspace = true
 serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+tips-audit = { path = "../audit" }
+tips-core = { path = "../core" }
 
 [dev-dependencies]
-tips-core = { workspace = true, features = ["test-utils"] }
-alloy-consensus.workspace = true
-alloy-provider.workspace = true
-alloy-signer = "1.0.41"
-alloy-signer-local = "1.0.41"
-op-alloy-consensus.workspace = true
-op-alloy-rpc-types.workspace = true
 testcontainers.workspace = true
 testcontainers-modules.workspace = true
-serde.workspace = true
+alloy-signer-local.workspace = true
+

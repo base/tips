@@ -6938,6 +6938,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
+name = "tips-aa-bundler"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-serde",
+ "alloy-signer-local",
+ "anyhow",
+ "async-trait",
+ "backon",
+ "bytes",
+ "clap",
+ "dotenvy",
+ "op-alloy-consensus",
+ "op-alloy-network",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "tips-audit",
+ "tips-core",
+ "tokio",
+ "tracing",
+ "tracing-subscriber 0.3.20",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "tips-audit"
 version = "0.1.0"
 dependencies = [
@@ -6969,15 +6998,10 @@ dependencies = [
 name = "tips-bundle-pool"
 version = "0.1.0"
 dependencies = [
- "alloy-consensus",
  "alloy-primitives",
- "alloy-provider",
- "alloy-signer",
  "alloy-signer-local",
  "anyhow",
  "async-trait",
- "op-alloy-consensus",
- "op-alloy-rpc-types",
  "rdkafka",
  "serde",
  "serde_json",
@@ -7033,12 +7057,32 @@ dependencies = [
  "reth-optimism-evm",
  "reth-rpc-eth-types",
  "revm-context-interface 10.2.0",
+ "serde",
  "serde_json",
  "tips-audit",
  "tips-core",
  "tokio",
  "tracing",
  "url",
+]
+
+[[package]]
+name = "tips-user-op-pool"
+version = "0.1.0"
+dependencies = [
+ "alloy-primitives",
+ "alloy-signer-local",
+ "anyhow",
+ "async-trait",
+ "rdkafka",
+ "serde",
+ "serde_json",
+ "testcontainers",
+ "testcontainers-modules",
+ "tips-core",
+ "tips-ingress-rpc",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

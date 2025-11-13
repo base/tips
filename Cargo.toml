@@ -7,13 +7,15 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/bundle-pool", "crates/core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/bundle-pool", "crates/core", "crates/aa-bundler", "crates/user-op-pool"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-bundle-pool = { path = "crates/bundle-pool" }
 tips-core = { path = "crates/core" }
+tips-aa-bundler = { path = "crates/aa-bundler" }
+tips-user-op-pool = { path = "crates/user-op-pool" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0" }

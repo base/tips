@@ -15,8 +15,8 @@ pub trait QueuePublisher: Send + Sync {
 
 /// A queue to buffer transactions
 pub struct KafkaQueuePublisher {
-    producer: FutureProducer,
-    topic: String,
+    pub producer: FutureProducer,
+    pub topic: String,
 }
 
 impl KafkaQueuePublisher {
