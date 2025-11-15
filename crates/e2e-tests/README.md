@@ -1,6 +1,12 @@
 # TIPS E2E Tests
 
-End-to-end integration tests for the TIPS (Transaction Inclusion Protocol Service) system.
+End-to-end integration tests and load testing tools for the TIPS (Transaction Inclusion Protocol Service) system.
+
+## Overview
+
+This crate provides:
+1. **Integration Tests** - Discrete test scenarios for TIPS functionality
+2. **Load Testing Runner** - Multi-wallet concurrent load testing tool
 
 ## Prerequisites
 
@@ -24,11 +30,8 @@ cd tips
 INTEGRATION_TESTS=1 cargo test --package tips-e2e-tests -- --nocapture
 ```
 
-All 8 tests will run:
+All 5 tests will run:
 - `test_rpc_client_instantiation` - Verifies client creation
-- `test_send_raw_transaction_rejects_empty` - Tests empty transaction rejection
-- `test_send_raw_transaction_rejects_invalid` - Tests invalid transaction rejection
-- `test_send_bundle_rejects_empty` - Tests empty bundle rejection
 - `test_send_valid_transaction` - End-to-end transaction submission
 - `test_send_bundle_with_valid_transaction` - End-to-end single-transaction bundle
 - `test_send_bundle_with_replacement_uuid` - Bundle replacement with UUID tracking
@@ -46,9 +49,36 @@ All 8 tests will run:
 
 - `src/client/` - RPC client for interacting with TIPS services
 - `src/fixtures/` - Test data generators (transactions, signers)
+- `src/bin/runner/` - Load testing runner implementation
 - `tests/` - End-to-end test scenarios
 
-## Notes
+## Load Testing
+
+For load testing and performance metrics, see [METRICS.md](./METRICS.md).
+
+The `tips-e2e-runner` binary provides:
+- Multi-wallet concurrent load generation
+- Time-to-inclusion tracking
+- Throughput and latency metrics
+- Reproducible test scenarios
+
+Quick start:
+```bash
+# Build
+cargo build --release --bin tips-e2e-runner
+
+# Setup wallets (optional: add --output wallets.json to save)
+./target/release/tips-e2e-runner setup --master-key <KEY> --num-wallets 100 --output wallets.json
+
+# Run load test
+./target/release/tips-e2e-runner load --rate 100 --duration 5m
+```
+
+See [METRICS.md](./METRICS.md) for complete documentation.
+
+---
+
+## Integration Test Notes
 
 - Tests will be skipped if `INTEGRATION_TESTS` environment variable is not set
 - All tests require the full SETUP.md infrastructure to be running
