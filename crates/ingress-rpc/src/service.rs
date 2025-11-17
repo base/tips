@@ -11,7 +11,7 @@ use op_alloy_network::Optimism;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
-use tips_core::types::ParsedBundle;
+use tips_core::types::{BundleType, ParsedBundle};
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
 };
@@ -29,6 +29,9 @@ pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
     #[method(name = "sendBundle")]
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+
+    #[method(name = "sendBackrunBundle")]
+    async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
 
     /// `eth_cancelBundle` is used to prevent a submitted bundle from being included on-chain.
     #[method(name = "cancelBundle")]
@@ -79,44 +82,13 @@ impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
+    async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
+        info!(message = "sending backrun bundle");
+        self.parse_and_process_bundle(bundle, true).await
+    }
+
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
-        self.validate_bundle(&bundle).await?;
-        let parsed_bundle: ParsedBundle = bundle
-            .clone()
-            .try_into()
-            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        let bundle_hash = &parsed_bundle.bundle_hash();
-        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
-
-        if let Err(e) = self
-            .bundle_queue
-            .publish(&accepted_bundle, bundle_hash)
-            .await
-        {
-            warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
-            return Err(EthApiError::InvalidParams("Failed to queue bundle".into()).into_rpc_err());
-        }
-
-        info!(
-            message = "queued bundle",
-            bundle_hash = %bundle_hash,
-        );
-
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: Box::new(accepted_bundle.clone()),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-            return Err(
-                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
-            );
-        }
-
-        Ok(BundleHash {
-            bundle_hash: *bundle_hash,
-        })
+        self.parse_and_process_bundle(bundle, false).await
     }
 
     async fn cancel_bundle(&self, _request: CancelBundle) -> RpcResult<()> {
@@ -161,7 +133,8 @@ where
             let bundle_hash = &parsed_bundle.bundle_hash();
             let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
 
-            let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response);
+            let accepted_bundle =
+                AcceptedBundle::new(parsed_bundle, BundleType::Standard, meter_bundle_response);
 
             if let Err(e) = self
                 .bundle_queue
@@ -299,6 +272,91 @@ where
             );
         }
         Ok(res)
+    }
+
+    async fn parse_and_process_bundle(
+        &self,
+        bundle: Bundle,
+        is_backrun: bool,
+    ) -> RpcResult<BundleHash> {
+        self.validate_bundle(&bundle).await.inspect_err(|e| {
+            tracing::error!(
+                error = ?e,
+                is_backrun = is_backrun,
+                "Bundle validation failed"
+            );
+        })?;
+
+        let parsed_bundle: ParsedBundle = bundle
+            .clone()
+            .try_into()
+            .inspect_err(|e| {
+                tracing::error!(
+                    error = %e,
+                    is_backrun = is_backrun,
+                    "ParsedBundle conversion failed"
+                );
+            })
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+
+        let bundle_hash = &parsed_bundle.bundle_hash();
+
+        let meter_bundle_response =
+            self.meter_bundle(&bundle, bundle_hash)
+                .await
+                .inspect_err(|e| {
+                    tracing::error!(
+                        error = ?e,
+                        bundle_hash = ?bundle_hash,
+                        is_backrun = is_backrun,
+                        "Bundle metering failed"
+                    );
+                })?;
+
+        let bundle_type = if is_backrun {
+            BundleType::Backrun
+        } else {
+            BundleType::Standard
+        };
+
+        let accepted_bundle =
+            AcceptedBundle::new(parsed_bundle, bundle_type, meter_bundle_response);
+
+        tracing::info!(
+            bundle_hash = ?bundle_hash,
+            bundle_type = ?bundle_type,
+            num_txs = bundle.txs.len(),
+            "Bundle successfully processed"
+        );
+
+        if let Err(e) = self
+            .bundle_queue
+            .publish(&accepted_bundle, bundle_hash)
+            .await
+        {
+            warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
+            return Err(EthApiError::InvalidParams("Failed to queue bundle".into()).into_rpc_err());
+        }
+
+        info!(
+            message = "queued bundle",
+            bundle_hash = %bundle_hash,
+        );
+
+        let audit_event = BundleEvent::Received {
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: Box::new(accepted_bundle.clone()),
+        };
+        if let Err(e) = self.audit_channel.send(audit_event) {
+            warn!(message = "Failed to send audit event", error = %e);
+            return Err(
+                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
+            );
+        }
+
+        Ok(BundleHash {
+            bundle_hash: *bundle_hash,
+        })
     }
 }
 

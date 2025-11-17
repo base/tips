@@ -99,6 +99,9 @@ get-blocks:
 sender := "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 sender_key := "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
 
+backrunner := "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC"
+backrunner_key := "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a"
+
 send-txn:
     #!/usr/bin/env bash
     set -euxo pipefail
@@ -108,3 +111,67 @@ send-txn:
     hash=$(curl -s {{ ingress_url }} -X POST   -H "Content-Type: application/json" --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" | jq -r ".result")
     cast receipt $hash -r {{ sequencer_url }} | grep status
     cast receipt $hash -r {{ builder_url }} | grep status
+
+send-txn-with-backrun:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    
+    # 1. Get nonce and send target transaction from sender account
+    nonce=$(cast nonce {{ sender }} -r {{ builder_url }})
+    echo "Sending target transaction from sender (nonce=$nonce)..."
+    target_txn=$(cast mktx --private-key {{ sender_key }} \
+        0x0000000000000000000000000000000000000000 \
+        --value 0.01ether \
+        --nonce $nonce \
+        --chain-id 13 \
+        -r {{ builder_url }})
+    
+    target_hash=$(curl -s {{ ingress_url }} -X POST \
+        -H "Content-Type: application/json" \
+        --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$target_txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" \
+        | jq -r ".result")
+    echo "Target tx sent: $target_hash"
+    
+    # 2. Build backrun transaction from backrunner account (different account!)
+    backrun_nonce=$(cast nonce {{ backrunner }} -r {{ builder_url }})
+    echo "Building backrun transaction from backrunner (nonce=$backrun_nonce)..."
+    backrun_txn=$(cast mktx --private-key {{ backrunner_key }} \
+        0x0000000000000000000000000000000000000001 \
+        --value 0.001ether \
+        --nonce $backrun_nonce \
+        --chain-id 13 \
+        -r {{ builder_url }})
+    
+    # 3. Compute tx hashes for reverting_tx_hashes
+    backrun_hash_computed=$(cast keccak $backrun_txn)
+    echo "Target tx hash: $target_hash"
+    echo "Backrun tx hash: $backrun_hash_computed"
+    
+    # 4. Construct and send bundle with reverting_tx_hashes
+    echo "Sending backrun bundle..."
+    bundle_json=$(jq -n \
+        --arg target "$target_txn" \
+        --arg backrun "$backrun_txn" \
+        --arg target_hash "$target_hash" \
+        --arg backrun_hash "$backrun_hash_computed" \
+        '{
+            txs: [$target, $backrun],
+            blockNumber: 0,
+            revertingTxHashes: [$target_hash, $backrun_hash]
+        }')
+    
+    bundle_hash=$(curl -s {{ ingress_url }} -X POST \
+        -H "Content-Type: application/json" \
+        --data "{\"method\":\"eth_sendBackrunBundle\",\"params\":[$bundle_json],\"id\":1,\"jsonrpc\":\"2.0\"}" \
+        | jq -r ".result")
+    echo "Bundle sent: $bundle_hash"
+    
+    # 5. Wait and verify both transactions
+    echo "Waiting for transactions to land..."
+    sleep 5
+    
+    echo "=== Target transaction (from sender) ==="
+    cast receipt $target_hash -r {{ sequencer_url }} | grep -E "(status|blockNumber|transactionIndex)"
+    
+    echo "=== Backrun transaction (from backrunner) ==="
+    cast receipt $backrun_hash_computed -r {{ sequencer_url }} | grep -E "(status|blockNumber|transactionIndex)" || echo "Backrun tx not found yet"

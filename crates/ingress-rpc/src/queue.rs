@@ -77,6 +77,7 @@ mod tests {
     use rdkafka::config::ClientConfig;
     use tips_core::{
         AcceptedBundle, Bundle, BundleExtensions, test_utils::create_test_meter_bundle_response,
+        types::BundleType,
     };
     use tokio::time::{Duration, Instant};
 
@@ -97,6 +98,7 @@ mod tests {
         let bundle = create_test_bundle();
         let accepted_bundle = AcceptedBundle::new(
             bundle.try_into().unwrap(),
+            BundleType::Standard,
             create_test_meter_bundle_response(),
         );
         let bundle_hash = &accepted_bundle.bundle_hash();

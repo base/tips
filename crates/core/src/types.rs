@@ -134,12 +134,27 @@ pub struct CancelBundle {
     pub replacement_uuid: String,
 }
 
+// Add BundleType enum
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum BundleType {
+    #[default]
+    Standard,
+
+    /// Backrun bundle: txs[0] is target, txs[1..] execute after target succeeds
+    Backrun,
+}
+
 /// `AcceptedBundle` is the type that is sent over the wire.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcceptedBundle {
     pub uuid: Uuid,
 
     pub txs: Vec<Recovered<OpTxEnvelope>>,
+
+    /// Bundle type - determines execution strategy
+    #[serde(default)]
+    pub bundle_type: BundleType,
 
     #[serde(with = "alloy_serde::quantity")]
     pub block_number: u64,
@@ -242,10 +257,15 @@ impl BundleTxs for AcceptedBundle {
 }
 
 impl AcceptedBundle {
-    pub fn new(bundle: ParsedBundle, meter_bundle_response: MeterBundleResponse) -> Self {
+    pub fn new(
+        bundle: ParsedBundle,
+        bundle_type: BundleType,
+        meter_bundle_response: MeterBundleResponse,
+    ) -> Self {
         AcceptedBundle {
             uuid: bundle.replacement_uuid.unwrap_or_else(Uuid::new_v4),
             txs: bundle.txs,
+            bundle_type: bundle_type,
             block_number: bundle.block_number,
             flashblock_number_min: bundle.flashblock_number_min,
             flashblock_number_max: bundle.flashblock_number_max,
@@ -326,6 +346,7 @@ mod tests {
             }
             .try_into()
             .unwrap(),
+            BundleType::Standard,
             create_test_meter_bundle_response(),
         );
 
@@ -355,6 +376,7 @@ mod tests {
             }
             .try_into()
             .unwrap(),
+            BundleType::Standard,
             create_test_meter_bundle_response(),
         );
 

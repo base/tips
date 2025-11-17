@@ -1,3 +1,4 @@
+use crate::types::BundleType;
 use crate::{AcceptedBundle, Bundle, MeterBundleResponse};
 use alloy_consensus::SignableTransaction;
 use alloy_primitives::{Address, B256, Bytes, TxHash, U256, b256, bytes};
@@ -23,6 +24,7 @@ pub fn create_bundle_from_txn_data() -> AcceptedBundle {
         }
         .try_into()
         .unwrap(),
+        BundleType::Standard,
         create_test_meter_bundle_response(),
     )
 }
@@ -60,7 +62,11 @@ pub fn create_test_bundle(
     };
     let meter_bundle_response = create_test_meter_bundle_response();
 
-    AcceptedBundle::new(bundle.try_into().unwrap(), meter_bundle_response)
+    AcceptedBundle::new(
+        bundle.try_into().unwrap(),
+        BundleType::Standard,
+        meter_bundle_response,
+    )
 }
 
 pub fn create_test_meter_bundle_response() -> MeterBundleResponse {

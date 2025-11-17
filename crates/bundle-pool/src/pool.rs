@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
 use tips_audit::{BundleEvent, DropReason};
 use tips_core::AcceptedBundle;
+use tips_core::types::BundleType;
 use tokio::sync::mpsc;
 use tracing::warn;
 use uuid::Uuid;
@@ -33,6 +34,7 @@ impl ProcessedBundle {
 pub trait BundleStore {
     fn add_bundle(&mut self, bundle: AcceptedBundle);
     fn get_bundles(&self) -> Vec<AcceptedBundle>;
+    fn get_backrun_bundles(&self) -> HashMap<TxHash, AcceptedBundle>;
     fn built_flashblock(
         &mut self,
         block_number: u64,
@@ -45,6 +47,7 @@ pub trait BundleStore {
 struct BundleData {
     flashblocks_in_block: HashMap<u64, Vec<ProcessedBundle>>,
     bundles: HashMap<Uuid, AcceptedBundle>,
+    backrun_bundles: HashMap<TxHash, AcceptedBundle>,
 }
 
 #[derive(Clone)]
@@ -69,6 +72,7 @@ impl InMemoryBundlePool {
             inner: Arc::new(Mutex::new(BundleData {
                 flashblocks_in_block: Default::default(),
                 bundles: Default::default(),
+                backrun_bundles: Default::default(),
             })),
             audit_log,
             builder_id,
@@ -78,13 +82,29 @@ impl InMemoryBundlePool {
 
 impl BundleStore for InMemoryBundlePool {
     fn add_bundle(&mut self, bundle: AcceptedBundle) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.bundles.insert(*bundle.uuid(), bundle);
+        if bundle.bundle_type == BundleType::Backrun {
+            self.inner
+                .lock()
+                .unwrap()
+                .backrun_bundles
+                .insert(bundle.txs[0].tx_hash(), bundle);
+        } else {
+            self.inner
+                .lock()
+                .unwrap()
+                .bundles
+                .insert(*bundle.uuid(), bundle);
+        }
     }
 
     fn get_bundles(&self) -> Vec<AcceptedBundle> {
         let inner = self.inner.lock().unwrap();
         inner.bundles.values().cloned().collect()
+    }
+
+    fn get_backrun_bundles(&self) -> HashMap<TxHash, AcceptedBundle> {
+        let inner = self.inner.lock().unwrap();
+        inner.backrun_bundles.clone()
     }
 
     fn built_flashblock(
