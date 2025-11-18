@@ -16,9 +16,9 @@ tips-bundle-pool = { path = "crates/bundle-pool" }
 tips-core = { path = "crates/core" }
 
 # Reth
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
-reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 
 # alloy
 alloy-primitives = { version = "1.4.1", default-features = false, features = [
