@@ -1,14 +1,11 @@
 use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
-use alloy_rpc_types_eth::Block;
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
 use op_alloy_network::Optimism;
-use op_alloy_rpc_types::Transaction as OpTransaction;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
-use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -49,29 +46,6 @@ impl AccountInfoLookup for RootProvider<Optimism> {
             nonce: account.nonce,
             code_hash: account.code_hash,
         })
-    }
-}
-
-/// Interface for fetching L1 block info for a given block number
-#[async_trait]
-pub trait L1BlockInfoLookup: Send + Sync {
-    async fn fetch_l1_block_info(&self, block: Block<OpTransaction>) -> RpcResult<L1BlockInfo>;
-}
-
-/// Implementation of the `L1BlockInfoLookup` trait for the `RootProvider`
-#[async_trait]
-impl L1BlockInfoLookup for RootProvider<Optimism> {
-    async fn fetch_l1_block_info(&self, block: Block<OpTransaction>) -> RpcResult<L1BlockInfo> {
-        let txs = block.transactions.clone();
-        let first_tx = txs.first_transaction().ok_or_else(|| {
-            warn!(message = "block contains no transactions");
-            EthApiError::InternalEthError.into_rpc_err()
-        })?;
-
-        Ok(extract_l1_info_from_tx(&first_tx.clone()).map_err(|e| {
-            warn!(message = "failed to extract l1_info from tx", err = %e);
-            EthApiError::InternalEthError.into_rpc_err()
-        })?)
     }
 }
 

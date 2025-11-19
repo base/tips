@@ -12,6 +12,8 @@ use moka::future::Cache;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use op_alloy_rpc_types::Transaction as OpTransaction;
+use op_revm::l1block::L1BlockInfo;
+use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
@@ -25,7 +27,7 @@ use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::validation::{AccountInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
@@ -247,29 +249,7 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        // get the latest block from the cache or fetch it from the provider. this reduces the number of
-        // RPC calls for the same block.
-        let block: Block<OpTransaction> = self
-            .block_cache
-            .get_with("latest".to_string(), async {
-                warn!(message = "Block cache MISS! Fetching fresh 'Latest' from RPC...");
-                let start = Instant::now();
-                let res = self
-                    .provider
-                    .get_block(BlockId::Number(BlockNumberOrTag::Latest))
-                    .full()
-                    .await
-                    .unwrap_or_else(|_| {
-                        warn!(message = "failed to fetch latest block");
-                        Some(Block::empty(Header::default()))
-                    })
-                    .unwrap();
-                record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
-                res
-            })
-            .await;
-
-        let mut l1_block_info = self.provider.fetch_l1_block_info(block).await?;
+        let mut l1_block_info = self.fetch_l1_block_info().await?;
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
@@ -346,6 +326,41 @@ where
             );
         }
         Ok(res)
+    }
+
+    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo> {
+        // get the latest block from the cache or fetch it from the provider. this reduces the number of
+        // RPC calls for the same block.
+        let block: Block<OpTransaction> = self
+            .block_cache
+            .get_with("latest".to_string(), async {
+                warn!(message = "Block cache MISS! Fetching fresh 'Latest' from RPC...");
+                let start = Instant::now();
+                let res = self
+                    .provider
+                    .get_block(BlockId::Number(BlockNumberOrTag::Latest))
+                    .full()
+                    .await
+                    .unwrap_or_else(|_| {
+                        warn!(message = "failed to fetch latest block");
+                        Some(Block::empty(Header::default()))
+                    })
+                    .unwrap();
+                record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
+                res
+            })
+            .await;
+
+        let txs = block.transactions.clone();
+        let first_tx = txs.first_transaction().ok_or_else(|| {
+            warn!(message = "block contains no transactions");
+            EthApiError::InternalEthError.into_rpc_err()
+        })?;
+
+        extract_l1_info_from_tx(&first_tx.clone()).map_err(|e| {
+            warn!(message = "failed to extract l1_info from tx", err = %e);
+            EthApiError::InternalEthError.into_rpc_err()
+        })
     }
 }
 
