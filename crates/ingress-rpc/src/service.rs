@@ -345,7 +345,7 @@ where
                         warn!(message = "failed to fetch latest block");
                         Some(Block::empty(Header::default()))
                     })
-                    .unwrap();
+                    .unwrap(); // TODO: handle error better
                 record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
                 res
             })
@@ -449,5 +449,25 @@ mod tests {
             1,
             "Cache should prevent thundering herd"
         );
+    }
+
+    #[tokio::test]
+    async fn test_block_cache_ttl() {
+        let cache: Cache<String, u64> = Cache::builder()
+            .time_to_live(Duration::from_secs(1))
+            .build();
+
+        // entry not in cache so insert (latest, 42)
+        // the TTL timer starts after this `get_with` call
+        let value = cache.get_with("latest".to_string(), async { 42u64 }).await;
+
+        // sleep for less than the TTL and verify the value is still 42
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(value, 42u64);
+
+        // sleep for longer than the TTL, so when we fetch again, it should be an updated value
+        tokio::time::sleep(Duration::from_millis(650)).await;
+        let value = cache.get_with("latest".to_string(), async { 43u64 }).await;
+        assert_eq!(value, 43u64);
     }
 }
