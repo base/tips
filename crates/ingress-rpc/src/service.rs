@@ -79,6 +79,7 @@ impl<Queue> IngressService<Queue> {
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
             block_cache: Cache::builder()
+                // a block is every 2s, so we set 1.5s to be safe
                 .time_to_live(Duration::from_millis(1500))
                 .build(),
         }
@@ -246,10 +247,12 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
+        // get the latest block from the cache or fetch it from the provider. this reduces the number of
+        // RPC calls for the same block.
         let block: Block<OpTransaction> = self
             .block_cache
             .get_with("latest".to_string(), async {
-                warn!(message = "L1 Block Cache MISS! Fetching fresh 'Latest' from RPC...");
+                warn!(message = "Block cache MISS! Fetching fresh 'Latest' from RPC...");
                 let start = Instant::now();
                 let res = self
                     .provider
@@ -401,14 +404,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_block_cache_thundering_herd() {
+    async fn test_block_cache() {
         let fetch_count = Arc::new(AtomicU32::new(0));
         let cache: Cache<String, u64> = Cache::builder()
             .time_to_live(Duration::from_secs(1))
             .build();
 
         let mut handles = vec![];
-        for i in 0..10 {
+        for _ in 0..10 {
             let cache_clone = cache.clone();
             let fetch_count_clone = fetch_count.clone();
             handles.push(tokio::spawn(async move {
@@ -419,7 +422,6 @@ mod tests {
                         42u64
                     })
                     .await;
-                println!("✅ Request {} served", i);
             }));
         }
 

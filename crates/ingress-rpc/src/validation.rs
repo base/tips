@@ -1,4 +1,3 @@
-use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
