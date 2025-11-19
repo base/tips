@@ -1,8 +1,9 @@
+use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
-use alloy_rpc_types_eth::Block;
+use alloy_rpc_types_eth::{Block, Header};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
@@ -11,7 +12,6 @@ use moka::future::Cache;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
 use op_alloy_rpc_types::Transaction as OpTransaction;
-use op_revm::L1BlockInfo;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
@@ -54,7 +54,7 @@ pub struct IngressService<Queue> {
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
-    block_cache: Cache<String, L1BlockInfo>,
+    block_cache: Cache<String, Block<OpTransaction>>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -248,7 +248,7 @@ where
 
         let block: Block<OpTransaction> = self
             .block_cache
-            .get_with("latest", async {
+            .get_with("latest".to_string(), async {
                 warn!(message = "L1 Block Cache MISS! Fetching fresh 'Latest' from RPC...");
                 let start = Instant::now();
                 let res = self
@@ -256,14 +256,11 @@ where
                     .get_block(BlockId::Number(BlockNumberOrTag::Latest))
                     .full()
                     .await
-                    .map_err(|e| {
-                        warn!(message = "failed to fetch latest block", err = %e);
-                        EthApiError::InternalEthError.into_rpc_err()
-                    })?
-                    .ok_or_else(|| {
-                        warn!(message = "empty latest block returned");
-                        EthApiError::InternalEthError.into_rpc_err()
-                    })?;
+                    .unwrap_or_else(|_| {
+                        warn!(message = "failed to fetch latest block");
+                        Some(Block::empty(Header::default()))
+                    })
+                    .unwrap();
                 record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
                 res
             })
@@ -352,6 +349,10 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    };
     use tips_core::test_utils::create_test_meter_bundle_response;
 
     #[tokio::test]
@@ -397,5 +398,39 @@ mod tests {
         // we're assumging that `base_meterBundle` will not error hence the second unwrap
         let res = result.unwrap().unwrap();
         assert_eq!(res, create_test_meter_bundle_response());
+    }
+
+    #[tokio::test]
+    async fn test_block_cache_thundering_herd() {
+        let fetch_count = Arc::new(AtomicU32::new(0));
+        let cache: Cache<String, u64> = Cache::builder()
+            .time_to_live(Duration::from_secs(1))
+            .build();
+
+        let mut handles = vec![];
+        for i in 0..10 {
+            let cache_clone = cache.clone();
+            let fetch_count_clone = fetch_count.clone();
+            handles.push(tokio::spawn(async move {
+                let _value = cache_clone
+                    .get_with("latest".to_string(), async {
+                        fetch_count_clone.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        42u64
+                    })
+                    .await;
+                println!("✅ Request {} served", i);
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        assert_eq!(
+            fetch_count.load(Ordering::SeqCst),
+            1,
+            "Cache should prevent thundering herd"
+        );
     }
 }
