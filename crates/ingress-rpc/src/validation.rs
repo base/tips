@@ -2,10 +2,12 @@ use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::{Transaction, Typed2718, constants::KECCAK_EMPTY, transaction::Recovered};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
+use alloy_rpc_types_eth::Block;
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;
 use op_alloy_consensus::interop::CROSS_L2_INBOX_ADDRESS;
 use op_alloy_network::Optimism;
+use op_alloy_rpc_types::Transaction as OpTransaction;
 use op_revm::{OpSpecId, l1block::L1BlockInfo};
 use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::{EthApiError, RpcInvalidTransactionError, SignError};
@@ -54,28 +56,13 @@ impl AccountInfoLookup for RootProvider<Optimism> {
 /// Interface for fetching L1 block info for a given block number
 #[async_trait]
 pub trait L1BlockInfoLookup: Send + Sync {
-    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo>;
+    async fn fetch_l1_block_info(&self, block: Block<OpTransaction>) -> RpcResult<L1BlockInfo>;
 }
 
 /// Implementation of the `L1BlockInfoLookup` trait for the `RootProvider`
 #[async_trait]
 impl L1BlockInfoLookup for RootProvider<Optimism> {
-    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo> {
-        let start = Instant::now();
-        let block = self
-            .get_block(BlockId::Number(BlockNumberOrTag::Latest))
-            .full()
-            .await
-            .map_err(|e| {
-                warn!(message = "failed to fetch latest block", err = %e);
-                EthApiError::InternalEthError.into_rpc_err()
-            })?
-            .ok_or_else(|| {
-                warn!(message = "empty latest block returned");
-                EthApiError::InternalEthError.into_rpc_err()
-            })?;
-        record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
-
+    async fn fetch_l1_block_info(&self, block: Block<OpTransaction>) -> RpcResult<L1BlockInfo> {
         let txs = block.transactions.clone();
         let first_tx = txs.first_transaction().ok_or_else(|| {
             warn!(message = "block contains no transactions");

@@ -2,12 +2,16 @@ use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
+use alloy_rpc_types_eth::Block;
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
+use moka::future::Cache;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
+use op_alloy_rpc_types::Transaction as OpTransaction;
+use op_revm::L1BlockInfo;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
@@ -18,8 +22,6 @@ use tips_core::{
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
-use moka::future::Cache;
-use op_revm::L1BlockInfo;
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
@@ -244,7 +246,30 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
+        let block: Block<OpTransaction> = self
+            .block_cache
+            .get_with("latest", async {
+                warn!(message = "L1 Block Cache MISS! Fetching fresh 'Latest' from RPC...");
+                let start = Instant::now();
+                let res = self
+                    .provider
+                    .get_block(BlockId::Number(BlockNumberOrTag::Latest))
+                    .full()
+                    .await
+                    .map_err(|e| {
+                        warn!(message = "failed to fetch latest block", err = %e);
+                        EthApiError::InternalEthError.into_rpc_err()
+                    })?
+                    .ok_or_else(|| {
+                        warn!(message = "empty latest block returned");
+                        EthApiError::InternalEthError.into_rpc_err()
+                    })?;
+                record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
+                res
+            })
+            .await;
+
+        let mut l1_block_info = self.provider.fetch_l1_block_info(block).await?;
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
