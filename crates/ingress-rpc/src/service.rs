@@ -1,13 +1,19 @@
+use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
+use alloy_rpc_types_eth::{Block, Header};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
     proc_macros::rpc,
 };
+use moka::future::Cache;
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_network::Optimism;
+use op_alloy_rpc_types::Transaction as OpTransaction;
+use op_revm::l1block::L1BlockInfo;
+use reth_optimism_evm::extract_l1_info_from_tx;
 use reth_rpc_eth_types::EthApiError;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tips_audit::BundleEvent;
@@ -21,7 +27,7 @@ use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::validation::{AccountInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
@@ -50,6 +56,7 @@ pub struct IngressService<Queue> {
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
+    block_cache: Cache<String, Block<OpTransaction>>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -73,6 +80,10 @@ impl<Queue> IngressService<Queue> {
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
+            block_cache: Cache::builder()
+                // a block is every 2s, so we set 1.5s to be safe
+                .time_to_live(Duration::from_millis(1500))
+                .build(),
         }
     }
 }
@@ -238,7 +249,7 @@ where
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
 
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
+        let mut l1_block_info = self.fetch_l1_block_info().await?;
         let account = self
             .provider
             .fetch_account_info(transaction.signer())
@@ -316,11 +327,50 @@ where
         }
         Ok(res)
     }
+
+    async fn fetch_l1_block_info(&self) -> RpcResult<L1BlockInfo> {
+        // get the latest block from the cache or fetch it from the provider. this reduces the number of
+        // RPC calls for the same block.
+        let block: Block<OpTransaction> = self
+            .block_cache
+            .get_with("latest".to_string(), async {
+                warn!(message = "Block cache MISS! Fetching fresh 'Latest' from RPC...");
+                let start = Instant::now();
+                let res = self
+                    .provider
+                    .get_block(BlockId::Number(BlockNumberOrTag::Latest))
+                    .full()
+                    .await
+                    .unwrap_or_else(|_| {
+                        warn!(message = "failed to fetch latest block");
+                        Some(Block::empty(Header::default()))
+                    })
+                    .unwrap(); // TODO: handle error better
+                record_histogram(start.elapsed(), "eth_getBlockByNumber".to_string());
+                res
+            })
+            .await;
+
+        let txs = block.transactions.clone();
+        let first_tx = txs.first_transaction().ok_or_else(|| {
+            warn!(message = "block contains no transactions");
+            EthApiError::InternalEthError.into_rpc_err()
+        })?;
+
+        extract_l1_info_from_tx(&first_tx.clone()).map_err(|e| {
+            warn!(message = "failed to extract l1_info from tx", err = %e);
+            EthApiError::InternalEthError.into_rpc_err()
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    };
     use tips_core::test_utils::create_test_meter_bundle_response;
 
     #[tokio::test]
@@ -366,5 +416,58 @@ mod tests {
         // we're assumging that `base_meterBundle` will not error hence the second unwrap
         let res = result.unwrap().unwrap();
         assert_eq!(res, create_test_meter_bundle_response());
+    }
+
+    #[tokio::test]
+    async fn test_block_cache() {
+        let fetch_count = Arc::new(AtomicU32::new(0));
+        let cache: Cache<String, u64> = Cache::builder()
+            .time_to_live(Duration::from_secs(1))
+            .build();
+
+        let mut handles = vec![];
+        for _ in 0..10 {
+            let cache_clone = cache.clone();
+            let fetch_count_clone = fetch_count.clone();
+            handles.push(tokio::spawn(async move {
+                let _value = cache_clone
+                    .get_with("latest".to_string(), async {
+                        fetch_count_clone.fetch_add(1, Ordering::SeqCst);
+                        tokio::time::sleep(Duration::from_millis(10)).await;
+                        42u64
+                    })
+                    .await;
+            }));
+        }
+
+        for h in handles {
+            h.await.unwrap();
+        }
+
+        assert_eq!(
+            fetch_count.load(Ordering::SeqCst),
+            1,
+            "Cache should prevent thundering herd"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_block_cache_ttl() {
+        let cache: Cache<String, u64> = Cache::builder()
+            .time_to_live(Duration::from_secs(1))
+            .build();
+
+        // entry not in cache so insert (latest, 42)
+        // the TTL timer starts after this `get_with` call
+        let value = cache.get_with("latest".to_string(), async { 42u64 }).await;
+
+        // sleep for less than the TTL and verify the value is still 42
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(value, 42u64);
+
+        // sleep for longer than the TTL, so when we fetch again, it should be an updated value
+        tokio::time::sleep(Duration::from_millis(650)).await;
+        let value = cache.get_with("latest".to_string(), async { 43u64 }).await;
+        assert_eq!(value, 43u64);
     }
 }

@@ -38,3 +38,6 @@ reth-optimism-evm.workspace = true
 metrics.workspace = true
 metrics-derive.workspace = true
 metrics-exporter-prometheus.workspace = true
+moka.workspace = true
+alloy-rpc-types-eth.workspace = true
+op-alloy-rpc-types.workspace = true
