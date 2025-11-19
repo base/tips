@@ -18,6 +18,8 @@ use tips_core::{
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
+use moka::future::Cache;
+use op_revm::L1BlockInfo;
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
@@ -50,6 +52,7 @@ pub struct IngressService<Queue> {
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
+    block_cache: Cache<String, L1BlockInfo>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -73,6 +76,9 @@ impl<Queue> IngressService<Queue> {
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
+            block_cache: Cache::builder()
+                .time_to_live(Duration::from_millis(1500))
+                .build(),
         }
     }
 }
