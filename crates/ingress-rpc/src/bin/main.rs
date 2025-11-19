@@ -11,7 +11,7 @@ use tips_core::logger::init_logger;
 use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
-use tips_ingress_rpc::queue::KafkaQueuePublisher;
+use tips_ingress_rpc::queue::{BundleQueuePublisher, UserOperationQueuePublisher};
 use tips_ingress_rpc::service::{IngressApiServer, IngressService};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
@@ -47,19 +47,31 @@ async fn main() -> anyhow::Result<()> {
         .network::<Optimism>()
         .connect_http(config.simulation_rpc);
 
+    // Bundle queue setup
     let ingress_client_config = ClientConfig::from_iter(load_kafka_config_from_file(
         &config.ingress_kafka_properties,
     )?);
+    let bundle_producer: FutureProducer = ingress_client_config.create()?;
+    let bundle_queue = BundleQueuePublisher::new(bundle_producer, config.ingress_topic.clone());
 
-    let queue_producer: FutureProducer = ingress_client_config.create()?;
+    // User operation queue setup
+    let user_op_queue = if let Some(user_ops_props) = &config.user_ops_kafka_properties {
+        // Use dedicated user ops configuration if provided
+        let user_ops_config = ClientConfig::from_iter(
+            load_kafka_config_from_file(user_ops_props)?
+        );
+        let user_ops_producer: FutureProducer = user_ops_config.create()?;
+        UserOperationQueuePublisher::new(user_ops_producer, config.user_ops_topic.clone())
+    } else {
+        // Fall back to using the same config as bundles
+        let user_ops_producer: FutureProducer = ingress_client_config.create()?;
+        UserOperationQueuePublisher::new(user_ops_producer, config.user_ops_topic.clone())
+    };
 
-    let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
-
+    // Audit setup
     let audit_client_config =
         ClientConfig::from_iter(load_kafka_config_from_file(&config.audit_kafka_properties)?);
-
     let audit_producer: FutureProducer = audit_client_config.create()?;
-
     let audit_publisher = KafkaBundleEventPublisher::new(audit_producer, config.audit_topic);
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
@@ -74,7 +86,8 @@ async fn main() -> anyhow::Result<()> {
     let service = IngressService::new(
         provider,
         simulation_provider,
-        queue,
+        bundle_queue,
+        user_op_queue,
         audit_tx,
         builder_tx,
         cfg,
