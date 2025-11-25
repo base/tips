@@ -1,7 +1,7 @@
 use alloy_consensus::Transaction;
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::transaction::SignerRecoverable;
-use alloy_primitives::{Address, B256, Bytes, TxHash, keccak256};
+use alloy_primitives::{Address, B256, Bytes, TxHash, U256, keccak256};
 use alloy_provider::network::eip2718::{Decodable2718, Encodable2718};
 use op_alloy_consensus::OpTxEnvelope;
 use op_alloy_flz::tx_estimated_size_fjord_bytes;
@@ -286,26 +286,26 @@ impl AcceptedBundle {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct TransactionResult {
-    pub coinbase_diff: String,
-    pub eth_sent_to_coinbase: String,
+    pub coinbase_diff: U256,
+    pub eth_sent_to_coinbase: U256,
     pub from_address: Address,
-    pub gas_fees: String,
-    pub gas_price: String,
+    pub gas_fees: U256,
+    pub gas_price: U256,
     pub gas_used: u64,
     pub to_address: Option<Address>,
     pub tx_hash: TxHash,
-    pub value: String,
+    pub value: U256,
     pub execution_time_us: u128,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct MeterBundleResponse {
-    pub bundle_gas_price: String,
+    pub bundle_gas_price: U256,
     pub bundle_hash: B256,
-    pub coinbase_diff: String,
-    pub eth_sent_to_coinbase: String,
-    pub gas_fees: String,
+    pub coinbase_diff: U256,
+    pub eth_sent_to_coinbase: U256,
+    pub gas_fees: U256,
     pub results: Vec<TransactionResult>,
     pub state_block_number: u64,
     #[serde(
@@ -402,11 +402,11 @@ mod tests {
     #[test]
     fn test_meter_bundle_response_serialization() {
         let response = MeterBundleResponse {
-            bundle_gas_price: "1000000000".to_string(),
+            bundle_gas_price: U256::from(1000000000),
             bundle_hash: B256::default(),
-            coinbase_diff: "100".to_string(),
-            eth_sent_to_coinbase: "0".to_string(),
-            gas_fees: "100".to_string(),
+            coinbase_diff: U256::from(100),
+            eth_sent_to_coinbase: U256::from(0),
+            gas_fees: U256::from(100),
             results: vec![],
             state_block_number: 12345,
             state_flashblock_index: Some(42),
@@ -426,11 +426,11 @@ mod tests {
     #[test]
     fn test_meter_bundle_response_without_flashblock_index() {
         let response = MeterBundleResponse {
-            bundle_gas_price: "1000000000".to_string(),
+            bundle_gas_price: U256::from(1000000000),
             bundle_hash: B256::default(),
-            coinbase_diff: "100".to_string(),
-            eth_sent_to_coinbase: "0".to_string(),
-            gas_fees: "100".to_string(),
+            coinbase_diff: U256::from(100),
+            eth_sent_to_coinbase: U256::from(0),
+            gas_fees: U256::from(100),
             results: vec![],
             state_block_number: 12345,
             state_flashblock_index: None,
@@ -463,6 +463,9 @@ mod tests {
         }"#;
 
         let deserialized: MeterBundleResponse = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized.bundle_gas_price, U256::from(1000000000));
+        assert_eq!(deserialized.coinbase_diff, U256::from(100));
+        assert_eq!(deserialized.eth_sent_to_coinbase, U256::from(0));
         assert_eq!(deserialized.state_flashblock_index, None);
         assert_eq!(deserialized.state_block_number, 12345);
         assert_eq!(deserialized.total_gas_used, 21000);
