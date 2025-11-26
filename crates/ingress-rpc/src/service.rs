@@ -54,7 +54,7 @@ pub struct IngressService<Queue> {
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
     backrun_enabled: bool,
-    op_rbuilder_client: Option<RootProvider<Optimism>>,
+    builder_clients: Vec<RootProvider<Optimism>>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -66,12 +66,16 @@ impl<Queue> IngressService<Queue> {
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         config: Config,
     ) -> Self {
-        let op_rbuilder_client = config.op_rbuilder_url.as_ref().map(|url| {
-            alloy_provider::ProviderBuilder::new()
-                .disable_recommended_fillers()
-                .network::<Optimism>()
-                .connect_http(url.clone())
-        });
+        let builder_clients = config
+            .builder_rpcs
+            .iter()
+            .map(|url| {
+                alloy_provider::ProviderBuilder::new()
+                    .disable_recommended_fillers()
+                    .network::<Optimism>()
+                    .connect_http(url.clone())
+            })
+            .collect();
 
         Self {
             provider,
@@ -86,7 +90,7 @@ impl<Queue> IngressService<Queue> {
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
             backrun_enabled: config.backrun_enabled,
-            op_rbuilder_client,
+            builder_clients,
         }
     }
 }
@@ -117,49 +121,69 @@ impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
-
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
-            info!(message = "Backrun bundle submission is disabled", backrun_enabled = self.backrun_enabled);
-            return Err(EthApiError::InvalidParams(
-                "Backrun bundle submission is disabled".into(),
-            )
-            .into_rpc_err());
+            info!(
+                message = "Backrun bundle submission is disabled",
+                backrun_enabled = self.backrun_enabled
+            );
+            return Err(
+                EthApiError::InvalidParams("Backrun bundle submission is disabled".into())
+                    .into_rpc_err(),
+            );
         }
 
         let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
 
-        info!(message = "Validated and parsed bundle", bundle_hash = %bundle_hash);
+        info!(message = "Validated and parsed backrun bundle", bundle_hash = %bundle_hash);
 
-        if let Some(client) = &self.op_rbuilder_client {
-            match client
-                .client()
-                .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle.clone(),))
-                .await
-            {
-                Ok(_) => {
-                    info!(
-                        message = "Sent backrun bundle to op-rbuilder",
-                        bundle_hash = %bundle_hash
-                    );
-                }
-                Err(e) => {
-                    // Log and continue (not critical failure)
-                    warn!(
-                        message = "Failed to send backrun bundle to op-rbuilder",
-                        bundle_hash = %bundle_hash,
-                        error = %e
-                    );
-                    // Don't return error, just log
-                }
-            }
-        } else {
-            // No op-rbuilder client configured
+        // Send to all configured builder RPCs concurrently
+        if self.builder_clients.is_empty() {
             warn!(
-                message = "Op-rbuilder client not configured, backrun bundle not submitted",
+                message = "No builder RPCs configured, backrun bundle not submitted",
                 bundle_hash = %bundle_hash
             );
-            // Continue execution, just log the warning
+        } else {
+            let mut tasks = Vec::new();
+
+            for (idx, client) in self.builder_clients.iter().enumerate() {
+                let client = client.clone();
+                let bundle = bundle.clone();
+                let bundle_hash = bundle_hash;
+
+                let task = tokio::spawn(async move {
+                    let result = client
+                        .client()
+                        .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle,))
+                        .await;
+                    (idx, bundle_hash, result)
+                });
+
+                tasks.push(task);
+            }
+
+            // Wait for all tasks to complete
+            for task in tasks {
+                if let Ok((idx, bundle_hash, result)) = task.await {
+                    match result {
+                        Ok(_) => {
+                            info!(
+                                message = "Sent backrun bundle to op-rbuilder",
+                                bundle_hash = %bundle_hash,
+                                builder_idx = idx
+                            );
+                        }
+                        Err(e) => {
+                            warn!(
+                                message = "Failed to send backrun bundle to op-rbuilder",
+                                bundle_hash = %bundle_hash,
+                                builder_idx = idx,
+                                error = %e
+                            );
+                        }
+                    }
+                }
+            }
         }
 
         let audit_event = BundleEvent::Received {
@@ -214,9 +238,7 @@ where
             );
         }
 
-        Ok(BundleHash {
-            bundle_hash,
-        })
+        Ok(BundleHash { bundle_hash })
     }
 
     async fn cancel_bundle(&self, _request: CancelBundle) -> RpcResult<()> {
