@@ -1,7 +1,9 @@
-use alloy_primitives::{Bytes, Uint};
 use serde::{Deserialize, Serialize};
 use alloy_rpc_types::erc4337;
 
+
+// Re-export SendUserOperationResponse
+pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -10,10 +12,14 @@ pub enum UserOperationRequest {
     EntryPointV07(erc4337::PackedUserOperation),
 }
 
+
 // Tests
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+    use alloy_primitives::{Address, Uint, Bytes};
     #[test]
     fn should_throw_error_when_deserializing_invalid() {
         const TEST_INVALID_USER_OPERATION: &str = r#"
@@ -47,24 +53,28 @@ mod tests {
             "signature": "0x01"
         }
     "#;
-        let user_operation: Result<UserOperation, serde_json::Error> =
-            serde_json::from_str::<UserOperation>(TEST_USER_OPERATION);
+        let user_operation: Result<UserOperationRequest, serde_json::Error> =
+            serde_json::from_str::<UserOperationRequest>(TEST_USER_OPERATION);
+        if user_operation.is_err() {
+            panic!("Error: {:?}", user_operation.err());
+        }
+        let user_operation = user_operation.unwrap();
         match user_operation {
-            Ok(user_operation) => {
-                assert_eq!(
-                    user_operation.sender,
-                    Some("0x1111111111111111111111111111111111111111".to_string())
-                );
+             UserOperationRequest::EntryPointV06(user_operation) => {
+               assert_eq!(user_operation.sender, Address::from_str("0x1111111111111111111111111111111111111111").unwrap());
                 assert_eq!(user_operation.nonce, Uint::from(0));
-                assert_eq!(user_operation.factory, None);
-                assert_eq!(user_operation.factory_data, None);
-                assert_eq!(user_operation.call_data, alloy_primitives::bytes!("0x"));
+                assert_eq!(user_operation.init_code, Bytes::from_str("0x").unwrap());
+                assert_eq!(user_operation.call_data, Bytes::from_str("0x").unwrap());
                 assert_eq!(user_operation.call_gas_limit, Uint::from(0x5208));
                 assert_eq!(user_operation.verification_gas_limit, Uint::from(0x100000));
                 assert_eq!(user_operation.pre_verification_gas, Uint::from(0x10000));
-            }
-            Err(e) => {
-                panic!("Error: {:?}", e);
+                assert_eq!(user_operation.max_fee_per_gas, Uint::from(0x59682f10));
+                assert_eq!(user_operation.max_priority_fee_per_gas, Uint::from(0x3b9aca00));
+                assert_eq!(user_operation.paymaster_and_data, Bytes::from_str("0x").unwrap());
+                assert_eq!(user_operation.signature, Bytes::from_str("0x01").unwrap());
+            },
+            _ => {
+                panic!("Expected EntryPointV06, got {:?}", user_operation);
             }
         }
     }
@@ -91,25 +101,16 @@ mod tests {
         "signature": "0xa3c5f1b90014e68abbbdc42e4b77b9accc0b7e1c5d0b5bcde1a47ba8faba00ff55c9a7de12e98b731766e35f6c51ab25c9b58cc0e7c4a33f25e75c51c6ad3c3a"
         }
     "#;
-        let user_operation: Result<UserOperation, serde_json::Error> =
-            serde_json::from_str::<UserOperation>(TEST_PACKED_USER_OPERATION);
+        let user_operation: Result<UserOperationRequest, serde_json::Error> =
+            serde_json::from_str::<UserOperationRequest>(TEST_PACKED_USER_OPERATION);
+        if user_operation.is_err() {
+            panic!("Error: {:?}", user_operation.err());
+        }
+        let user_operation = user_operation.unwrap();
         match user_operation {
-            Ok(user_operation) => {
-                assert_eq!(
-                    user_operation.sender,
-                    Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string())
-                );
+            UserOperationRequest::EntryPointV07(user_operation) => {
+                assert_eq!(user_operation.sender, Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap());
                 assert_eq!(user_operation.nonce, Uint::from(1));
-                assert_eq!(
-                    user_operation.factory,
-                    Some("0x2222222222222222222222222222222222222222".to_string())
-                );
-                assert_eq!(
-                    user_operation.factory_data,
-                    Some(alloy_primitives::bytes!(
-                        "0xabcdef1234560000000000000000000000000000000000000000000000000000"
-                    ))
-                );
                 assert_eq!(
                     user_operation.call_data,
                     alloy_primitives::bytes!(
@@ -120,8 +121,8 @@ mod tests {
                 assert_eq!(user_operation.verification_gas_limit, Uint::from(0x1e8480));
                 assert_eq!(user_operation.pre_verification_gas, Uint::from(0x186a0));
             }
-            Err(e) => {
-                panic!("Error: {:?}", e);
+            _ => {
+                panic!("Expected EntryPointV07, got {:?}", user_operation);
             }
         }
     }
