@@ -1,3 +1,7 @@
+use crate::metrics::{Metrics, record_histogram};
+use crate::queue::QueuePublisher;
+use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::{Config, TxSubmissionMethod};
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
@@ -14,15 +18,11 @@ use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
-    user_ops_types::{UserOperationRequest, SendUserOperationResponse},
+    user_ops_types::{SendUserOperationResponse, UserOperationRequest},
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
-use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
-use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -231,15 +231,15 @@ where
         user_operation: UserOperationRequest,
     ) -> RpcResult<SendUserOperationResponse> {
         dbg!(&user_operation);
-   
+
         // STEPS:
         // 1. Reputation Service Validate
-        // 2. Base Node Validate User Operation 
+        // 2. Base Node Validate User Operation
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
         todo!("not yet implemented send_user_operation");
-   }
+    }
 }
 
 impl<Queue> IngressService<Queue>

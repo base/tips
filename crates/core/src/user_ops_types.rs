@@ -1,6 +1,5 @@
-use serde::{Deserialize, Serialize};
 use alloy_rpc_types::erc4337;
-
+use serde::{Deserialize, Serialize};
 
 // Re-export SendUserOperationResponse
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
@@ -12,14 +11,13 @@ pub enum UserOperationRequest {
     EntryPointV07(erc4337::PackedUserOperation),
 }
 
-
 // Tests
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use alloy_primitives::{Address, Uint, Bytes};
+    use alloy_primitives::{Address, Bytes, Uint};
     #[test]
     fn should_throw_error_when_deserializing_invalid() {
         const TEST_INVALID_USER_OPERATION: &str = r#"
@@ -60,8 +58,11 @@ mod tests {
         }
         let user_operation = user_operation.unwrap();
         match user_operation {
-             UserOperationRequest::EntryPointV06(user_operation) => {
-               assert_eq!(user_operation.sender, Address::from_str("0x1111111111111111111111111111111111111111").unwrap());
+            UserOperationRequest::EntryPointV06(user_operation) => {
+                assert_eq!(
+                    user_operation.sender,
+                    Address::from_str("0x1111111111111111111111111111111111111111").unwrap()
+                );
                 assert_eq!(user_operation.nonce, Uint::from(0));
                 assert_eq!(user_operation.init_code, Bytes::from_str("0x").unwrap());
                 assert_eq!(user_operation.call_data, Bytes::from_str("0x").unwrap());
@@ -69,10 +70,16 @@ mod tests {
                 assert_eq!(user_operation.verification_gas_limit, Uint::from(0x100000));
                 assert_eq!(user_operation.pre_verification_gas, Uint::from(0x10000));
                 assert_eq!(user_operation.max_fee_per_gas, Uint::from(0x59682f10));
-                assert_eq!(user_operation.max_priority_fee_per_gas, Uint::from(0x3b9aca00));
-                assert_eq!(user_operation.paymaster_and_data, Bytes::from_str("0x").unwrap());
+                assert_eq!(
+                    user_operation.max_priority_fee_per_gas,
+                    Uint::from(0x3b9aca00)
+                );
+                assert_eq!(
+                    user_operation.paymaster_and_data,
+                    Bytes::from_str("0x").unwrap()
+                );
                 assert_eq!(user_operation.signature, Bytes::from_str("0x01").unwrap());
-            },
+            }
             _ => {
                 panic!("Expected EntryPointV06, got {:?}", user_operation);
             }
@@ -109,7 +116,10 @@ mod tests {
         let user_operation = user_operation.unwrap();
         match user_operation {
             UserOperationRequest::EntryPointV07(user_operation) => {
-                assert_eq!(user_operation.sender, Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap());
+                assert_eq!(
+                    user_operation.sender,
+                    Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()
+                );
                 assert_eq!(user_operation.nonce, Uint::from(1));
                 assert_eq!(
                     user_operation.call_data,
