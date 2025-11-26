@@ -67,7 +67,6 @@ pub enum UserOperationRequest {
     EntryPointV07(PackedUserOperation),
 }
 
-
 // Tests
 #[cfg(test)]
 mod tests {
@@ -93,23 +92,24 @@ mod tests {
 "#;
         let user_operation: Result<UserOperation, serde_json::Error> =
             serde_json::from_str::<UserOperation>(TEST_USER_OPERATION);
-            match user_operation {
-                Ok(user_operation) => {
-                    assert_eq!(user_operation.sender, Some("0x1111111111111111111111111111111111111111".to_string()));
-                    assert_eq!(user_operation.nonce, Uint::from(0));
-                    assert_eq!(user_operation.factory, None);
-                    assert_eq!(user_operation.factory_data, None);
-                    assert_eq!(user_operation.call_data, alloy_primitives::bytes!("0x"));
-                    assert_eq!(user_operation.call_gas_limit, Uint::from(0x5208));
-                    assert_eq!(user_operation.verification_gas_limit, Uint::from(0x100000));
-                    assert_eq!(user_operation.pre_verification_gas, Uint::from(0x10000));
-                }
-                Err(e) => {
-                    panic!("Error: {:?}", e);
-                }
+        match user_operation {
+            Ok(user_operation) => {
+                assert_eq!(
+                    user_operation.sender,
+                    Some("0x1111111111111111111111111111111111111111".to_string())
+                );
+                assert_eq!(user_operation.nonce, Uint::from(0));
+                assert_eq!(user_operation.factory, None);
+                assert_eq!(user_operation.factory_data, None);
+                assert_eq!(user_operation.call_data, alloy_primitives::bytes!("0x"));
+                assert_eq!(user_operation.call_gas_limit, Uint::from(0x5208));
+                assert_eq!(user_operation.verification_gas_limit, Uint::from(0x100000));
+                assert_eq!(user_operation.pre_verification_gas, Uint::from(0x10000));
             }
-
-       
+            Err(e) => {
+                panic!("Error: {:?}", e);
+            }
+        }
     }
 
     #[test]
@@ -148,7 +148,10 @@ mod tests {
             serde_json::from_str::<UserOperation>(TEST_USER_OPERATION);
         match user_operation {
             Ok(user_operation) => {
-                assert_eq!(user_operation.sender, Some("0x1111111111111111111111111111111111111111".to_string()));
+                assert_eq!(
+                    user_operation.sender,
+                    Some("0x1111111111111111111111111111111111111111".to_string())
+                );
                 assert_eq!(user_operation.nonce, Uint::from(0));
                 assert_eq!(user_operation.factory, None);
                 assert_eq!(user_operation.factory_data, None);
@@ -189,11 +192,27 @@ mod tests {
             serde_json::from_str::<UserOperation>(TEST_PACKED_USER_OPERATION);
         match user_operation {
             Ok(user_operation) => {
-                assert_eq!(user_operation.sender, Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string()));
+                assert_eq!(
+                    user_operation.sender,
+                    Some("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48".to_string())
+                );
                 assert_eq!(user_operation.nonce, Uint::from(1));
-                assert_eq!(user_operation.factory, Some("0x2222222222222222222222222222222222222222".to_string()));
-                assert_eq!(user_operation.factory_data, Some(alloy_primitives::bytes!("0xabcdef1234560000000000000000000000000000000000000000000000000000")));
-                assert_eq!(user_operation.call_data, alloy_primitives::bytes!("0xb61d27f600000000000000000000000000000000000000000000000000000000000000c8"));
+                assert_eq!(
+                    user_operation.factory,
+                    Some("0x2222222222222222222222222222222222222222".to_string())
+                );
+                assert_eq!(
+                    user_operation.factory_data,
+                    Some(alloy_primitives::bytes!(
+                        "0xabcdef1234560000000000000000000000000000000000000000000000000000"
+                    ))
+                );
+                assert_eq!(
+                    user_operation.call_data,
+                    alloy_primitives::bytes!(
+                        "0xb61d27f600000000000000000000000000000000000000000000000000000000000000c8"
+                    )
+                );
                 assert_eq!(user_operation.call_gas_limit, Uint::from(0x2dc6c0));
                 assert_eq!(user_operation.verification_gas_limit, Uint::from(0x1e8480));
                 assert_eq!(user_operation.pre_verification_gas, Uint::from(0x186a0));
@@ -202,6 +221,5 @@ mod tests {
                 panic!("Error: {:?}", e);
             }
         }
-
     }
 }

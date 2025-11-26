@@ -14,6 +14,7 @@ use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
+    user_ops_types,
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
@@ -23,7 +24,6 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
-
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
@@ -37,6 +37,13 @@ pub trait IngressApi {
     /// Handler for: `eth_sendRawTransaction`
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+
+    /// Handler for: `eth_sendUserOperation`
+    #[method(name = "sendUserOperation")]
+    async fn send_user_operation(
+        &self,
+        user_operation: user_ops_types::UserOperationRequest,
+    ) -> RpcResult<B256>;
 }
 
 pub struct IngressService<Queue> {
@@ -218,6 +225,14 @@ where
 
         Ok(transaction.tx_hash())
     }
+
+    async fn send_user_operation(
+        &self,
+        user_operation: user_ops_types::UserOperationRequest,
+    ) -> RpcResult<B256> {
+        dbg!(&user_operation);
+        todo!("implement send_user_operation");
+   }
 }
 
 impl<Queue> IngressService<Queue>
