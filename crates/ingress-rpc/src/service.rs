@@ -2,6 +2,7 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
+use crate::validation::validate_bundle;
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
@@ -147,7 +148,7 @@ where
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
-        let transaction = self.validate_tx(&data).await?;
+        let transaction = self.get_tx(&data).await?;
 
         let send_to_kafka = matches!(
             self.tx_submission_method,
@@ -246,8 +247,7 @@ impl<Queue> IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
-    async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
-        let start = Instant::now();
+    async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
         }
@@ -259,17 +259,6 @@ where
             .clone()
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
-        let account = self
-            .provider
-            .fetch_account_info(transaction.signer())
-            .await?;
-        validate_tx(account, &transaction, data, &mut l1_block_info).await?;
-
-        self.metrics
-            .validate_tx_duration
-            .record(start.elapsed().as_secs_f64());
         Ok(transaction)
     }
 
@@ -285,7 +274,7 @@ where
         let mut total_gas = 0u64;
         let mut tx_hashes = Vec::new();
         for tx_data in &bundle.txs {
-            let transaction = self.validate_tx(tx_data).await?;
+            let transaction = self.get_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
             tx_hashes.push(transaction.tx_hash());
         }
