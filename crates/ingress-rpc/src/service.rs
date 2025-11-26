@@ -194,7 +194,6 @@ where
         let start = Instant::now();
         let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
 
-        // Record metric: backrun bundle received
         self.metrics.backrun_bundles_received_total.increment(1);
 
         // Send to all configured builder RPCs concurrently
@@ -203,7 +202,6 @@ where
         // Send audit event
         self.send_audit_event(&accepted_bundle, bundle_hash);
 
-        // Record metric: duration to send backrun bundle
         self.metrics
             .backrun_bundles_sent_duration
             .record(start.elapsed().as_secs_f64());
