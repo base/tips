@@ -19,11 +19,11 @@ use tips_core::{
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
-
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
 use crate::{Config, TxSubmissionMethod};
+
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
@@ -231,7 +231,7 @@ where
         user_operation: user_ops_types::UserOperationRequest,
     ) -> RpcResult<B256> {
         dbg!(&user_operation);
-        todo!("implement send_user_operation");
+        todo!("not yet implemented send_user_operation");
    }
 }
 
