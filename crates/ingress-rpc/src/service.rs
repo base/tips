@@ -149,7 +149,6 @@ where
             for (idx, client) in self.builder_clients.iter().enumerate() {
                 let client = client.clone();
                 let bundle = bundle.clone();
-                let bundle_hash = bundle_hash;
 
                 let task = tokio::spawn(async move {
                     let result = client
