@@ -3,29 +3,6 @@ use serde::{Deserialize, Serialize};
 use alloy_rpc_types::erc4337;
 
 
-#[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct UserOperation {
-    pub sender: Option<String>,
-
-    pub nonce: Uint<256, 4>,
-
-    pub factory: Option<String>,
-    pub factory_data: Option<Bytes>,
-
-    pub call_data: Bytes,
-
-    pub call_gas_limit: Uint<256, 4>,
-
-    pub verification_gas_limit: Uint<256, 4>,
-
-    pub pre_verification_gas: Uint<256, 4>,
-
-    pub max_fee_per_gas: Uint<256, 4>,
-
-    pub max_priority_fee_per_gas: Uint<256, 4>,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum UserOperationRequest {
