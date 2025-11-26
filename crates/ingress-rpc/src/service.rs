@@ -114,6 +114,72 @@ where
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
         Ok((accepted_bundle, bundle_hash))
     }
+
+    /// Helper method to send backrun bundle to all configured builders concurrently
+    async fn send_backrun_to_builders(&self, bundle: &Bundle, bundle_hash: B256) {
+        if self.builder_clients.is_empty() {
+            warn!(
+                message = "No builder RPCs configured, backrun bundle not submitted",
+                bundle_hash = %bundle_hash
+            );
+            return;
+        }
+
+        let mut tasks = Vec::new();
+
+        for (idx, client) in self.builder_clients.iter().enumerate() {
+            let client = client.clone();
+            let bundle = bundle.clone();
+
+            let task = tokio::spawn(async move {
+                let result = client
+                    .client()
+                    .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle,))
+                    .await;
+                (idx, bundle_hash, result)
+            });
+
+            tasks.push(task);
+        }
+
+        // Wait for all tasks to complete
+        for task in tasks {
+            if let Ok((idx, bundle_hash, result)) = task.await {
+                match result {
+                    Ok(_) => {
+                        info!(
+                            message = "Sent backrun bundle to op-rbuilder",
+                            bundle_hash = %bundle_hash,
+                            builder_idx = idx
+                        );
+                    }
+                    Err(e) => {
+                        warn!(
+                            message = "Failed to send backrun bundle to op-rbuilder",
+                            bundle_hash = %bundle_hash,
+                            builder_idx = idx,
+                            error = %e
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Helper method to send audit event for a bundle
+    fn send_audit_event(&self, accepted_bundle: &AcceptedBundle, bundle_hash: B256) {
+        let audit_event = BundleEvent::Received {
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: Box::new(accepted_bundle.clone()),
+        };
+        if let Err(e) = self.audit_channel.send(audit_event) {
+            warn!(
+                message = "Failed to send audit event",
+                bundle_hash = %bundle_hash,
+                error = %e
+            );
+        }
+    }
 }
 
 #[async_trait]
@@ -135,66 +201,11 @@ where
 
         let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
 
-        info!(message = "Validated and parsed backrun bundle", bundle_hash = %bundle_hash);
-
         // Send to all configured builder RPCs concurrently
-        if self.builder_clients.is_empty() {
-            warn!(
-                message = "No builder RPCs configured, backrun bundle not submitted",
-                bundle_hash = %bundle_hash
-            );
-        } else {
-            let mut tasks = Vec::new();
+        self.send_backrun_to_builders(&bundle, bundle_hash).await;
 
-            for (idx, client) in self.builder_clients.iter().enumerate() {
-                let client = client.clone();
-                let bundle = bundle.clone();
-
-                let task = tokio::spawn(async move {
-                    let result = client
-                        .client()
-                        .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle,))
-                        .await;
-                    (idx, bundle_hash, result)
-                });
-
-                tasks.push(task);
-            }
-
-            // Wait for all tasks to complete
-            for task in tasks {
-                if let Ok((idx, bundle_hash, result)) = task.await {
-                    match result {
-                        Ok(_) => {
-                            info!(
-                                message = "Sent backrun bundle to op-rbuilder",
-                                bundle_hash = %bundle_hash,
-                                builder_idx = idx
-                            );
-                        }
-                        Err(e) => {
-                            warn!(
-                                message = "Failed to send backrun bundle to op-rbuilder",
-                                bundle_hash = %bundle_hash,
-                                builder_idx = idx,
-                                error = %e
-                            );
-                        }
-                    }
-                }
-            }
-        }
-
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: Box::new(accepted_bundle.clone()),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-            // Don't fail the request
-        }
-
-        info!(message = "Sent backrun bundle to audit channel", bundle_hash = %bundle_hash);
+        // Send audit event
+        self.send_audit_event(&accepted_bundle, bundle_hash);
 
         Ok(BundleHash { bundle_hash })
     }
@@ -226,16 +237,7 @@ where
         );
 
         // asynchronously send the audit event to the audit channel
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: Box::new(accepted_bundle.clone()),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-            return Err(
-                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
-            );
-        }
+        self.send_audit_event(&accepted_bundle, bundle_hash);
 
         Ok(BundleHash { bundle_hash })
     }
@@ -314,13 +316,7 @@ where
             }
         }
 
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: accepted_bundle.clone().into(),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-        }
+        self.send_audit_event(&accepted_bundle, transaction.tx_hash());
 
         self.metrics
             .send_raw_transaction_duration
