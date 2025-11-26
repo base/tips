@@ -23,6 +23,7 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
+use futures::future::join_all;
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
@@ -125,43 +126,34 @@ where
             return;
         }
 
-        let mut tasks = Vec::new();
-
-        for (idx, client) in self.builder_clients.iter().enumerate() {
-            let client = client.clone();
-            let bundle = bundle.clone();
-
-            let task = tokio::spawn(async move {
-                let result = client
-                    .client()
-                    .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle,))
-                    .await;
-                (idx, bundle_hash, result)
+        let futures = self
+            .builder_clients
+            .iter()
+            .enumerate()
+            .map(|(idx, client)| {
+                let bundle = bundle.clone();
+                async move {
+                    let result = client
+                        .client()
+                        .request::<(Bundle,), ()>("base_sendBackrunBundle", (bundle,))
+                        .await;
+                    (idx, result)
+                }
             });
 
-            tasks.push(task);
-        }
-
-        // Wait for all tasks to complete
-        for task in tasks {
-            if let Ok((idx, bundle_hash, result)) = task.await {
-                match result {
-                    Ok(_) => {
-                        info!(
-                            message = "Sent backrun bundle to op-rbuilder",
-                            bundle_hash = %bundle_hash,
-                            builder_idx = idx
-                        );
-                    }
-                    Err(e) => {
-                        warn!(
-                            message = "Failed to send backrun bundle to op-rbuilder",
-                            bundle_hash = %bundle_hash,
-                            builder_idx = idx,
-                            error = %e
-                        );
-                    }
-                }
+        for (idx, result) in join_all(futures).await {
+            match result {
+                Ok(_) => info!(
+                    message = "Sent backrun bundle to op-rbuilder",
+                    bundle_hash = %bundle_hash,
+                    builder_idx = idx,
+                ),
+                Err(e) => warn!(
+                    message = "Failed to send backrun bundle to op-rbuilder",
+                    bundle_hash = %bundle_hash,
+                    builder_idx = idx,
+                    error = %e,
+                ),
             }
         }
     }
