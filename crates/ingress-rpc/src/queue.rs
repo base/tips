@@ -7,6 +7,7 @@ use tips_core::AcceptedBundle;
 use tokio::time::Duration;
 use tracing::{error, info};
 
+
 /// A queue to buffer transactions
 #[async_trait]
 pub trait QueuePublisher: Send + Sync {

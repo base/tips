@@ -24,6 +24,7 @@ tracing-subscriber.workspace = true
 op-alloy-flz.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+alloy-rpc-types = "1.1.2"
 
 [dev-dependencies]
 alloy-signer-local.workspace = true

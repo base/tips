@@ -1,41 +1,7 @@
 use alloy_primitives::{Bytes, Uint};
 use serde::{Deserialize, Serialize};
+use alloy_rpc_types::erc4337;
 
-// https://reth.rs/docs/reth/rpc/types/struct.PackedUserOperation.html
-#[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub struct PackedUserOperation {
-    pub sender: String,
-
-    pub nonce: Uint<256, 4>,
-
-    pub factory: Option<String>,
-    pub factory_data: Option<Bytes>,
-
-    pub call_data: Bytes,
-
-    pub call_gas_limit: Uint<256, 4>,
-
-    pub verification_gas_limit: Uint<256, 4>,
-
-    pub pre_verification_gas: Uint<256, 4>,
-
-    pub max_fee_per_gas: Uint<256, 4>,
-
-    pub max_priority_fee_per_gas: Uint<256, 4>,
-
-    pub paymaster: Option<String>,
-
-    pub paymaster_verification_gas_limit: Option<Uint<256, 4>>,
-
-    pub paymaster_post_op_gas_limit: Option<Uint<256, 4>>,
-
-    pub paymaster_data: Option<Bytes>,
-    pub signature: Bytes,
-}
-
-// // https://reth.rs/docs/reth/srpc/types/struct.UserOperation.html
-// crates/core/src/user_ops_types.rs
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -63,71 +29,31 @@ pub struct UserOperation {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum UserOperationRequest {
-    EntryPointV06(UserOperation),
-    EntryPointV07(PackedUserOperation),
+    EntryPointV06(erc4337::UserOperation),
+    EntryPointV07(erc4337::PackedUserOperation),
 }
 
 // Tests
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
-
     use super::*;
     #[test]
-    fn should_deserialize_user_operation() {
-        const TEST_USER_OPERATION: &str = r#"
-    {
-             "sender": "0x1111111111111111111111111111111111111111",
-            "nonce": "0x0",
-            "initCode": "0x",
-            "callData": "0x",
-            "callGasLimit": "0x5208",
-            "verificationGasLimit": "0x100000",
-            "preVerificationGas": "0x10000",
-            "maxFeePerGas": "0x59682f10",
-            "maxPriorityFeePerGas": "0x3b9aca00",
-            "paymasterAndData": "0x",
-            "signature": "0x01"
-    }
-"#;
-        let user_operation: Result<UserOperation, serde_json::Error> =
-            serde_json::from_str::<UserOperation>(TEST_USER_OPERATION);
-        match user_operation {
-            Ok(user_operation) => {
-                assert_eq!(
-                    user_operation.sender,
-                    Some("0x1111111111111111111111111111111111111111".to_string())
-                );
-                assert_eq!(user_operation.nonce, Uint::from(0));
-                assert_eq!(user_operation.factory, None);
-                assert_eq!(user_operation.factory_data, None);
-                assert_eq!(user_operation.call_data, alloy_primitives::bytes!("0x"));
-                assert_eq!(user_operation.call_gas_limit, Uint::from(0x5208));
-                assert_eq!(user_operation.verification_gas_limit, Uint::from(0x100000));
-                assert_eq!(user_operation.pre_verification_gas, Uint::from(0x10000));
-            }
-            Err(e) => {
-                panic!("Error: {:?}", e);
-            }
-        }
-    }
-
-    #[test]
-    fn should_throw_error_when_deserializing_invalid_user_operation() {
+    fn should_throw_error_when_deserializing_invalid() {
         const TEST_INVALID_USER_OPERATION: &str = r#"
         {
-            "sender": "0x1111111111111111111111111111111111111111",
-            "nonce": "0x0",
-            "callGasLimit": "0x5208"
+        "type": "EntryPointV06",
+        "sender": "0x1111111111111111111111111111111111111111",
+        "nonce": "0x0",
+        "callGasLimit": "0x5208"
         }
     "#;
-        let user_operation: Result<UserOperation, serde_json::Error> =
-            serde_json::from_str::<UserOperation>(TEST_INVALID_USER_OPERATION);
+        let user_operation: Result<UserOperationRequest, serde_json::Error> =
+            serde_json::from_str::<UserOperationRequest>(TEST_INVALID_USER_OPERATION);
         assert!(user_operation.is_err());
     }
 
     #[test]
-    fn should_deserialize_user_operation_when_tag_is_entry_point_v06() {
+    fn should_deserialize_v06() {
         const TEST_USER_OPERATION: &str = r#"
         {
             "type": "EntryPointV06",
@@ -167,7 +93,7 @@ mod tests {
     }
 
     #[test]
-    fn should_deserialize_user_operation_when_tag_is_entry_point_v07() {
+    fn should_deserialize_v07() {
         const TEST_PACKED_USER_OPERATION: &str = r#"
         {
         "type": "EntryPointV07",
