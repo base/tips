@@ -28,6 +28,7 @@ alloy-primitives = { version = "1.4.1", default-features = false, features = [
 alloy-consensus = { version = "1.0.41" }
 alloy-provider = { version = "1.0.41" }
 alloy-serde = "1.0.41"
+alloy-rpc-types = "1.1.2"
 
 # op-alloy
 op-alloy-network = { version = "0.22.0", default-features = false }

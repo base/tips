@@ -238,9 +238,7 @@ where
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
-        Ok(SendUserOperationResponse{
-            user_op_hash: Bytes::from("0xYoThisIsTheHash"),
-        })
+        todo!("not yet implemented send_user_operation");
    }
 }
 
