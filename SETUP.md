@@ -27,7 +27,6 @@ git checkout danyal/base-overlay
 # Clone op-rbuilder in a separate directory
 git clone https://github.com/base/op-rbuilder.git
 cd op-rbuilder
-git checkout tips-prototype
 ```
 
 ## Step 2: Start TIPS Infrastructure
