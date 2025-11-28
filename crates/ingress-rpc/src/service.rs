@@ -1,7 +1,3 @@
-use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
-use crate::validation::validate_bundle;
-use crate::{Config, TxSubmissionMethod};
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{B256, Bytes};
@@ -23,6 +19,11 @@ use tips_core::{
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
+
+use crate::metrics::{Metrics, record_histogram};
+use crate::queue::QueuePublisher;
+use crate::validation::validate_bundle;
+use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
