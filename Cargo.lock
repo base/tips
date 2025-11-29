@@ -6964,6 +6964,7 @@ dependencies = [
  "backon",
  "clap",
  "dotenvy",
+ "futures",
  "jsonrpsee",
  "metrics",
  "metrics-derive",

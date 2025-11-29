@@ -136,6 +136,10 @@ pub struct Config {
         default_value = "100"
     )]
     pub max_buffered_meter_bundle_responses: usize,
+
+    /// Enable backrun bundle submission to op-rbuilder
+    #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
+    pub backrun_enabled: bool,
 }
 
 pub fn connect_ingress_to_builder(
