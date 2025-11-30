@@ -14,6 +14,7 @@ use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
+    user_ops_types::{SendUserOperationResponse, UserOperationRequest},
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
@@ -21,7 +22,7 @@ use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
-use crate::validation::{AccountInfoLookup, L1BlockInfoLookup, validate_bundle, validate_tx};
+use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 
 #[rpc(server, namespace = "eth")]
@@ -37,6 +38,13 @@ pub trait IngressApi {
     /// Handler for: `eth_sendRawTransaction`
     #[method(name = "sendRawTransaction")]
     async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+
+    /// Handler for: `eth_sendUserOperation`
+    #[method(name = "sendUserOperation")]
+    async fn send_user_operation(
+        &self,
+        user_operation: UserOperationRequest,
+    ) -> RpcResult<SendUserOperationResponse>;
 }
 
 pub struct IngressService<Queue> {
@@ -140,7 +148,7 @@ where
 
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
-        let transaction = self.validate_tx(&data).await?;
+        let transaction = self.get_tx(&data).await?;
 
         let send_to_kafka = matches!(
             self.tx_submission_method,
@@ -218,14 +226,28 @@ where
 
         Ok(transaction.tx_hash())
     }
+
+    async fn send_user_operation(
+        &self,
+        user_operation: UserOperationRequest,
+    ) -> RpcResult<SendUserOperationResponse> {
+        dbg!(&user_operation);
+
+        // STEPS:
+        // 1. Reputation Service Validate
+        // 2. Base Node Validate User Operation
+        // 3. Send to Kafka
+        // Send Hash
+        // todo!("not yet implemented send_user_operation");
+        todo!("not yet implemented send_user_operation");
+    }
 }
 
 impl<Queue> IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
-    async fn validate_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
-        let start = Instant::now();
+    async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
         }
@@ -237,17 +259,6 @@ where
             .clone()
             .try_into_recovered()
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction.into_rpc_err())?;
-
-        let mut l1_block_info = self.provider.fetch_l1_block_info().await?;
-        let account = self
-            .provider
-            .fetch_account_info(transaction.signer())
-            .await?;
-        validate_tx(account, &transaction, data, &mut l1_block_info).await?;
-
-        self.metrics
-            .validate_tx_duration
-            .record(start.elapsed().as_secs_f64());
         Ok(transaction)
     }
 
@@ -263,7 +274,7 @@ where
         let mut total_gas = 0u64;
         let mut tx_hashes = Vec::new();
         for tx_data in &bundle.txs {
-            let transaction = self.validate_tx(tx_data).await?;
+            let transaction = self.get_tx(tx_data).await?;
             total_gas = total_gas.saturating_add(transaction.gas_limit());
             tx_hashes.push(transaction.tx_hash());
         }

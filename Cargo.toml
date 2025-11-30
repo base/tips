@@ -12,14 +12,13 @@ resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
-tips-bundle-pool = { path = "crates/bundle-pool" }
 tips-core = { path = "crates/core" }
 tips-e2e-tests = { path = "crates/e2e-tests" }
 
 # Reth
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
-reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.1" }
+reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 
 # alloy
 alloy-primitives = { version = "1.4.1", default-features = false, features = [
@@ -32,6 +31,7 @@ alloy-rpc-types = { version = "1.0.41" }
 alloy-signer = { version = "1.0.41" }
 alloy-network = { version = "1.0.41" }
 alloy-serde = "1.0.41"
+alloy-rpc-types = "1.1.2"
 
 # op-alloy
 op-alloy-network = { version = "0.22.0", default-features = false }
@@ -41,7 +41,7 @@ op-alloy-flz = {  version = "0.13.1" }
 
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 anyhow = "1.0.99"
 clap = { version = "4.5.47", features = ["derive", "env"] }
 url = "2.5.7"
