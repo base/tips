@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(name = "tips-e2e-runner")]
+#[command(name = "load-test")]
 #[command(about = "Load testing tool for TIPS ingress service", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]

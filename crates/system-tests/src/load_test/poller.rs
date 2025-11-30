@@ -1,4 +1,4 @@
-use crate::tracker::TransactionTracker;
+use super::tracker::TransactionTracker;
 use alloy_provider::{Provider, RootProvider};
 use anyhow::Result;
 use op_alloy_network::Optimism;

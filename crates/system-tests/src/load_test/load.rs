@@ -1,18 +1,18 @@
-use crate::config::LoadArgs;
-use crate::metrics::{TestConfig, calculate_results};
-use crate::output::{print_results, save_results};
-use crate::poller::ReceiptPoller;
-use crate::sender::SenderTask;
-use crate::tracker::TransactionTracker;
-use crate::wallet::load_wallets;
+use super::config::LoadArgs;
+use super::metrics::{TestConfig, calculate_results};
+use super::output::{print_results, save_results};
+use super::poller::ReceiptPoller;
+use super::sender::SenderTask;
+use super::tracker::TransactionTracker;
+use super::wallet::load_wallets;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use std::sync::Arc;
 use std::time::Duration;
-use tips_e2e_tests::client::TipsRpcClient;
-use tips_e2e_tests::fixtures::create_optimism_provider;
+use crate::client::TipsRpcClient;
+use crate::fixtures::create_optimism_provider;
 
 pub async fn run(args: LoadArgs) -> Result<()> {
     let wallets = load_wallets(&args.wallets).context("Failed to load wallets")?;

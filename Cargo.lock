@@ -6955,7 +6955,39 @@ dependencies = [
 ]
 
 [[package]]
-name = "tips-e2e-tests"
+name = "tips-ingress-rpc"
+version = "0.1.0"
+dependencies = [
+ "alloy-consensus",
+ "alloy-primitives",
+ "alloy-provider",
+ "alloy-signer-local",
+ "anyhow",
+ "async-trait",
+ "backon",
+ "clap",
+ "dotenvy",
+ "jsonrpsee",
+ "metrics",
+ "metrics-derive",
+ "metrics-exporter-prometheus",
+ "op-alloy-consensus",
+ "op-alloy-network",
+ "op-revm",
+ "rdkafka",
+ "reth-optimism-evm",
+ "reth-rpc-eth-types",
+ "revm-context-interface",
+ "serde_json",
+ "tips-audit",
+ "tips-core",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "tips-system-tests"
 version = "0.1.0"
 dependencies = [
  "alloy-consensus",
@@ -6993,38 +7025,6 @@ dependencies = [
  "tracing-subscriber 0.3.22",
  "url",
  "uuid",
-]
-
-[[package]]
-name = "tips-ingress-rpc"
-version = "0.1.0"
-dependencies = [
- "alloy-consensus",
- "alloy-primitives",
- "alloy-provider",
- "alloy-signer-local",
- "anyhow",
- "async-trait",
- "backon",
- "clap",
- "dotenvy",
- "jsonrpsee",
- "metrics",
- "metrics-derive",
- "metrics-exporter-prometheus",
- "op-alloy-consensus",
- "op-alloy-network",
- "op-revm",
- "rdkafka",
- "reth-optimism-evm",
- "reth-rpc-eth-types",
- "revm-context-interface",
- "serde_json",
- "tips-audit",
- "tips-core",
- "tokio",
- "tracing",
- "url",
 ]
 
 [[package]]

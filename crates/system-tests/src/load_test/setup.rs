@@ -1,5 +1,5 @@
-use crate::config::SetupArgs;
-use crate::wallet::{Wallet, generate_wallets, save_wallets};
+use super::config::SetupArgs;
+use super::wallet::{Wallet, generate_wallets, save_wallets};
 use alloy_consensus::{SignableTransaction, TxEip1559};
 use alloy_primitives::U256;
 use alloy_provider::Provider;
@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use op_alloy_network::TxSignerSync;
 use op_alloy_network::eip2718::Encodable2718;
-use tips_e2e_tests::fixtures::create_optimism_provider;
+use crate::fixtures::create_optimism_provider;
 
 const CHAIN_ID: u64 = 13; // builder-playground local chain ID
 

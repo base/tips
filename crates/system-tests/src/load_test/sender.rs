@@ -1,5 +1,5 @@
-use crate::tracker::TransactionTracker;
-use crate::wallet::Wallet;
+use super::tracker::TransactionTracker;
+use super::wallet::Wallet;
 use alloy_network::Network;
 use alloy_primitives::{Address, Bytes, keccak256};
 use alloy_provider::{Provider, RootProvider};
@@ -9,8 +9,8 @@ use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tips_e2e_tests::client::TipsRpcClient;
-use tips_e2e_tests::fixtures::create_load_test_transaction;
+use crate::client::TipsRpcClient;
+use crate::fixtures::create_load_test_transaction;
 
 pub struct SenderTask<N: Network> {
     wallet: Wallet,
