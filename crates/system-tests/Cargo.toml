@@ -1,5 +1,5 @@
 [package]
-name = "tips-e2e-tests"
+name = "tips-system-tests"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -7,10 +7,6 @@ license.workspace = true
 
 [lib]
 path = "src/lib.rs"
-
-[[bin]]
-name = "tips-e2e-runner"
-path = "src/bin/runner/main.rs"
 
 [dependencies]
 tips-audit = { workspace = true }
@@ -50,13 +46,6 @@ bytes = { workspace = true }
 hex = "0.4.3"
 jsonrpsee = { workspace = true }
 op-revm = { workspace = true }
-
-# Runner-specific dependencies
-clap = { version = "4.5", features = ["derive", "env"] }
-indicatif = "0.17"
-rand = "0.8"
-rand_chacha = "0.3"
-dashmap = "6.0"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

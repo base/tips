@@ -2,8 +2,8 @@ use alloy_primitives::{Address, U256, keccak256};
 use alloy_provider::{Provider, RootProvider};
 use anyhow::{Context, Result};
 use op_alloy_network::Optimism;
-use tips_e2e_tests::client::TipsRpcClient;
-use tips_e2e_tests::fixtures::{
+use tips_system_tests::client::TipsRpcClient;
+use tips_system_tests::fixtures::{
     create_funded_signer, create_optimism_provider, create_signed_transaction,
 };
 use tokio::time::{Duration, sleep};
