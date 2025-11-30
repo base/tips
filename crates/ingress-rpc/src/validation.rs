@@ -739,5 +739,4 @@ mod tests {
         let result = OpTxEnvelope::decode_2718(&mut invalid_bytes.as_ref());
         assert!(result.is_err(), "Invalid bytes should fail decoding");
     }
-
 }

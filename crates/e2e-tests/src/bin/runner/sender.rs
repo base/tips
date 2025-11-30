@@ -44,7 +44,6 @@ impl<N: Network> SenderTask<N> {
     }
 
     pub async fn run(mut self) -> Result<()> {
-
         let mut nonce = self
             .sequencer
             .get_transaction_count(self.wallet.address)

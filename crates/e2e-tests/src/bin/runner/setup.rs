@@ -7,14 +7,11 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use op_alloy_network::TxSignerSync;
 use op_alloy_network::eip2718::Encodable2718;
-use std::time::Duration;
 use tips_e2e_tests::fixtures::create_optimism_provider;
-use tracing::info;
 
 const CHAIN_ID: u64 = 13; // builder-playground local chain ID
 
 pub async fn run(args: SetupArgs) -> Result<()> {
-
     let master_wallet = Wallet::from_private_key(&args.master_key)
         .context("Failed to parse master wallet private key")?;
 

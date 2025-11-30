@@ -15,7 +15,6 @@ use tips_e2e_tests::client::TipsRpcClient;
 use tips_e2e_tests::fixtures::create_optimism_provider;
 
 pub async fn run(args: LoadArgs) -> Result<()> {
-
     let wallets = load_wallets(&args.wallets).context("Failed to load wallets")?;
 
     if wallets.is_empty() {
@@ -113,7 +112,7 @@ pub async fn run(args: LoadArgs) -> Result<()> {
     let config = TestConfig {
         target: args.target,
         sequencer: args.sequencer,
-        wallets: tracker.total_sent() as usize, 
+        wallets: tracker.total_sent() as usize,
         target_rate: args.rate,
         duration_secs: args.duration,
         tx_timeout_secs: args.tx_timeout,

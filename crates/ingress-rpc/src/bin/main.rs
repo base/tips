@@ -5,13 +5,15 @@ use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use tips_audit::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
+use tips_core::MeterBundleResponse;
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger;
 use tips_ingress_rpc::Config;
+use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
 use tips_ingress_rpc::queue::KafkaQueuePublisher;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
 #[tokio::main]
@@ -62,7 +64,21 @@ async fn main() -> anyhow::Result<()> {
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
 
-    let service = IngressService::new(provider, simulation_provider, queue, audit_tx, cfg);
+    let (builder_tx, _) =
+        broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
+    config.builder_rpcs.iter().for_each(|builder_rpc| {
+        let builder_rx = builder_tx.subscribe();
+        connect_ingress_to_builder(builder_rx, builder_rpc.clone());
+    });
+
+    let service = IngressService::new(
+        provider,
+        simulation_provider,
+        queue,
+        audit_tx,
+        builder_tx,
+        cfg,
+    );
     let bind_addr = format!("{}:{}", config.address, config.port);
 
     let server = Server::builder().build(&bind_addr).await?;

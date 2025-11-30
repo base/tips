@@ -18,12 +18,10 @@ tips-core = { workspace = true }
 tips-ingress-rpc = { path = "../ingress-rpc" }
 
 alloy-primitives = { workspace = true }
-alloy-rpc-types = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-signer-local = { workspace = true }
-alloy-signer = "1.0.37"
 alloy-consensus = { workspace = true }
-alloy-network = "1.0.37"
+alloy-network = { workspace = true }
 
 op-alloy-network = { workspace = true }
 op-alloy-consensus = { workspace = true }

@@ -50,11 +50,7 @@ pub fn generate_wallets(num_wallets: usize, seed: Option<u64>) -> Vec<Wallet> {
         .collect()
 }
 
-pub fn save_wallets(
-    wallets: &[Wallet],
-    fund_amount: f64,
-    path: &Path,
-) -> Result<()> {
+pub fn save_wallets(wallets: &[Wallet], fund_amount: f64, path: &Path) -> Result<()> {
     let wallet_data: Vec<WalletData> = wallets
         .iter()
         .map(|w| WalletData {
