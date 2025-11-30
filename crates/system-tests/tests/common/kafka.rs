@@ -1,0 +1,131 @@
+use std::{path::Path, str, time::Duration};
+
+use alloy_primitives::B256;
+use anyhow::{Context, Result};
+use rdkafka::{
+    Message,
+    config::ClientConfig,
+    consumer::{Consumer, StreamConsumer},
+    message::BorrowedMessage,
+};
+use tips_audit::types::BundleEvent;
+use tips_core::{AcceptedBundle, kafka::load_kafka_config_from_file};
+use tokio::time::{Instant, timeout};
+use uuid::Uuid;
+
+const DEFAULT_INGRESS_TOPIC: &str = "tips-ingress";
+const DEFAULT_AUDIT_TOPIC: &str = "tips-audit";
+const DEFAULT_INGRESS_PROPERTIES: &str = "../../docker/host-ingress-bundles-kafka-properties";
+const DEFAULT_AUDIT_PROPERTIES: &str = "../../docker/host-ingress-audit-kafka-properties";
+const KAFKA_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+
+fn resolve_properties_path(env_key: &str, default_path: &str) -> Result<String> {
+    match std::env::var(env_key) {
+        Ok(value) => Ok(value),
+        Err(_) => {
+            if Path::new(default_path).exists() {
+                Ok(default_path.to_string())
+            } else {
+                anyhow::bail!(
+                    "Environment variable {env_key} must be set (default path '{default_path}' not found). \
+                     Run `just sync` or export {env_key} before running tests."
+                );
+            }
+        }
+    }
+}
+
+fn build_kafka_consumer(properties_env: &str, default_path: &str) -> Result<StreamConsumer> {
+    let props_file = resolve_properties_path(properties_env, default_path)?;
+
+    let mut client_config = ClientConfig::from_iter(load_kafka_config_from_file(&props_file)?);
+
+    client_config
+        .set("group.id", format!("tips-system-tests-{}", Uuid::new_v4()))
+        .set("enable.auto.commit", "false")
+        .set("auto.offset.reset", "earliest");
+
+    client_config
+        .create()
+        .context("Failed to create Kafka consumer")
+}
+
+async fn wait_for_kafka_message<T>(
+    properties_env: &str,
+    default_properties: &str,
+    topic_env: &str,
+    default_topic: &str,
+    timeout_duration: Duration,
+    mut matcher: impl FnMut(BorrowedMessage<'_>) -> Option<T>,
+) -> Result<T> {
+    let consumer = build_kafka_consumer(properties_env, default_properties)?;
+    let topic = std::env::var(topic_env).unwrap_or_else(|_| default_topic.to_string());
+    consumer.subscribe(&[&topic])?;
+
+    let deadline = Instant::now() + timeout_duration;
+
+    loop {
+        let now = Instant::now();
+        if now >= deadline {
+            anyhow::bail!(
+                "Timed out waiting for Kafka message on topic {topic} after {:?}",
+                timeout_duration
+            );
+        }
+
+        let remaining = deadline - now;
+        match timeout(remaining, consumer.recv()).await {
+            Ok(Ok(message)) => {
+                if let Some(value) = matcher(message) {
+                    return Ok(value);
+                }
+            }
+            Ok(Err(err)) => {
+                return Err(err.into());
+            }
+            Err(_) => {
+                // Timeout for this iteration, continue looping
+            }
+        }
+    }
+}
+
+pub async fn wait_for_ingress_bundle(expected_bundle_hash: &B256) -> Result<AcceptedBundle> {
+    let expected_key = expected_bundle_hash.to_string();
+
+    wait_for_kafka_message(
+        "TIPS_INGRESS_KAFKA_INGRESS_PROPERTIES_FILE",
+        DEFAULT_INGRESS_PROPERTIES,
+        "TIPS_INGRESS_KAFKA_INGRESS_TOPIC",
+        DEFAULT_INGRESS_TOPIC,
+        KAFKA_WAIT_TIMEOUT,
+        |message| {
+            let key = message.key().and_then(|k| str::from_utf8(k).ok())?;
+            if key != expected_key {
+                return None;
+            }
+            let payload = message.payload()?;
+            serde_json::from_slice(payload).ok()
+        },
+    )
+    .await
+}
+
+pub async fn wait_for_audit_event(
+    expected_bundle_id: Uuid,
+    mut matcher: impl FnMut(&BundleEvent) -> bool,
+) -> Result<BundleEvent> {
+    wait_for_kafka_message(
+        "TIPS_INGRESS_KAFKA_AUDIT_PROPERTIES_FILE",
+        DEFAULT_AUDIT_PROPERTIES,
+        "TIPS_INGRESS_KAFKA_AUDIT_TOPIC",
+        DEFAULT_AUDIT_TOPIC,
+        KAFKA_WAIT_TIMEOUT,
+        |message| {
+            let payload = message.payload()?;
+            let event: BundleEvent = serde_json::from_slice(payload).ok()?;
+            (event.bundle_id() == expected_bundle_id && matcher(&event)).then_some(event)
+        },
+    )
+    .await
+}

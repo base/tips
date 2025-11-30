@@ -1,87 +1,32 @@
-# TIPS E2E Tests
+# System Tests (Integration Suite)
 
-End-to-end integration tests and load testing tools for the TIPS (Transaction Inclusion Protocol Service) system.
+Integration coverage for TIPS ingress RPC. Tests talk to the real services started by `just start-all`.
 
-## Overview
+## What we test
+- `test_client_can_connect_to_tips` – RPC connectivity.
+- `test_send_raw_transaction_accepted` – `eth_sendRawTransaction` returns a tx hash.
+- `test_send_bundle_accepted` – single‑tx bundle returns the correct bundle hash, appears in Kafka/audit.
+- `test_send_bundle_with_three_transactions` – max-sized bundle (3 txs) flows through Kafka/audit.
+- `test_cancel_bundle_endpoint` – `eth_cancelBundle` RPC (currently ignored until server supports it).
 
-This crate provides:
-1. **Integration Tests** - Discrete test scenarios for TIPS functionality
-2. **Load Testing Runner** - Multi-wallet concurrent load testing tool
+Each bundle test confirms:
+1. The response hash equals `keccak256` of the tx hashes.
+2. The bundle is published to the ingress Kafka topic.
+3. Audit propagation works end-to-end: Kafka `BundleEvent` and a persisted S3 bundle history entry.
 
-## Prerequisites
-
-All tests require the full infrastructure from `SETUP.md` running:
-- TIPS ingress service (port 8080) via `just start-all`
-- builder-playground (L1/L2 blockchain) on `danyal/base-overlay` branch
-- op-rbuilder (block builder)
-- Kafka
-- MinIO
-
-## Running Tests
-
-### Start Infrastructure
-
-Follow guidelines in `SETUP.md`
-
-### Run Integration Tests
-
+## How to run
 ```bash
-cd tips
-INTEGRATION_TESTS=1 cargo test --package tips-e2e-tests -- --nocapture
+# Start infrastructure (see ../../SETUP.md for full instructions)
+#  - just sync && just start-all
+#  - builder-playground + op-rbuilder
+
+# Run the tests
+INTEGRATION_TESTS=1 cargo test --package tips-system-tests --test integration_tests
 ```
 
-All 5 tests will run:
-- `test_rpc_client_instantiation` - Verifies client creation
-- `test_send_valid_transaction` - End-to-end transaction submission
-- `test_send_bundle_with_valid_transaction` - End-to-end single-transaction bundle
-- `test_send_bundle_with_replacement_uuid` - Bundle replacement with UUID tracking
-- `test_send_bundle_with_multiple_transactions` - Multi-transaction bundle
-
-### Environment Variables
-
-| Variable | Purpose | Default | Required |
-|----------|---------|---------|----------|
-| `INTEGRATION_TESTS` | Enable integration tests | (unset) | Yes |
-| `INGRESS_URL` | TIPS ingress service URL | `http://localhost:8080` | No |
-| `SEQUENCER_URL` | L2 sequencer node | `http://localhost:8547` | No |
-
-## Test Structure
-
-- `src/client/` - RPC client for interacting with TIPS services
-- `src/fixtures/` - Test data generators (transactions, signers)
-- `src/bin/runner/` - Load testing runner implementation
-- `tests/` - End-to-end test scenarios
-
-## Load Testing
-
-For load testing and performance metrics, see [METRICS.md](./METRICS.md).
-
-The `tips-e2e-runner` binary provides:
-- Multi-wallet concurrent load generation
-- Time-to-inclusion tracking
-- Throughput and latency metrics
-- Reproducible test scenarios
-
-Quick start:
-```bash
-# Build
-cargo build --release --bin tips-e2e-runner
-
-# Setup wallets (optional: add --output wallets.json to save)
-./target/release/tips-e2e-runner setup --master-key <KEY> --num-wallets 100 --output wallets.json
-
-# Run load test
-./target/release/tips-e2e-runner load --rate 100 --duration 5m
-```
-
-See [METRICS.md](./METRICS.md) for complete documentation.
-
----
-
-## Integration Test Notes
-
-- Tests will be skipped if `INTEGRATION_TESTS` environment variable is not set
-- All tests require the full SETUP.md infrastructure to be running
-- Tests use real nonces fetched from the L2 node, so they adapt to current blockchain state
-- CI/CD setup will be added later to automate infrastructure provisioning
+Defaults:
+- Kafka configs: `docker/host-*.properties` (override with the standard `TIPS_INGRESS_KAFKA_*` env vars if needed).
+- S3 (MinIO): `http://localhost:7000`, bucket `tips`, credentials `minioadmin` (override with the `TIPS_AUDIT_S3_*` env vars).
+- URLs: `http://localhost:8080` ingress, `http://localhost:8547` sequencer (override via `INGRESS_URL` / `SEQUENCER_URL`).
+- Tx submission mode: inferred from `TIPS_TEST_TX_SUBMISSION_METHOD` (or `TIPS_INGRESS_TX_SUBMISSION_METHOD`). Set to `mempool`, `kafka`, or `mempool,kafka` so the raw‑tx test knows which behavior to verify.
 
