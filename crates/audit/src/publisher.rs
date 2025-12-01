@@ -1,30 +1,42 @@
-use crate::types::BundleEvent;
+use crate::types::{BundleEvent, BundleId};
 use anyhow::Result;
 use async_trait::async_trait;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde_json;
+use std::collections::HashSet;
 use tracing::{debug, error, info};
 
 #[async_trait]
 pub trait BundleEventPublisher: Send + Sync {
-    async fn publish(&self, event: BundleEvent) -> Result<()>;
+    async fn publish(&mut self, event: BundleEvent) -> Result<()>;
 
-    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()>;
+    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()>;
 }
 
 #[derive(Clone)]
 pub struct KafkaBundleEventPublisher {
     producer: FutureProducer,
     topic: String,
+    pending_events: HashSet<BundleId>,
 }
 
 impl KafkaBundleEventPublisher {
     pub fn new(producer: FutureProducer, topic: String) -> Self {
-        Self { producer, topic }
+        Self {
+            producer,
+            topic,
+            pending_events: HashSet::new(),
+        }
     }
 
-    async fn send_event(&self, event: &BundleEvent) -> Result<()> {
+    async fn send_event(&mut self, event: &BundleEvent) -> Result<()> {
         let bundle_id = event.bundle_id();
+        if self.pending_events.contains(&bundle_id) {
+            debug!(bundle_id = %bundle_id, "We already got this event");
+            return Ok(());
+        }
+        self.pending_events.insert(bundle_id);
+
         let key = event.generate_event_key();
         let json_bytes = serde_json::to_vec(event)?;
         let payload = lz4_flex::compress_prepend_size(&json_bytes);
@@ -37,6 +49,8 @@ impl KafkaBundleEventPublisher {
             .await
         {
             Ok(_) => {
+                // Remove from pending_events after successful send to prevent memory growth
+                self.pending_events.remove(&bundle_id);
                 debug!(
                     bundle_id = %bundle_id,
                     topic = %self.topic,
@@ -46,6 +60,7 @@ impl KafkaBundleEventPublisher {
                 Ok(())
             }
             Err((err, _)) => {
+                // Keep in pending_events on failure to prevent retry loops
                 error!(
                     bundle_id = %bundle_id,
                     topic = %self.topic,
@@ -60,11 +75,11 @@ impl KafkaBundleEventPublisher {
 
 #[async_trait]
 impl BundleEventPublisher for KafkaBundleEventPublisher {
-    async fn publish(&self, event: BundleEvent) -> Result<()> {
+    async fn publish(&mut self, event: BundleEvent) -> Result<()> {
         self.send_event(&event).await
     }
 
-    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()> {
+    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()> {
         for event in events {
             self.send_event(&event).await?;
         }
@@ -89,7 +104,7 @@ impl Default for LoggingBundleEventPublisher {
 
 #[async_trait]
 impl BundleEventPublisher for LoggingBundleEventPublisher {
-    async fn publish(&self, event: BundleEvent) -> Result<()> {
+    async fn publish(&mut self, event: BundleEvent) -> Result<()> {
         info!(
             bundle_id = %event.bundle_id(),
             event = ?event,
@@ -98,7 +113,7 @@ impl BundleEventPublisher for LoggingBundleEventPublisher {
         Ok(())
     }
 
-    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()> {
+    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()> {
         for event in events {
             self.publish(event).await?;
         }

@@ -31,7 +31,7 @@ async fn test_kafka_publisher_s3_archiver_integration()
         },
     ];
 
-    let publisher = KafkaBundleEventPublisher::new(harness.kafka_producer, topic.to_string());
+    let mut publisher = KafkaBundleEventPublisher::new(harness.kafka_producer, topic.to_string());
 
     for event in test_events.iter() {
         publisher.publish(event.clone()).await?;
