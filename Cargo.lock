@@ -7,8 +7,10 @@ name = "account-abstraction-core"
 version = "0.1.0"
 dependencies = [
  "alloy-primitives",
+ "alloy-provider",
  "alloy-rpc-types",
  "alloy-serde",
+ "op-alloy-network",
  "serde",
  "serde_json",
 ]
