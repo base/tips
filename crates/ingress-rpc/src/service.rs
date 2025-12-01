@@ -14,7 +14,6 @@ use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
-    user_ops_types::{SendUserOperationResponse, UserOperationRequest},
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
@@ -24,6 +23,7 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
+use account_abstraction_core::user_ops_types::{SendUserOperationResponse, UserOperationRequest};
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {

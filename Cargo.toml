@@ -7,12 +7,13 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
+account-abstraction-core = { path = "crates/account-abstraction-core" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
