@@ -1,8 +1,8 @@
 use crate::types::BundleEvent;
 use anyhow::Result;
 use async_trait::async_trait;
+use bincode;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use serde_json;
 use tracing::{debug, error, info};
 
 #[async_trait]
