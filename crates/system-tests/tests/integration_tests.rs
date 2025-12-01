@@ -1,25 +1,3 @@
-//! Integration tests for TIPS ingress service RPC endpoints.
-//!
-//! ## What These Tests Verify
-//!
-//! 1. **RPC Connectivity** - Can connect to TIPS ingress service
-//! 2. **Bundle Acceptance** - Valid bundles are accepted and return hashes
-//! 3. **Transaction Acceptance** - Valid raw transactions are accepted
-//! 4. **Error Handling** - Invalid requests return appropriate errors
-//!
-//! ## What Is NOT Tested Here
-//!
-//! - **Validation Logic** - Unit tested in `ingress-rpc/src/validation.rs`
-//! - **Transaction Inclusion** - Builder responsibility, not TIPS
-//! - **Bundle Updates/Cancellation** - Not supported (bundle-pool removed)
-//! - **Bundle State Tracking** - No bundle pool to track state
-//!
-//! ## Test Environment Requirements
-//!
-//! Set `INTEGRATION_TESTS=1` and ensure infrastructure is running:
-//! - TIPS ingress service (port 8080)
-//! - Simulation provider with base_meterBundle support
-
 #[path = "common/mod.rs"]
 mod common;
 
@@ -126,7 +104,6 @@ async fn test_send_raw_transaction_accepted() -> Result<()> {
     let client = TipsRpcClient::new(provider);
     let signer = create_funded_signer();
 
-    // Get nonce from sequencer
     let sequencer_url = get_sequencer_url();
     let sequencer_provider = create_optimism_provider(&sequencer_url)?;
     let nonce = sequencer_provider
@@ -186,7 +163,6 @@ async fn test_send_bundle_accepted() -> Result<()> {
     let client = TipsRpcClient::new(provider);
     let signer = create_funded_signer();
 
-    // Get nonce from sequencer
     let sequencer_url = get_sequencer_url();
     let sequencer_provider = create_optimism_provider(&sequencer_url)?;
     let nonce = sequencer_provider
@@ -294,14 +270,12 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
     let client = TipsRpcClient::new(provider);
     let signer = create_funded_signer();
 
-    // Get nonce from sequencer
     let sequencer_url = get_sequencer_url();
     let sequencer_provider = create_optimism_provider(&sequencer_url)?;
     let nonce = sequencer_provider
         .get_transaction_count(signer.address())
         .await?;
 
-    // Create 3 transactions (the maximum allowed)
     let tx1 = create_signed_transaction(
         &signer,
         Address::from([0x33; 20]),
@@ -407,93 +381,6 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
             "S3 history bundle hash should match response"
         );
     }
-
-    Ok(())
-}
-
-#[tokio::test]
-#[ignore = "eth_cancelBundle is not yet implemented on the ingress server"]
-async fn test_cancel_bundle_endpoint() -> Result<()> {
-    if std::env::var("INTEGRATION_TESTS").is_err() {
-        eprintln!(
-            "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure TIPS infrastructure is running)"
-        );
-        return Ok(());
-    }
-
-    use tips_core::Bundle;
-
-    let url = get_integration_test_url();
-    let provider = create_optimism_provider(&url)?;
-    let client = TipsRpcClient::new(provider);
-    let signer = create_funded_signer();
-
-    // Get nonce from sequencer
-    let sequencer_url = get_sequencer_url();
-    let sequencer_provider = create_optimism_provider(&sequencer_url)?;
-    let nonce = sequencer_provider
-        .get_transaction_count(signer.address())
-        .await?;
-
-    let signed_tx = create_signed_transaction(
-        &signer,
-        Address::from([0x77; 20]),
-        U256::from(1234),
-        nonce,
-        21000,
-        1_000_000_000,
-    )?;
-    let tx_hash = keccak256(&signed_tx);
-
-    let bundle = Bundle {
-        txs: vec![signed_tx],
-        block_number: 1,
-        min_timestamp: None,
-        max_timestamp: None,
-        reverting_tx_hashes: vec![tx_hash],
-        replacement_uuid: None,
-        dropping_tx_hashes: vec![],
-        flashblock_number_min: None,
-        flashblock_number_max: None,
-    };
-
-    let bundle_hash = client
-        .send_bundle(bundle)
-        .await
-        .context("Failed to send bundle before cancellation")?;
-
-    // Fetch the accepted bundle from Kafka to get the UUID
-    let accepted_bundle = wait_for_ingress_bundle(&bundle_hash.bundle_hash)
-        .await
-        .context("Failed to fetch bundle from Kafka before cancellation")?;
-    let bundle_uuid = *accepted_bundle.uuid();
-
-    // Issue cancelBundle RPC
-    let cancel_request = CancelBundle {
-        replacement_uuid: bundle_uuid.to_string(),
-    };
-    let _ = client
-        .cancel_bundle(cancel_request)
-        .await
-        .context("Failed to call eth_cancelBundle")?;
-
-    // Verify audit channel records the cancellation
-    let audit_event = wait_for_audit_event(bundle_uuid, |event| {
-        matches!(event, BundleEvent::Cancelled { .. })
-    })
-    .await
-    .context("Failed to read cancellation audit event")?;
-
-    assert!(
-        matches!(audit_event, BundleEvent::Cancelled { .. }),
-        "Expected a cancellation audit event"
-    );
-
-    let _ = wait_for_bundle_history_event(bundle_uuid, |event| {
-        matches!(event, BundleHistoryEvent::Cancelled { .. })
-    })
-    .await
-    .context("Failed to read cancellation bundle history from S3")?;
 
     Ok(())
 }

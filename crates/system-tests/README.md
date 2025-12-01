@@ -7,7 +7,7 @@ Integration coverage for TIPS ingress RPC. Tests talk to the real services start
 - `test_send_raw_transaction_accepted` – `eth_sendRawTransaction` returns a tx hash.
 - `test_send_bundle_accepted` – single‑tx bundle returns the correct bundle hash, appears in Kafka/audit.
 - `test_send_bundle_with_three_transactions` – max-sized bundle (3 txs) flows through Kafka/audit.
-- `test_cancel_bundle_endpoint` – `eth_cancelBundle` RPC (currently ignored until server supports it).
+
 
 Each bundle test confirms:
 1. The response hash equals `keccak256` of the tx hashes.
@@ -18,7 +18,7 @@ Each bundle test confirms:
 ```bash
 # Start infrastructure (see ../../SETUP.md for full instructions)
 #  - just sync && just start-all
-#  - builder-playground + op-rbuilder
+#  - builder-playground + op-rbuilder are running
 
 # Run the tests
 INTEGRATION_TESTS=1 cargo test --package tips-system-tests --test integration_tests
