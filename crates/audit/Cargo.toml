@@ -32,6 +32,10 @@ aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 bytes = { workspace = true }
+<<<<<<< HEAD
+=======
+bincode = { workspace = true }
+>>>>>>> d4e9c4b (use lz4)
 lz4_flex = { workspace = true }
 
 [dev-dependencies]
