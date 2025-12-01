@@ -77,7 +77,7 @@ impl EventReader for KafkaAuditLogReader {
                         .as_millis() as i64,
                 };
 
-                let event: BundleEvent = serde_json::from_slice(payload)?;
+                let event: BundleEvent = bincode::deserialize(payload)?;
 
                 debug!(
                     bundle_id = %event.bundle_id(),

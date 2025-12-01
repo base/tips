@@ -1,8 +1,8 @@
 use crate::types::BundleEvent;
 use anyhow::Result;
 use async_trait::async_trait;
+use bincode;
 use rdkafka::producer::{FutureProducer, FutureRecord};
-use serde_json;
 use tracing::{debug, error, info};
 
 #[async_trait]
@@ -26,7 +26,7 @@ impl KafkaBundleEventPublisher {
     async fn send_event(&self, event: &BundleEvent) -> Result<()> {
         let bundle_id = event.bundle_id();
         let key = event.generate_event_key();
-        let payload = serde_json::to_vec(event)?;
+        let payload = bincode::serialize(event)?;
 
         let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
