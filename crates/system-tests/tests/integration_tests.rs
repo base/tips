@@ -25,22 +25,19 @@ mod common;
 
 use alloy_primitives::{Address, TxHash, U256, keccak256};
 use alloy_provider::{Provider, RootProvider};
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use common::{
     kafka::{wait_for_audit_event, wait_for_ingress_bundle},
     s3::wait_for_bundle_history_event,
 };
 use op_alloy_network::Optimism;
-use tips_audit::{
-    storage::BundleHistoryEvent,
-    types::BundleEvent,
-};
+use tips_audit::{storage::BundleHistoryEvent, types::BundleEvent};
 use tips_core::{BundleExtensions, CancelBundle};
-use tokio::time::{sleep, Duration, Instant};
 use tips_system_tests::client::TipsRpcClient;
 use tips_system_tests::fixtures::{
     create_funded_signer, create_optimism_provider, create_signed_transaction,
 };
+use tokio::time::{Duration, Instant, sleep};
 
 /// Get the URL for integration tests against the TIPS ingress service
 fn get_integration_test_url() -> String {

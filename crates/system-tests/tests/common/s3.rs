@@ -2,13 +2,13 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use aws_config::BehaviorVersion;
-use aws_credential_types::{provider::SharedCredentialsProvider, Credentials};
+use aws_credential_types::{Credentials, provider::SharedCredentialsProvider};
 use aws_sdk_s3::{
-    config::{Builder as S3ConfigBuilder, Region},
     Client as S3Client,
+    config::{Builder as S3ConfigBuilder, Region},
 };
 use tips_audit::storage::{BundleEventS3Reader, BundleHistoryEvent, S3EventReaderWriter};
-use tokio::time::{sleep, Instant};
+use tokio::time::{Instant, sleep};
 use uuid::Uuid;
 
 const DEFAULT_S3_ENDPOINT: &str = "http://localhost:7000";
@@ -27,18 +27,9 @@ async fn build_s3_reader() -> Result<S3EventReaderWriter> {
     let region = env_or("TIPS_AUDIT_S3_REGION", DEFAULT_S3_REGION);
     let bucket = env_or("TIPS_AUDIT_S3_BUCKET", DEFAULT_S3_BUCKET);
     let access_key = env_or("TIPS_AUDIT_S3_ACCESS_KEY_ID", DEFAULT_S3_ACCESS_KEY);
-    let secret_key = env_or(
-        "TIPS_AUDIT_S3_SECRET_ACCESS_KEY",
-        DEFAULT_S3_SECRET_KEY,
-    );
+    let secret_key = env_or("TIPS_AUDIT_S3_SECRET_ACCESS_KEY", DEFAULT_S3_SECRET_KEY);
 
-    let creds = Credentials::new(
-        access_key,
-        secret_key,
-        None,
-        None,
-        "tips-system-tests",
-    );
+    let creds = Credentials::new(access_key, secret_key, None, None, "tips-system-tests");
     let shared_creds = SharedCredentialsProvider::new(creds);
 
     let base_config = aws_config::defaults(BehaviorVersion::latest())
