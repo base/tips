@@ -151,7 +151,7 @@ pub struct Config {
     pub backrun_enabled: bool,
 }
 
-pub fn connect_to_builder(
+pub fn connect_ingress_to_builder(
     metering_rx: broadcast::Receiver<MeterBundleResponse>,
     backrun_rx: broadcast::Receiver<tips_core::Bundle>,
     builder_rpc: Url,

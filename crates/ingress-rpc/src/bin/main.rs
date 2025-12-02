@@ -9,7 +9,7 @@ use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
 use tips_core::{Bundle, MeterBundleResponse};
 use tips_ingress_rpc::Config;
-use tips_ingress_rpc::connect_to_builder;
+use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::health::bind_health_server;
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
 use tips_ingress_rpc::queue::KafkaQueuePublisher;
@@ -73,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
     config.builder_rpcs.iter().for_each(|builder_rpc| {
         let metering_rx = builder_tx.subscribe();
         let backrun_rx = builder_backrun_tx.subscribe();
-        connect_to_builder(metering_rx, backrun_rx, builder_rpc.clone());
+        connect_ingress_to_builder(metering_rx, backrun_rx, builder_rpc.clone());
     });
 
     let health_check_addr = config.health_check_addr;
