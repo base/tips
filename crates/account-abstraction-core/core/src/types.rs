@@ -1,3 +1,4 @@
+use alloy_primitives::U256;
 use alloy_rpc_types::erc4337;
 use serde::{Deserialize, Serialize};
 
@@ -9,6 +10,13 @@ pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 pub enum UserOperationRequest {
     EntryPointV06(erc4337::UserOperation),
     EntryPointV07(erc4337::PackedUserOperation),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UserOperationRequestValidationResult {
+    pub expiration_timestamp: u64,
+    pub gas_used: U256,
 }
 
 // Tests

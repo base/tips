@@ -23,8 +23,8 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use account_abstraction_core::user_ops_types::{SendUserOperationResponse, UserOperationRequest};
-use account_abstraction_core::{AccountAbstractionServiceImpl, AccountAbstractionService};
+use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
+use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 
 #[rpc(server, namespace = "eth")]
@@ -74,11 +74,12 @@ impl<Queue> IngressService<Queue> {
     ) -> Self {
         let provider = Arc::new(provider);
         let simulation_provider = Arc::new(simulation_provider);
-        let account_abstraction_service: AccountAbstractionServiceImpl = AccountAbstractionServiceImpl::new(simulation_provider.clone(), provider.clone());
+        let account_abstraction_service: AccountAbstractionServiceImpl =
+            AccountAbstractionServiceImpl::new(simulation_provider.clone(), config.validate_user_operation_timeout_ms);
         Self {
             provider,
             simulation_provider,
-            account_abstraction_service:account_abstraction_service,
+            account_abstraction_service: account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
             audit_channel,
@@ -243,7 +244,8 @@ where
         // STEPS:
         // 1. Reputation Service Validate
         // 2. Base Node Validate User Operation
-        self.account_abstraction_service.validate_user_operation(user_operation);
+        self.account_abstraction_service
+            .validate_user_operation(user_operation);
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");

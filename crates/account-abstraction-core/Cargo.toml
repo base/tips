@@ -16,6 +16,10 @@ serde.workspace = true
 alloy-rpc-types.workspace = true
 alloy-provider.workspace = true
 op-alloy-network.workspace = true
+alloy-primitives = { workspace = true }
+reth-rpc-eth-types.workspace = true
+tokio.workspace = true
+jsonrpsee.workspace = true
 
 [dev-dependencies]
 alloy-primitives.workspace = true

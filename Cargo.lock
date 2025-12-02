@@ -10,9 +10,12 @@ dependencies = [
  "alloy-provider",
  "alloy-rpc-types",
  "alloy-serde",
+ "jsonrpsee",
  "op-alloy-network",
+ "reth-rpc-eth-types",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]

@@ -1,5 +1,5 @@
-pub mod user_ops_types;
 pub mod account_abstraction_service;
+pub mod types;
 
-pub use user_ops_types::{SendUserOperationResponse, UserOperationRequest};
-pub use account_abstraction_service::{AccountAbstractionServiceImpl, AccountAbstractionService};
+pub use account_abstraction_service::{AccountAbstractionService, AccountAbstractionServiceImpl};
+pub use types::{SendUserOperationResponse, UserOperationRequest};
