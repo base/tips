@@ -134,6 +134,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn should_propagate_error_from_base_node() {
+        let mock_server = setup_mock_server().await;
+
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Internal error"
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let service = new_service(&mock_server);
+        let user_operation = new_test_user_operation_v06();
+
+        let result = service
+            .base_node_validate_user_operation(user_operation)
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Internal error"));
+    }
+    #[tokio::test]
     async fn base_node_validate_user_operation_succeeds() {
         let mock_server = setup_mock_server().await;
 
