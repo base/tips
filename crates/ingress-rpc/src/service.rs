@@ -27,6 +27,13 @@ use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRe
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 
+/// RPC providers for different endpoints
+pub struct Providers {
+    pub mempool: RootProvider<Optimism>,
+    pub simulation: RootProvider<Optimism>,
+    pub raw_tx_forward: Option<RootProvider<Optimism>>,
+}
+
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
@@ -53,7 +60,7 @@ pub trait IngressApi {
 }
 
 pub struct IngressService<Queue> {
-    provider: Arc<RootProvider<Optimism>>,
+    mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
@@ -71,18 +78,16 @@ pub struct IngressService<Queue> {
 
 impl<Queue> IngressService<Queue> {
     pub fn new(
-        provider: RootProvider<Optimism>,
-        simulation_provider: RootProvider<Optimism>,
-        raw_tx_forward_provider: Option<RootProvider<Optimism>>,
+        providers: Providers,
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
         config: Config,
     ) -> Self {
-        let provider = Arc::new(provider);
-        let simulation_provider = Arc::new(simulation_provider);
-        let raw_tx_forward_provider = raw_tx_forward_provider.map(Arc::new);
+        let mempool_provider = Arc::new(providers.mempool);
+        let simulation_provider = Arc::new(providers.simulation);
+        let raw_tx_forward_provider = providers.raw_tx_forward.map(Arc::new);
         let account_abstraction_service: AccountAbstractionServiceImpl =
             AccountAbstractionServiceImpl::new(
                 simulation_provider.clone(),
@@ -90,7 +95,7 @@ impl<Queue> IngressService<Queue> {
             );
 
         Self {
-            provider,
+            mempool_provider,
             simulation_provider,
             raw_tx_forward_provider,
             account_abstraction_service,
@@ -241,7 +246,7 @@ where
 
         if send_to_mempool {
             let response = self
-                .provider
+                .mempool_provider
                 .send_raw_transaction(data.iter().as_slice())
                 .await;
             match response {
