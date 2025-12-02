@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes, U256};
+use alloy_primitives::{B256, Bytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -216,19 +216,9 @@ where
         let bundle_hash = &parsed_bundle.bundle_hash();
         let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await
             .unwrap_or_else(|_| {
+                // TODO: in the future, we should return the error
                 warn!(message = "Bundle simulation failed, using default response", bundle_hash = %bundle_hash);
-                MeterBundleResponse {
-                    bundle_gas_price: U256::from(0),
-                    bundle_hash: *bundle_hash,
-                    coinbase_diff: U256::from(0),
-                    eth_sent_to_coinbase: U256::from(0),
-                    gas_fees: U256::from(0),
-                    results: vec![],
-                    state_block_number: 0,
-                    state_flashblock_index: None,
-                    total_gas_used: 0,
-                    total_execution_time_us: 0,
-                }
+                MeterBundleResponse::default()
             });
 
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
