@@ -3,21 +3,21 @@ use anyhow::Result;
 use async_trait::async_trait;
 use rdkafka::producer::{FutureProducer, FutureRecord};
 use serde_json;
-use std::collections::HashSet;
 use tracing::{debug, error, info};
+use dashmap::DashSet;
 
 #[async_trait]
 pub trait BundleEventPublisher: Send + Sync {
-    async fn publish(&mut self, event: BundleEvent) -> Result<()>;
+    async fn publish(&self, event: BundleEvent) -> Result<()>;
 
-    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()>;
+    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()>;
 }
 
 #[derive(Clone)]
 pub struct KafkaBundleEventPublisher {
     producer: FutureProducer,
     topic: String,
-    pending_events: HashSet<BundleId>,
+    pending_events: DashSet<BundleId>,
 }
 
 impl KafkaBundleEventPublisher {
@@ -25,11 +25,11 @@ impl KafkaBundleEventPublisher {
         Self {
             producer,
             topic,
-            pending_events: HashSet::new(),
+            pending_events: DashSet::new(),
         }
     }
 
-    async fn send_event(&mut self, event: &BundleEvent) -> Result<()> {
+    async fn send_event(&self, event: &BundleEvent) -> Result<()> {
         let bundle_id = event.bundle_id();
         if self.pending_events.contains(&bundle_id) {
             debug!(bundle_id = %bundle_id, "We already got this event");
@@ -74,11 +74,11 @@ impl KafkaBundleEventPublisher {
 
 #[async_trait]
 impl BundleEventPublisher for KafkaBundleEventPublisher {
-    async fn publish(&mut self, event: BundleEvent) -> Result<()> {
+    async fn publish(&self, event: BundleEvent) -> Result<()> {
         self.send_event(&event).await
     }
 
-    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()> {
+    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()> {
         for event in events {
             self.send_event(&event).await?;
         }
@@ -103,7 +103,7 @@ impl Default for LoggingBundleEventPublisher {
 
 #[async_trait]
 impl BundleEventPublisher for LoggingBundleEventPublisher {
-    async fn publish(&mut self, event: BundleEvent) -> Result<()> {
+    async fn publish(&self, event: BundleEvent) -> Result<()> {
         info!(
             bundle_id = %event.bundle_id(),
             event = ?event,
@@ -112,7 +112,7 @@ impl BundleEventPublisher for LoggingBundleEventPublisher {
         Ok(())
     }
 
-    async fn publish_all(&mut self, events: Vec<BundleEvent>) -> Result<()> {
+    async fn publish_all(&self, events: Vec<BundleEvent>) -> Result<()> {
         for event in events {
             self.publish(event).await?;
         }

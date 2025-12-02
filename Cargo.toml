@@ -71,3 +71,4 @@ alloy-signer-local = "1.0.41"
 metrics = "0.24.1"
 metrics-derive = "0.1"
 metrics-exporter-prometheus = { version = "0.17.0", features = ["http-listener"]}
+dashmap = "6.1.0"

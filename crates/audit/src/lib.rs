@@ -15,7 +15,7 @@ pub use types::*;
 
 pub fn connect_audit_to_publisher<P>(
     event_rx: mpsc::UnboundedReceiver<BundleEvent>,
-    mut publisher: P,
+    publisher: P,
 ) where
     P: BundleEventPublisher + 'static,
 {

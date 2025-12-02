@@ -7039,6 +7039,7 @@ dependencies = [
  "aws-sdk-s3",
  "bytes",
  "clap",
+ "dashmap",
  "dotenvy",
  "op-alloy-consensus",
  "rdkafka",
