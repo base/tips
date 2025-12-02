@@ -38,8 +38,7 @@ impl KafkaBundleEventPublisher {
         self.pending_events.insert(bundle_id);
 
         let key = event.generate_event_key();
-        let json_bytes = serde_json::to_vec(event)?;
-        let payload = lz4_flex::compress_prepend_size(&json_bytes);
+        let payload = serde_json::to_vec(event)?;
 
         let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
 
