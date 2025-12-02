@@ -20,8 +20,10 @@ alloy-primitives = { workspace = true }
 reth-rpc-eth-types.workspace = true
 tokio.workspace = true
 jsonrpsee.workspace = true
+async-trait = { workspace = true }
 
 [dev-dependencies]
 alloy-primitives.workspace = true
 serde_json.workspace = true
+wiremock.workspace = true
 

@@ -75,7 +75,10 @@ impl<Queue> IngressService<Queue> {
         let provider = Arc::new(provider);
         let simulation_provider = Arc::new(simulation_provider);
         let account_abstraction_service: AccountAbstractionServiceImpl =
-            AccountAbstractionServiceImpl::new(simulation_provider.clone(), config.validate_user_operation_timeout_ms);
+            AccountAbstractionServiceImpl::new(
+                simulation_provider.clone(),
+                config.validate_user_operation_timeout_ms,
+            );
         Self {
             provider,
             simulation_provider,
@@ -244,8 +247,8 @@ where
         // STEPS:
         // 1. Reputation Service Validate
         // 2. Base Node Validate User Operation
-        self.account_abstraction_service
-            .validate_user_operation(user_operation);
+       let _= self.account_abstraction_service
+            .validate_user_operation(user_operation).await?;
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
