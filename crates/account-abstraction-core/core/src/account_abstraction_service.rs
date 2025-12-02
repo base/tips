@@ -26,14 +26,7 @@ impl AccountAbstractionService for AccountAbstractionServiceImpl {
         // Steps: Reputation Service Validate
         // Steps: Base Node Validate User Operation
         let validation_result = self.base_node_validate_user_operation(user_operation).await;
-        match validation_result {
-            Ok(validation_result) => {
-                return Ok(validation_result);
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        }
+        validation_result
     }
 }
 
@@ -54,8 +47,8 @@ impl AccountAbstractionServiceImpl {
     ) -> RpcResult<UserOperationRequestValidationResult> {
         let result = timeout(
             Duration::from_secs(self.validate_user_operation_timeout),
-            self.simulation_provider
-                .raw_request("base_validateUserOperation".into(), (user_operation,)),
+            self.simulation_provider.client()
+                .request("base_validateUserOperation", (user_operation,)),
         )
         .await;
 
@@ -74,4 +67,16 @@ impl AccountAbstractionServiceImpl {
 
         Ok(validation_result)
     }
+}
+
+
+// Tests
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_base_node_validate_user_operation() {
+        // Test timeout 
+        }
 }
