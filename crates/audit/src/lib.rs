@@ -13,10 +13,8 @@ pub use reader::*;
 pub use storage::*;
 pub use types::*;
 
-pub fn connect_audit_to_publisher<P>(
-    event_rx: mpsc::UnboundedReceiver<BundleEvent>,
-    publisher: P,
-) where
+pub fn connect_audit_to_publisher<P>(event_rx: mpsc::UnboundedReceiver<BundleEvent>, publisher: P)
+where
     P: BundleEventPublisher + 'static,
 {
     tokio::spawn(async move {
