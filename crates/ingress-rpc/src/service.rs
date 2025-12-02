@@ -247,8 +247,10 @@ where
         // STEPS:
         // 1. Reputation Service Validate
         // 2. Base Node Validate User Operation
-       let _= self.account_abstraction_service
-            .validate_user_operation(user_operation).await?;
+        let _ = self
+            .account_abstraction_service
+            .validate_user_operation(user_operation)
+            .await?;
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
