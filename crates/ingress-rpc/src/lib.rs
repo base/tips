@@ -164,6 +164,14 @@ pub struct Config {
     /// Enable backrun bundle submission to op-rbuilder
     #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
     pub backrun_enabled: bool,
+
+    /// Enable forwarding raw transactions to third-party endpoint
+    #[arg(long, env = "TIPS_INGRESS_RAW_TX_FORWARD_ENABLED", default_value = "false")]
+    pub raw_tx_forward_enabled: bool,
+
+    /// URL of third-party RPC endpoint to forward raw transactions to
+    #[arg(long, env = "TIPS_INGRESS_RAW_TX_FORWARD_RPC")]
+    pub raw_tx_forward_rpc: Option<Url>,
 }
 
 pub fn connect_ingress_to_builder(

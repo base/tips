@@ -55,6 +55,7 @@ pub trait IngressApi {
 pub struct IngressService<Queue> {
     provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
+    raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
     bundle_queue: Queue,
@@ -72,6 +73,7 @@ impl<Queue> IngressService<Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
+        raw_tx_forward_provider: Option<RootProvider<Optimism>>,
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
@@ -80,14 +82,17 @@ impl<Queue> IngressService<Queue> {
     ) -> Self {
         let provider = Arc::new(provider);
         let simulation_provider = Arc::new(simulation_provider);
+        let raw_tx_forward_provider = raw_tx_forward_provider.map(Arc::new);
         let account_abstraction_service: AccountAbstractionServiceImpl =
             AccountAbstractionServiceImpl::new(
                 simulation_provider.clone(),
                 config.validate_user_operation_timeout_ms,
             );
+
         Self {
             provider,
             simulation_provider,
+            raw_tx_forward_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
@@ -245,6 +250,20 @@ where
                 }
                 Err(e) => {
                     warn!(message = "Failed to send raw transaction to mempool", error = %e);
+                }
+            }
+        }
+
+        if let Some(ref forward_provider) = self.raw_tx_forward_provider {
+            let response = forward_provider
+                .send_raw_transaction(data.iter().as_slice())
+                .await;
+            match response {
+                Ok(_) => {
+                    info!(message = "Forwarded raw tx", hash=%transaction.tx_hash());
+                }
+                Err(e) => {
+                    warn!(message = "Failed to forward raw tx", hash=%transaction.tx_hash(), error = %e);
                 }
             }
         }
