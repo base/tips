@@ -138,6 +138,14 @@ pub struct Config {
     )]
     pub max_buffered_meter_bundle_responses: usize,
 
+    /// Maximum number of backrun bundles to buffer in memory
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_MAX_BUFFERED_BACKRUN_BUNDLES",
+        default_value = "100"
+    )]
+    pub max_buffered_backrun_bundles: usize,
+
     /// Address to bind the health check server to
     #[arg(
         long,

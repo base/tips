@@ -68,8 +68,7 @@ async fn main() -> anyhow::Result<()> {
 
     let (builder_tx, _) =
         broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
-    let (builder_backrun_tx, _) =
-        broadcast::channel::<Bundle>(config.max_buffered_meter_bundle_responses);
+    let (builder_backrun_tx, _) = broadcast::channel::<Bundle>(config.max_buffered_backrun_bundles);
     config.builder_rpcs.iter().for_each(|builder_rpc| {
         let metering_rx = builder_tx.subscribe();
         let backrun_rx = builder_backrun_tx.subscribe();
