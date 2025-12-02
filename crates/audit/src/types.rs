@@ -90,17 +90,6 @@ impl BundleEvent {
     }
 
     pub fn generate_event_key(&self) -> String {
-        match self {
-            BundleEvent::BlockIncluded {
-                bundle_id,
-                block_hash,
-                ..
-            } => {
-                format!("{bundle_id}-{block_hash}")
-            }
-            _ => {
-                format!("{}-{}", self.bundle_id(), Uuid::new_v4())
-            }
-        }
+        self.bundle_id().to_string()
     }
 }
