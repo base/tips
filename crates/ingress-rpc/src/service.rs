@@ -82,7 +82,7 @@ impl<Queue> IngressService<Queue> {
         Self {
             provider,
             simulation_provider,
-            account_abstraction_service: account_abstraction_service,
+            account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
             audit_channel,
