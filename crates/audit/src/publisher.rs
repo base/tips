@@ -1,4 +1,4 @@
-use crate::types::{BundleEvent, BundleId};
+use crate::types::BundleEvent;
 use anyhow::Result;
 use async_trait::async_trait;
 use dashmap::DashSet;
@@ -17,7 +17,7 @@ pub trait BundleEventPublisher: Send + Sync {
 pub struct KafkaBundleEventPublisher {
     producer: FutureProducer,
     topic: String,
-    pending_events: DashSet<BundleId>,
+    pending_events: DashSet<String>,
 }
 
 impl KafkaBundleEventPublisher {
@@ -31,13 +31,14 @@ impl KafkaBundleEventPublisher {
 
     async fn send_event(&self, event: &BundleEvent) -> Result<()> {
         let bundle_id = event.bundle_id();
-        if self.pending_events.contains(&bundle_id) {
+        let key = event.generate_event_key();
+
+        if self.pending_events.contains(&key) {
             debug!(bundle_id = %bundle_id, "We already got this event");
             return Ok(());
         }
-        self.pending_events.insert(bundle_id);
+        self.pending_events.insert(key.clone());
 
-        let key = event.generate_event_key();
         let payload = serde_json::to_vec(event)?;
 
         let record = FutureRecord::to(&self.topic).key(&key).payload(&payload);
@@ -49,7 +50,7 @@ impl KafkaBundleEventPublisher {
         {
             Ok(_) => {
                 // Remove from pending_events after successful send to prevent memory growth
-                self.pending_events.remove(&bundle_id);
+                self.pending_events.remove(&key);
                 debug!(
                     bundle_id = %bundle_id,
                     topic = %self.topic,
