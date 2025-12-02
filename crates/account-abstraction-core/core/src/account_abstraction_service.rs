@@ -28,8 +28,7 @@ impl AccountAbstractionService for AccountAbstractionServiceImpl {
     ) -> RpcResult<UserOperationRequestValidationResult> {
         // Steps: Reputation Service Validate
         // Steps: Base Node Validate User Operation
-        let validation_result = self.base_node_validate_user_operation(user_operation).await;
-        validation_result
+        self.base_node_validate_user_operation(user_operation).await
     }
 }
 
