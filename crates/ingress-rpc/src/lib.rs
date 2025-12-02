@@ -1,3 +1,4 @@
+pub mod health;
 pub mod metrics;
 pub mod queue;
 pub mod service;
@@ -86,6 +87,9 @@ pub struct Config {
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
+    #[arg(long, env = "TIPS_INGRESS_LOG_FORMAT", default_value = "pretty")]
+    pub log_format: tips_core::logger::LogFormat,
+
     /// Default lifetime for sent transactions in seconds (default: 3 hours)
     #[arg(
         long,
@@ -133,6 +137,14 @@ pub struct Config {
         default_value = "100"
     )]
     pub max_buffered_meter_bundle_responses: usize,
+
+    /// Address to bind the health check server to
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_HEALTH_CHECK_ADDR",
+        default_value = "0.0.0.0:8081"
+    )]
+    pub health_check_addr: SocketAddr,
 
     /// Enable backrun bundle submission to op-rbuilder
     #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]

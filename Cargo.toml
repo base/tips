@@ -12,7 +12,6 @@ resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
-tips-bundle-pool = { path = "crates/bundle-pool" }
 tips-core = { path = "crates/core" }
 
 # Reth
@@ -28,6 +27,7 @@ alloy-primitives = { version = "1.4.1", default-features = false, features = [
 alloy-consensus = { version = "1.0.41" }
 alloy-provider = { version = "1.0.41" }
 alloy-serde = "1.0.41"
+alloy-rpc-types = "1.1.2"
 
 # op-alloy
 op-alloy-network = { version = "0.22.0", default-features = false }
@@ -37,7 +37,7 @@ op-alloy-flz = {  version = "0.13.1" }
 
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
 anyhow = "1.0.99"
 clap = { version = "4.5.47", features = ["derive", "env"] }
 url = "2.5.7"
@@ -51,6 +51,7 @@ testcontainers-modules = { version = "0.11.2", features = ["postgres", "kafka", 
 jsonrpsee = { version = "0.26.0", features = ["server", "macros"] }
 chrono = { version = "0.4.42", features = ["serde"] }
 futures = "0.3"
+axum = "0.8.3"
 
 # Kafka and S3 dependencies
 rdkafka = { version = "0.37.0", features = ["libz-static", "ssl-vendored"] }

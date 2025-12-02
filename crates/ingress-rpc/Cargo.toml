@@ -39,3 +39,4 @@ metrics.workspace = true
 metrics-derive.workspace = true
 metrics-exporter-prometheus.workspace = true
 futures.workspace = true
+axum.workspace = true
