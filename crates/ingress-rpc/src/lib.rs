@@ -84,6 +84,14 @@ pub struct Config {
     )]
     pub audit_topic: String,
 
+    /// User operation topic for pushing valid user operations
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_USER_OPERATION_TOPIC",
+        default_value = "tips-user-operation"
+    )]
+    pub user_operation_topic: String,
+
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 

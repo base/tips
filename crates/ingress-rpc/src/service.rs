@@ -93,8 +93,8 @@ impl IngressService {
             tx_submission_method: config.tx_submission_method,
             user_op_queue_publisher: UserOpQueuePublisher::new(
                 queueConnection.clone(),
-                "TODO: Change topic to user_op_topic".into(),
-            ), // TODO: Change topic to user_op_topic
+                config.user_operation_topic,
+            ),
             bundle_queue_publisher: BundleQueuePublisher::new(
                 queueConnection.clone(),
                 config.ingress_topic,
