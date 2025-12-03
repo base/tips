@@ -436,7 +436,7 @@ mod tests {
     use alloy_provider::RootProvider;
     use async_trait::async_trait;
     use std::net::{IpAddr, SocketAddr};
-    use std::sync::Arc;
+    use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
     use tokio::sync::{broadcast, mpsc};
     use url::Url;
@@ -478,6 +478,7 @@ mod tests {
             max_buffered_backrun_bundles: 100,
             health_check_addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
             backrun_enabled: false,
+            raw_tx_forward_rpc: None,
         }
     }
 
@@ -548,20 +549,19 @@ mod tests {
 
         let provider: RootProvider<Optimism> =
             RootProvider::new_http(mock_server.uri().parse().unwrap());
-        let simulation_provider = Arc::new(provider.clone());
+
+        let providers = Providers {
+            mempool: provider.clone(),
+            simulation: provider.clone(),
+            raw_tx_forward: None,
+        };
 
         let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
         let service = IngressService::new(
-            provider,
-            simulation_provider.as_ref().clone(),
-            MockQueue,
-            audit_tx,
-            builder_tx,
-            backrun_tx,
-            config,
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
         );
 
         let bundle = Bundle::default();
@@ -573,5 +573,65 @@ mod tests {
         assert!(result.is_err());
         let response = result.unwrap_or_else(|_| MeterBundleResponse::default());
         assert_eq!(response, MeterBundleResponse::default());
+    }
+
+    #[tokio::test]
+    async fn test_raw_tx_forward() {
+        let simulation_server = MockServer::start().await;
+        let forward_server = MockServer::start().await;
+
+        // Mock error response from base_meterBundle
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Simulation failed"
+                }
+            })))
+            .mount(&simulation_server)
+            .await;
+
+        // Mock forward endpoint - expect exactly 1 call
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            })))
+            .expect(1)
+            .mount(&forward_server)
+            .await;
+
+        let mut config = create_test_config(&simulation_server);
+        config.tx_submission_method = TxSubmissionMethod::Kafka; // Skip mempool send
+
+        let providers = Providers {
+            mempool: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            simulation: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            raw_tx_forward: Some(RootProvider::new_http(
+                forward_server.uri().parse().unwrap(),
+            )),
+        };
+
+        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
+        let (builder_tx, _builder_rx) = broadcast::channel(1);
+        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+
+        let service = IngressService::new(
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+        );
+
+        // Valid signed transaction bytes
+        let tx_bytes = Bytes::from_str("0x02f86c0d010183072335825208940000000000000000000000000000000000000000872386f26fc1000080c001a0cdb9e4f2f1ba53f9429077e7055e078cf599786e29059cd80c5e0e923bb2c114a01c90e29201e031baf1da66296c3a5c15c200bcb5e6c34da2f05f7d1778f8be07").unwrap();
+
+        let result = service.send_raw_transaction(tx_bytes).await;
+        assert!(result.is_ok());
+
+        // Wait for spawned forward task to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // wiremock automatically verifies expect(1) when forward_server is dropped
     }
 }
