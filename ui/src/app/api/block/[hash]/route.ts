@@ -1,0 +1,141 @@
+import { type NextRequest, NextResponse } from "next/server";
+import {
+  type BlockData,
+  type BlockTransaction,
+  cacheBlockData,
+  getBlockFromCache,
+  getBundleHistory,
+  getTransactionMetadataByHash,
+  type MeterBundleResult,
+} from "@/lib/s3";
+
+const RPC_URL = process.env.TIPS_UI_RPC_URL || "http://localhost:8545";
+
+interface RpcBlockTransaction {
+  hash: string;
+  from: string;
+  to: string | null;
+  gas: string;
+  blockNumber: string;
+  transactionIndex: string;
+}
+
+interface RpcBlock {
+  hash: string;
+  number: string;
+  timestamp: string;
+  transactions: RpcBlockTransaction[];
+  gasUsed: string;
+  gasLimit: string;
+}
+
+async function fetchBlockFromRpc(blockHash: string): Promise<RpcBlock | null> {
+  try {
+    const response = await fetch(RPC_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        method: "eth_getBlockByHash",
+        params: [blockHash, true],
+        id: 1,
+      }),
+    });
+
+    const data = await response.json();
+    if (data.error || !data.result) {
+      return null;
+    }
+
+    return data.result as RpcBlock;
+  } catch (error) {
+    console.error("Failed to fetch block from RPC:", error);
+    return null;
+  }
+}
+
+async function enrichTransactionWithBundleData(
+  txHash: string,
+): Promise<{ bundleId: string | null; executionTimeUs: number | null }> {
+  const metadata = await getTransactionMetadataByHash(txHash);
+  if (!metadata || metadata.bundle_ids.length === 0) {
+    return { bundleId: null, executionTimeUs: null };
+  }
+
+  const bundleId = metadata.bundle_ids[0];
+  const bundleHistory = await getBundleHistory(bundleId);
+  if (!bundleHistory) {
+    return { bundleId, executionTimeUs: null };
+  }
+
+  const receivedEvent = bundleHistory.history.find(
+    (e) => e.event === "Received",
+  );
+  if (!receivedEvent?.data?.bundle?.meter_bundle_response?.results) {
+    return { bundleId, executionTimeUs: null };
+  }
+
+  const txResult = receivedEvent.data.bundle.meter_bundle_response.results.find(
+    (r: MeterBundleResult) => r.txHash.toLowerCase() === txHash.toLowerCase(),
+  );
+
+  return {
+    bundleId,
+    executionTimeUs: txResult?.executionTimeUs ?? null,
+  };
+}
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ hash: string }> },
+) {
+  try {
+    const { hash } = await params;
+
+    const cachedBlock = await getBlockFromCache(hash);
+    if (cachedBlock) {
+      return NextResponse.json(cachedBlock);
+    }
+
+    const rpcBlock = await fetchBlockFromRpc(hash);
+    if (!rpcBlock) {
+      return NextResponse.json({ error: "Block not found" }, { status: 404 });
+    }
+
+    const transactions: BlockTransaction[] = await Promise.all(
+      rpcBlock.transactions.map(async (tx, index) => {
+        const { bundleId, executionTimeUs } =
+          await enrichTransactionWithBundleData(tx.hash);
+        return {
+          hash: tx.hash,
+          from: tx.from,
+          to: tx.to,
+          gasUsed: parseInt(tx.gas, 16),
+          executionTimeUs,
+          bundleId,
+          index,
+        };
+      }),
+    );
+
+    const blockData: BlockData = {
+      hash: rpcBlock.hash,
+      number: parseInt(rpcBlock.number, 16),
+      timestamp: parseInt(rpcBlock.timestamp, 16),
+      transactions,
+      gasUsed: parseInt(rpcBlock.gasUsed, 16),
+      gasLimit: parseInt(rpcBlock.gasLimit, 16),
+      cachedAt: Date.now(),
+    };
+
+    await cacheBlockData(blockData);
+
+    return NextResponse.json(blockData);
+  } catch (error) {
+    console.error("Error fetching block data:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
