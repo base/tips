@@ -20,7 +20,6 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use crate::queue2::{BundleQueuePublisher, UserOpQueuePublisher, KafkaMessageQueue};
@@ -52,7 +51,7 @@ pub trait IngressApi {
     ) -> RpcResult<SendUserOperationResponse>;
 }
 
-pub struct IngressService<Queue> {
+pub struct IngressService {
     provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
@@ -69,7 +68,7 @@ pub struct IngressService<Queue> {
     builder_backrun_tx: broadcast::Sender<Bundle>,
 }
 
-impl<Queue> IngressService<Queue> {
+impl IngressService {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
@@ -108,9 +107,7 @@ impl<Queue> IngressService<Queue> {
 }
 
 #[async_trait]
-impl<Queue> IngressApiServer for IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
+impl IngressApiServer for IngressService
 {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
@@ -159,8 +156,8 @@ where
 
         // publish the bundle to the queue
         if let Err(e) = self
-            .bundle_queue
-            .publish_raw(&self.bundle_queue.topic, &bundle_hash.to_string(), &accepted_bundle.to_vec())
+            .bundle_queue_publisher
+            .publish(&accepted_bundle, &bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -227,7 +224,7 @@ where
 
         if send_to_kafka {
             if let Err(e) = self
-                .bundle_queue
+                .bundle_queue_publisher
                 .publish(&accepted_bundle, bundle_hash)
                 .await
             {
@@ -281,9 +278,7 @@ where
     }
 }
 
-impl<Queue> IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
+impl IngressService
 {
     async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
