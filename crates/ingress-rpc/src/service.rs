@@ -20,10 +20,10 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
+use crate::queue2::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use crate::queue2::{BundleQueuePublisher, UserOpQueuePublisher, KafkaMessageQueue};
-use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
+use account_abstraction_core::types::{SendUserOperationResponse, VersionedUserOperation};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 #[rpc(server, namespace = "eth")]
@@ -47,7 +47,7 @@ pub trait IngressApi {
     #[method(name = "sendUserOperation")]
     async fn send_user_operation(
         &self,
-        user_operation: UserOperationRequest,
+        user_operation: VersionedUserOperation,
     ) -> RpcResult<SendUserOperationResponse>;
 }
 
@@ -91,8 +91,14 @@ impl IngressService {
             simulation_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
-            user_op_queue_publisher: UserOpQueuePublisher::new(queueConnection.clone(), "TODO: Change topic to user_op_topic".into()), // TODO: Change topic to user_op_topic
-            bundle_queue_publisher: BundleQueuePublisher::new(queueConnection.clone(), config.ingress_topic),
+            user_op_queue_publisher: UserOpQueuePublisher::new(
+                queueConnection.clone(),
+                "TODO: Change topic to user_op_topic".into(),
+            ), // TODO: Change topic to user_op_topic
+            bundle_queue_publisher: BundleQueuePublisher::new(
+                queueConnection.clone(),
+                config.ingress_topic,
+            ),
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -107,8 +113,7 @@ impl IngressService {
 }
 
 #[async_trait]
-impl IngressApiServer for IngressService
-{
+impl IngressApiServer for IngressService {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
             info!(
@@ -260,7 +265,7 @@ impl IngressApiServer for IngressService
 
     async fn send_user_operation(
         &self,
-        user_operation: UserOperationRequest,
+        user_operation: VersionedUserOperation,
     ) -> RpcResult<SendUserOperationResponse> {
         dbg!(&user_operation);
 
@@ -269,17 +274,24 @@ impl IngressApiServer for IngressService
         // 2. Base Node Validate User Operation
         let _ = self
             .account_abstraction_service
-            .validate_user_operation(user_operation)
+            .validate_user_operation(&user_operation)
             .await?;
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
+        if let Err(e) = self
+            .user_op_queue_publisher
+            .publish(&user_operation, &"TODO: GET USER OPERATION HASH".to_string())
+            .await
+        {
+            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %"SOME:HASH TO REPLACE ONE DAY", error = %e);
+            return Err(EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err());
+        }
         todo!("not yet implemented send_user_operation");
     }
 }
 
-impl IngressService
-{
+impl IngressService {
     async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());

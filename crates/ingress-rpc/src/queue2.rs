@@ -1,3 +1,4 @@
+use account_abstraction_core::types::VersionedUserOperation;
 use alloy_primitives::B256;
 use anyhow::Result;
 use async_trait::async_trait;
@@ -6,16 +7,10 @@ use rdkafka::producer::{FutureProducer, FutureRecord};
 use tips_core::AcceptedBundle;
 use tokio::time::Duration;
 use tracing::{error, info};
-use account_abstraction_core::types::UserOperationRequest;
 
 #[async_trait]
 pub trait MessageQueue: Send + Sync {
-    async fn publish_raw(
-        &self,
-        topic: &str,
-        key: &str,
-        payload: &[u8],
-    ) -> Result<()>;
+    async fn publish_raw(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()>;
 }
 
 pub struct KafkaMessageQueue {
@@ -31,7 +26,6 @@ impl KafkaMessageQueue {
 #[async_trait]
 impl MessageQueue for KafkaMessageQueue {
     async fn publish_raw(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()> {
-       
         let enqueue = || async {
             let record = FutureRecord::to(topic).key(key).payload(payload);
 
@@ -72,7 +66,6 @@ impl MessageQueue for KafkaMessageQueue {
     }
 }
 
-
 pub struct UserOpQueuePublisher<Q: MessageQueue> {
     queue: std::sync::Arc<Q>,
     topic: String,
@@ -83,14 +76,12 @@ impl<Q: MessageQueue> UserOpQueuePublisher<Q> {
         Self { queue, topic }
     }
 
-    pub async fn publish(&self, user_op: &UserOperationRequest, hash: &B256) -> Result<()> {
-        let key = hash.to_string();
-        let payload = serde_json::to_vec(user_op)?;
+    pub async fn publish(&self, user_op: &VersionedUserOperation, hash: &String) -> Result<()> {
+        let key = hash;
+        let payload = serde_json::to_vec(&user_op)?;
         self.queue.publish_raw(&self.topic, &key, &payload).await
     }
 }
-
-
 
 pub struct BundleQueuePublisher<Q: MessageQueue> {
     queue: std::sync::Arc<Q>,
@@ -108,4 +99,3 @@ impl<Q: MessageQueue> BundleQueuePublisher<Q> {
         self.queue.publish_raw(&self.topic, &key, &payload).await
     }
 }
-

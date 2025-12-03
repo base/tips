@@ -1,13 +1,14 @@
-use alloy_primitives::U256;
+use alloy_primitives::{B256, U256};
 use alloy_rpc_types::erc4337;
 use serde::{Deserialize, Serialize};
+
 
 // Re-export SendUserOperationResponse
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
-pub enum UserOperationRequest {
+pub enum VersionedUserOperation {
     EntryPointV06(erc4337::UserOperation),
     EntryPointV07(erc4337::PackedUserOperation),
 }
@@ -16,6 +17,7 @@ pub enum UserOperationRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UserOperationRequestValidationResult {
     pub expiration_timestamp: u64,
+    pub hash: B256,
     pub gas_used: U256,
 }
 
@@ -36,8 +38,8 @@ mod tests {
         "callGasLimit": "0x5208"
         }
     "#;
-        let user_operation: Result<UserOperationRequest, serde_json::Error> =
-            serde_json::from_str::<UserOperationRequest>(TEST_INVALID_USER_OPERATION);
+        let user_operation: Result<VersionedUserOperation, serde_json::Error> =
+            serde_json::from_str::<VersionedUserOperation>(TEST_INVALID_USER_OPERATION);
         assert!(user_operation.is_err());
     }
 
@@ -59,14 +61,14 @@ mod tests {
             "signature": "0x01"
         }
     "#;
-        let user_operation: Result<UserOperationRequest, serde_json::Error> =
-            serde_json::from_str::<UserOperationRequest>(TEST_USER_OPERATION);
+        let user_operation: Result<VersionedUserOperation, serde_json::Error> =
+            serde_json::from_str::<VersionedUserOperation>(TEST_USER_OPERATION);
         if user_operation.is_err() {
             panic!("Error: {:?}", user_operation.err());
         }
         let user_operation = user_operation.unwrap();
         match user_operation {
-            UserOperationRequest::EntryPointV06(user_operation) => {
+            VersionedUserOperation::EntryPointV06(user_operation) => {
                 assert_eq!(
                     user_operation.sender,
                     Address::from_str("0x1111111111111111111111111111111111111111").unwrap()
@@ -116,14 +118,14 @@ mod tests {
         "signature": "0xa3c5f1b90014e68abbbdc42e4b77b9accc0b7e1c5d0b5bcde1a47ba8faba00ff55c9a7de12e98b731766e35f6c51ab25c9b58cc0e7c4a33f25e75c51c6ad3c3a"
         }
     "#;
-        let user_operation: Result<UserOperationRequest, serde_json::Error> =
-            serde_json::from_str::<UserOperationRequest>(TEST_PACKED_USER_OPERATION);
+        let user_operation: Result<VersionedUserOperation, serde_json::Error> =
+            serde_json::from_str::<VersionedUserOperation>(TEST_PACKED_USER_OPERATION);
         if user_operation.is_err() {
             panic!("Error: {:?}", user_operation.err());
         }
         let user_operation = user_operation.unwrap();
         match user_operation {
-            UserOperationRequest::EntryPointV07(user_operation) => {
+            VersionedUserOperation::EntryPointV07(user_operation) => {
                 assert_eq!(
                     user_operation.sender,
                     Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()

@@ -20,4 +20,3 @@ pub fn load_kafka_config_from_file(
 
     Ok(config)
 }
-
