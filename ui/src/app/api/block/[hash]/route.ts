@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { type Block, createPublicClient, type Hash, http } from "viem";
+import { mainnet } from "viem/chains";
 import {
   type BlockData,
   type BlockTransaction,
@@ -11,43 +13,20 @@ import {
 
 const RPC_URL = process.env.TIPS_UI_RPC_URL || "http://localhost:8545";
 
-interface RpcBlockTransaction {
-  hash: string;
-  from: string;
-  to: string | null;
-  gas: string;
-  blockNumber: string;
-  transactionIndex: string;
-}
+const client = createPublicClient({
+  chain: mainnet,
+  transport: http(RPC_URL),
+});
 
-interface RpcBlock {
-  hash: string;
-  number: string;
-  timestamp: string;
-  transactions: RpcBlockTransaction[];
-  gasUsed: string;
-  gasLimit: string;
-}
-
-async function fetchBlockFromRpc(blockHash: string): Promise<RpcBlock | null> {
+async function fetchBlockFromRpc(
+  blockHash: string,
+): Promise<Block<bigint, true> | null> {
   try {
-    const response = await fetch(RPC_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        jsonrpc: "2.0",
-        method: "eth_getBlockByHash",
-        params: [blockHash, true],
-        id: 1,
-      }),
+    const block = await client.getBlock({
+      blockHash: blockHash as Hash,
+      includeTransactions: true,
     });
-
-    const data = await response.json();
-    if (data.error || !data.result) {
-      return null;
-    }
-
-    return data.result as RpcBlock;
+    return block;
   } catch (error) {
     console.error("Failed to fetch block from RPC:", error);
     return null;
@@ -98,7 +77,7 @@ export async function GET(
     }
 
     const rpcBlock = await fetchBlockFromRpc(hash);
-    if (!rpcBlock) {
+    if (!rpcBlock || !rpcBlock.hash || !rpcBlock.number) {
       return NextResponse.json({ error: "Block not found" }, { status: 404 });
     }
 
@@ -110,7 +89,7 @@ export async function GET(
           hash: tx.hash,
           from: tx.from,
           to: tx.to,
-          gasUsed: parseInt(tx.gas, 16),
+          gasUsed: tx.gas,
           executionTimeUs,
           bundleId,
           index,
@@ -120,11 +99,11 @@ export async function GET(
 
     const blockData: BlockData = {
       hash: rpcBlock.hash,
-      number: parseInt(rpcBlock.number, 16),
-      timestamp: parseInt(rpcBlock.timestamp, 16),
+      number: rpcBlock.number,
+      timestamp: rpcBlock.timestamp,
       transactions,
-      gasUsed: parseInt(rpcBlock.gasUsed, 16),
-      gasLimit: parseInt(rpcBlock.gasLimit, 16),
+      gasUsed: rpcBlock.gasUsed,
+      gasLimit: rpcBlock.gasLimit,
       cachedAt: Date.now(),
     };
 

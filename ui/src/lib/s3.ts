@@ -184,7 +184,7 @@ export interface BlockTransaction {
   hash: string;
   from: string;
   to: string | null;
-  gasUsed: number;
+  gasUsed: bigint;
   executionTimeUs: number | null;
   bundleId: string | null;
   index: number;
@@ -192,11 +192,11 @@ export interface BlockTransaction {
 
 export interface BlockData {
   hash: string;
-  number: number;
-  timestamp: number;
+  number: bigint;
+  timestamp: bigint;
   transactions: BlockTransaction[];
-  gasUsed: number;
-  gasLimit: number;
+  gasUsed: bigint;
+  gasLimit: bigint;
   cachedAt: number;
 }
 

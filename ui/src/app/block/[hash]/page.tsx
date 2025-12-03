@@ -228,7 +228,7 @@ function BlockStats({ block }: { block: BlockData }) {
         <div>
           <span className="text-gray-500">Timestamp</span>
           <span className="ml-2 font-medium">
-            {new Date(block.timestamp * 1000).toLocaleString()}
+            {new Date(Number(block.timestamp) * 1000).toLocaleString()}
           </span>
         </div>
       </div>

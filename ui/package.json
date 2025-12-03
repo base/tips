@@ -13,7 +13,8 @@
     "@aws-sdk/client-s3": "^3.888.0",
     "next": "15.5.3",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "viem": "^2.41.2"
   },
   "devDependencies": {
     "@biomejs/biome": "2.2.0",
