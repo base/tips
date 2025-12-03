@@ -48,22 +48,12 @@ async fn main() -> anyhow::Result<()> {
             .disable_recommended_fillers()
             .network::<Optimism>()
             .connect_http(config.simulation_rpc),
-        raw_tx_forward: if config.raw_tx_forward_enabled {
-            match config.raw_tx_forward_rpc.clone() {
-                Some(url) => Some(
-                    ProviderBuilder::new()
-                        .disable_recommended_fillers()
-                        .network::<Optimism>()
-                        .connect_http(url),
-                ),
-                None => {
-                    tracing::warn!(message = "Raw tx forwarding enabled but no RPC URL configured");
-                    None
-                }
-            }
-        } else {
-            None
-        },
+        raw_tx_forward: config.raw_tx_forward_rpc.clone().map(|url| {
+            ProviderBuilder::new()
+                .disable_recommended_fillers()
+                .network::<Optimism>()
+                .connect_http(url)
+        }),
     };
 
     let ingress_client_config = ClientConfig::from_iter(load_kafka_config_from_file(

@@ -17,7 +17,7 @@ use tips_core::{
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
@@ -265,7 +265,7 @@ where
                 .await;
             match response {
                 Ok(_) => {
-                    info!(message = "Forwarded raw tx", hash=%transaction.tx_hash());
+                    debug!(message = "Forwarded raw tx", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
                     warn!(message = "Failed to forward raw tx", hash=%transaction.tx_hash(), error = %e);
