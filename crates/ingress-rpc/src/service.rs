@@ -23,10 +23,10 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
+use crate::queue2::{BundleQueuePublisher, UserOpQueuePublisher, KafkaMessageQueue};
 use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
-
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
@@ -57,7 +57,8 @@ pub struct IngressService<Queue> {
     simulation_provider: Arc<RootProvider<Optimism>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
-    bundle_queue: Queue,
+    bundle_queue_publisher: BundleQueuePublisher<KafkaMessageQueue>,
+    user_op_queue_publisher: UserOpQueuePublisher<KafkaMessageQueue>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -72,7 +73,7 @@ impl<Queue> IngressService<Queue> {
     pub fn new(
         provider: RootProvider<Optimism>,
         simulation_provider: RootProvider<Optimism>,
-        queue: Queue,
+        queue: KafkaMessageQueue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
@@ -85,12 +86,14 @@ impl<Queue> IngressService<Queue> {
                 simulation_provider.clone(),
                 config.validate_user_operation_timeout_ms,
             );
+        let queueConnection = Arc::new(queue);
         Self {
             provider,
             simulation_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
-            bundle_queue: queue,
+            user_op_queue_publisher: UserOpQueuePublisher::new(queueConnection.clone(), "TODO: Change topic to user_op_topic".into()), // TODO: Change topic to user_op_topic
+            bundle_queue_publisher: BundleQueuePublisher::new(queueConnection.clone(), config.ingress_topic),
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -157,7 +160,7 @@ where
         // publish the bundle to the queue
         if let Err(e) = self
             .bundle_queue
-            .publish(&accepted_bundle, &bundle_hash)
+            .publish_raw(&self.bundle_queue.topic, &bundle_hash.to_string(), &accepted_bundle.to_vec())
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);

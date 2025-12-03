@@ -3,7 +3,7 @@ pub mod metrics;
 pub mod queue;
 pub mod service;
 pub mod validation;
-
+pub mod queue2;
 use alloy_primitives::TxHash;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use clap::Parser;
@@ -14,6 +14,7 @@ use tips_core::MeterBundleResponse;
 use tokio::sync::broadcast;
 use tracing::error;
 use url::Url;
+
 
 #[derive(Debug, Clone, Copy)]
 pub enum TxSubmissionMethod {
