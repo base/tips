@@ -137,21 +137,6 @@ function Badge({
   );
 }
 
-function _KeyValue({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[140px_1fr] gap-4 py-2">
-      <dt className="text-sm text-gray-500">{label}</dt>
-      <dd className="text-sm text-gray-900 text-right truncate">{value}</dd>
-    </div>
-  );
-}
-
 function Card({
   children,
   className = "",
@@ -238,7 +223,11 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2 w-20">Hash</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <ExplorerLink type="tx" value={tx.hash} className="font-mono text-blue-600">
+                      <ExplorerLink
+                        type="tx"
+                        value={tx.hash}
+                        className="font-mono text-blue-600"
+                      >
                         {tx.hash}
                       </ExplorerLink>
                       <CopyButton text={tx.hash} />
@@ -249,7 +238,11 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2">From</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <ExplorerLink type="address" value={tx.signer} className="font-mono">
+                      <ExplorerLink
+                        type="address"
+                        value={tx.signer}
+                        className="font-mono"
+                      >
                         {tx.signer}
                       </ExplorerLink>
                       <CopyButton text={tx.signer} />
@@ -260,7 +253,11 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2">To</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <ExplorerLink type="address" value={tx.to} className="font-mono">
+                      <ExplorerLink
+                        type="address"
+                        value={tx.to}
+                        className="font-mono"
+                      >
                         {tx.to}
                       </ExplorerLink>
                       <CopyButton text={tx.to} />
@@ -296,26 +293,6 @@ function TransactionDetails({
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function _MetricCard({
-  label,
-  value,
-  subtext,
-}: {
-  label: string;
-  value: string;
-  subtext?: string;
-}) {
-  return (
-    <div className="p-5">
-      <div className="text-sm font-medium text-gray-500 mb-1">{label}</div>
-      <div className="text-2xl font-semibold text-gray-900 tracking-tight">
-        {value}
-      </div>
-      {subtext && <div className="text-xs text-gray-400 mt-1">{subtext}</div>}
     </div>
   );
 }
