@@ -1,4 +1,4 @@
-use crate::types::{VersionedUserOperation, UserOperationRequestValidationResult};
+use crate::types::{UserOperationRequestValidationResult, VersionedUserOperation};
 use alloy_provider::{Provider, RootProvider};
 use async_trait::async_trait;
 use jsonrpsee::core::RpcResult;

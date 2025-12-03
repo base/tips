@@ -23,7 +23,7 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue2::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest, VersionedUserOperation};
+use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 #[rpc(server, namespace = "eth")]
@@ -85,18 +85,18 @@ impl IngressService {
                 simulation_provider.clone(),
                 config.validate_user_operation_timeout_ms,
             );
-        let queueConnection = Arc::new(queue);
+        let queue_connection = Arc::new(queue);
         Self {
             provider,
             simulation_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             user_op_queue_publisher: UserOpQueuePublisher::new(
-                queueConnection.clone(),
+                queue_connection.clone(),
                 config.user_operation_topic,
             ),
             bundle_queue_publisher: BundleQueuePublisher::new(
-                queueConnection.clone(),
+                queue_connection.clone(),
                 config.ingress_topic,
             ),
             audit_channel,
@@ -274,11 +274,16 @@ impl IngressApiServer for IngressService {
             .await?;
         if let Err(e) = self
             .user_op_queue_publisher
-            .publish(&user_operation_request.user_operation, &user_operation_request.hash())
+            .publish(
+                &user_operation_request.user_operation,
+                &user_operation_request.hash(),
+            )
             .await
         {
             warn!(message = "Failed to publish user operation to queue", user_operation_hash = %user_operation_request.hash(), error = %e);
-            return Err(EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err());
+            return Err(
+                EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err(),
+            );
         }
         todo!("not yet implemented send_user_operation");
     }

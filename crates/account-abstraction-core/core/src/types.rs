@@ -1,7 +1,6 @@
-use alloy_primitives::{B256, U256, Address};
+use alloy_primitives::{Address, B256, U256};
 use alloy_rpc_types::erc4337;
 use serde::{Deserialize, Serialize};
-
 
 // Re-export SendUserOperationResponse
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
@@ -21,7 +20,7 @@ pub struct UserOperationRequest {
 
 impl UserOperationRequest {
     pub fn hash(&self) -> B256 {
-        let payload =self.entry_point.to_string();
+        let payload = self.entry_point.to_string();
         let hash = alloy_primitives::keccak256(&payload);
         B256::from(hash)
     }
