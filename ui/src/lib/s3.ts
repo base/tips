@@ -211,7 +211,20 @@ export async function getBlockFromCache(
   }
 
   try {
-    return JSON.parse(content) as BlockData;
+    const parsed = JSON.parse(content);
+    return {
+      ...parsed,
+      number: BigInt(parsed.number),
+      timestamp: BigInt(parsed.timestamp),
+      gasUsed: BigInt(parsed.gasUsed),
+      gasLimit: BigInt(parsed.gasLimit),
+      transactions: parsed.transactions.map(
+        (tx: BlockTransaction & { gasUsed: string }) => ({
+          ...tx,
+          gasUsed: BigInt(tx.gasUsed),
+        }),
+      ),
+    } as BlockData;
   } catch (error) {
     console.error(`Failed to parse block data for hash ${blockHash}:`, error);
     return null;
@@ -225,7 +238,9 @@ export async function cacheBlockData(blockData: BlockData): Promise<void> {
     const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
       Key: key,
-      Body: JSON.stringify(blockData),
+      Body: JSON.stringify(blockData, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      ),
       ContentType: "application/json",
     });
 

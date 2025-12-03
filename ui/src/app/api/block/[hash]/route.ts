@@ -11,6 +11,20 @@ import {
   type MeterBundleResult,
 } from "@/lib/s3";
 
+function serializeBlockData(block: BlockData) {
+  return {
+    ...block,
+    number: block.number.toString(),
+    timestamp: block.timestamp.toString(),
+    gasUsed: block.gasUsed.toString(),
+    gasLimit: block.gasLimit.toString(),
+    transactions: block.transactions.map((tx) => ({
+      ...tx,
+      gasUsed: tx.gasUsed.toString(),
+    })),
+  };
+}
+
 const RPC_URL = process.env.TIPS_UI_RPC_URL || "http://localhost:8545";
 
 const client = createPublicClient({
@@ -73,7 +87,7 @@ export async function GET(
 
     const cachedBlock = await getBlockFromCache(hash);
     if (cachedBlock) {
-      return NextResponse.json(cachedBlock);
+      return NextResponse.json(serializeBlockData(cachedBlock));
     }
 
     const rpcBlock = await fetchBlockFromRpc(hash);
@@ -109,7 +123,7 @@ export async function GET(
 
     await cacheBlockData(blockData);
 
-    return NextResponse.json(blockData);
+    return NextResponse.json(serializeBlockData(blockData));
   } catch (error) {
     console.error("Error fetching block data:", error);
     return NextResponse.json(
