@@ -7,6 +7,7 @@ import type { BundleTransaction, MeterBundleResponse } from "@/lib/s3";
 
 const WEI_PER_GWEI = 10n ** 9n;
 const WEI_PER_ETH = 10n ** 18n;
+const BLOCK_EXPLORER_URL = process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL;
 
 interface PageProps {
   params: Promise<{ uuid: string }>;
@@ -32,6 +33,34 @@ function formatHexValue(hex: string): string {
 function formatGasPrice(hex: string): string {
   const value = BigInt(hex);
   return `${formatBigInt(value, 2, WEI_PER_GWEI)} Gwei`;
+}
+
+function ExplorerLink({
+  type,
+  value,
+  children,
+  className = "",
+}: {
+  type: "tx" | "address";
+  value: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  if (!BLOCK_EXPLORER_URL) {
+    return <span className={className}>{children}</span>;
+  }
+
+  const path = type === "tx" ? `/tx/${value}` : `/address/${value}`;
+  return (
+    <a
+      href={`${BLOCK_EXPLORER_URL}${path}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`hover:underline ${className}`}
+    >
+      {children}
+    </a>
+  );
 }
 
 function CopyButton({ text }: { text: string }) {
@@ -209,7 +238,9 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2 w-20">Hash</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <span className="font-mono text-blue-600">{tx.hash}</span>
+                      <ExplorerLink type="tx" value={tx.hash} className="font-mono text-blue-600">
+                        {tx.hash}
+                      </ExplorerLink>
                       <CopyButton text={tx.hash} />
                     </span>
                   </td>
@@ -218,7 +249,9 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2">From</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <span className="font-mono">{tx.signer}</span>
+                      <ExplorerLink type="address" value={tx.signer} className="font-mono">
+                        {tx.signer}
+                      </ExplorerLink>
                       <CopyButton text={tx.signer} />
                     </span>
                   </td>
@@ -227,7 +260,9 @@ function TransactionDetails({
                   <td className="text-gray-500 py-2">To</td>
                   <td className="py-2 text-right">
                     <span className="inline-flex items-center gap-1">
-                      <span className="font-mono">{tx.to}</span>
+                      <ExplorerLink type="address" value={tx.to} className="font-mono">
+                        {tx.to}
+                      </ExplorerLink>
                       <CopyButton text={tx.to} />
                     </span>
                   </td>
@@ -407,7 +442,7 @@ export default function BundlePage({ params }: PageProps) {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 400);
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, [uuid]);
 
