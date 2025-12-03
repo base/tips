@@ -55,7 +55,7 @@ wiremock = "0.6.2"
 axum = "0.8.3"
 
 # Kafka and S3 dependencies
-rdkafka = { version = "0.37.0", features = ["libz-static", "ssl-vendored"] }
+rdkafka = { version = "0.37.0", features = ["zstd", "ssl-vendored"] }
 aws-config = "1.1.7"
 aws-sdk-s3 = "1.106.0"
 aws-credential-types = "1.1.7"
