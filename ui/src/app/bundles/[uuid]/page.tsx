@@ -311,7 +311,7 @@ function SimulationCard({ meter }: { meter: MeterBundleResponse }) {
           <div>
             <div className="text-xs text-gray-500 mb-1">Execution Time</div>
             <div className="text-xl font-semibold text-gray-900">
-              {meter.totalExecutionTimeUs}μs
+              {meter.results.reduce((sum, r) => sum + r.executionTimeUs, 0)}μs
             </div>
           </div>
           <div>
@@ -350,6 +350,48 @@ function SimulationCard({ meter }: { meter: MeterBundleResponse }) {
   );
 }
 
+function TimelineEventDetails({
+  event,
+}: {
+  event: BundleHistoryResponse["history"][0];
+}) {
+  if (event.event === "BlockIncluded" && event.data?.block_hash) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="success">{event.event}</Badge>
+        <Link
+          href={`/block/${event.data.block_hash}`}
+          className="text-xs font-mono text-blue-600 hover:underline"
+        >
+          Block #{event.data.block_number}
+        </Link>
+      </div>
+    );
+  }
+
+  if (event.event === "BuilderIncluded" && event.data?.builder) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge>{event.event}</Badge>
+        <span className="text-xs text-gray-500">
+          {event.data.builder} (flashblock #{event.data.flashblock_index})
+        </span>
+      </div>
+    );
+  }
+
+  if (event.event === "Dropped" && event.data?.reason) {
+    return (
+      <div className="flex items-center gap-2">
+        <Badge variant="error">{event.event}</Badge>
+        <span className="text-xs text-gray-500">{event.data.reason}</span>
+      </div>
+    );
+  }
+
+  return <Badge>{event.event}</Badge>;
+}
+
 function Timeline({ events }: { events: BundleHistoryResponse["history"] }) {
   if (events.length === 0) return null;
 
@@ -364,7 +406,7 @@ function Timeline({ events }: { events: BundleHistoryResponse["history"] }) {
             <div className="w-2 h-2 rounded-full bg-blue-600" />
           </div>
           <div className="flex-1 flex items-center justify-between gap-4">
-            <Badge>{event.event}</Badge>
+            <TimelineEventDetails event={event} />
             <time className="text-sm text-gray-500 tabular-nums">
               {event.data?.timestamp
                 ? new Date(event.data.timestamp).toLocaleString()

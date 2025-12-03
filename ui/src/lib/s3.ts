@@ -1,5 +1,6 @@
 import {
   GetObjectCommand,
+  PutObjectCommand,
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
@@ -138,13 +139,20 @@ export interface BundleData {
   meter_bundle_response: MeterBundleResponse;
 }
 
+export interface BundleEventData {
+  key: string;
+  timestamp: number;
+  bundle?: BundleData;
+  block_number?: number;
+  block_hash?: string;
+  builder?: string;
+  flashblock_index?: number;
+  reason?: string;
+}
+
 export interface BundleEvent {
   event: string;
-  data: {
-    key: string;
-    timestamp: number;
-    bundle?: BundleData;
-  };
+  data: BundleEventData;
 }
 
 export interface BundleHistory {
@@ -169,5 +177,75 @@ export async function getBundleHistory(
       error,
     );
     return null;
+  }
+}
+
+export interface BlockTransaction {
+  hash: string;
+  from: string;
+  to: string | null;
+  gasUsed: bigint;
+  executionTimeUs: number | null;
+  bundleId: string | null;
+  index: number;
+}
+
+export interface BlockData {
+  hash: string;
+  number: bigint;
+  timestamp: bigint;
+  transactions: BlockTransaction[];
+  gasUsed: bigint;
+  gasLimit: bigint;
+  cachedAt: number;
+}
+
+export async function getBlockFromCache(
+  blockHash: string,
+): Promise<BlockData | null> {
+  const key = `blocks/${blockHash}`;
+  const content = await getObjectContent(key);
+
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    return {
+      ...parsed,
+      number: BigInt(parsed.number),
+      timestamp: BigInt(parsed.timestamp),
+      gasUsed: BigInt(parsed.gasUsed),
+      gasLimit: BigInt(parsed.gasLimit),
+      transactions: parsed.transactions.map(
+        (tx: BlockTransaction & { gasUsed: string }) => ({
+          ...tx,
+          gasUsed: BigInt(tx.gasUsed),
+        }),
+      ),
+    } as BlockData;
+  } catch (error) {
+    console.error(`Failed to parse block data for hash ${blockHash}:`, error);
+    return null;
+  }
+}
+
+export async function cacheBlockData(blockData: BlockData): Promise<void> {
+  const key = `blocks/${blockData.hash}`;
+
+  try {
+    const command = new PutObjectCommand({
+      Bucket: BUCKET_NAME,
+      Key: key,
+      Body: JSON.stringify(blockData, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      ),
+      ContentType: "application/json",
+    });
+
+    await s3Client.send(command);
+  } catch (error) {
+    console.error(`Failed to cache block data for ${blockData.hash}:`, error);
   }
 }
