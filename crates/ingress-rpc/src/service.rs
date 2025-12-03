@@ -23,7 +23,7 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue2::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use account_abstraction_core::types::{SendUserOperationResponse, VersionedUserOperation};
+use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest, VersionedUserOperation};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 #[rpc(server, namespace = "eth")]
@@ -47,7 +47,7 @@ pub trait IngressApi {
     #[method(name = "sendUserOperation")]
     async fn send_user_operation(
         &self,
-        user_operation: VersionedUserOperation,
+        user_operation: UserOperationRequest,
     ) -> RpcResult<SendUserOperationResponse>;
 }
 
@@ -265,26 +265,19 @@ impl IngressApiServer for IngressService {
 
     async fn send_user_operation(
         &self,
-        user_operation: VersionedUserOperation,
+        user_operation_request: UserOperationRequest,
     ) -> RpcResult<SendUserOperationResponse> {
-        dbg!(&user_operation);
-
-        // STEPS:
-        // 1. Reputation Service Validate
-        // 2. Base Node Validate User Operation
+        dbg!(&user_operation_request);
         let _ = self
             .account_abstraction_service
-            .validate_user_operation(&user_operation)
+            .validate_user_operation(&user_operation_request.user_operation)
             .await?;
-        // 3. Send to Kafka
-        // Send Hash
-        // todo!("not yet implemented send_user_operation");
         if let Err(e) = self
             .user_op_queue_publisher
-            .publish(&user_operation, &"TODO: GET USER OPERATION HASH".to_string())
+            .publish(&user_operation_request.user_operation, &user_operation_request.hash())
             .await
         {
-            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %"SOME:HASH TO REPLACE ONE DAY", error = %e);
+            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %user_operation_request.hash(), error = %e);
             return Err(EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err());
         }
         todo!("not yet implemented send_user_operation");

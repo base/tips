@@ -1,4 +1,4 @@
-use alloy_primitives::{B256, U256};
+use alloy_primitives::{B256, U256, Address};
 use alloy_rpc_types::erc4337;
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,20 @@ pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 pub enum VersionedUserOperation {
     EntryPointV06(erc4337::UserOperation),
     EntryPointV07(erc4337::PackedUserOperation),
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+
+pub struct UserOperationRequest {
+    pub user_operation: VersionedUserOperation,
+    pub entry_point: Address,
+}
+
+impl UserOperationRequest {
+    pub fn hash(&self) -> B256 {
+        let payload =self.entry_point.to_string();
+        let hash = alloy_primitives::keccak256(&payload);
+        B256::from(hash)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

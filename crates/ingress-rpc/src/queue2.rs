@@ -76,8 +76,8 @@ impl<Q: MessageQueue> UserOpQueuePublisher<Q> {
         Self { queue, topic }
     }
 
-    pub async fn publish(&self, user_op: &VersionedUserOperation, hash: &String) -> Result<()> {
-        let key = hash;
+    pub async fn publish(&self, user_op: &VersionedUserOperation, hash: &B256) -> Result<()> {
+        let key = hash.to_string();
         let payload = serde_json::to_vec(&user_op)?;
         self.queue.publish_raw(&self.topic, &key, &payload).await
     }
