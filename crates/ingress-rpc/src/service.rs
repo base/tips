@@ -259,18 +259,23 @@ where
             }
         }
 
-        if let Some(ref forward_provider) = self.raw_tx_forward_provider {
-            let response = forward_provider
-                .send_raw_transaction(data.iter().as_slice())
-                .await;
-            match response {
-                Ok(_) => {
-                    debug!(message = "Forwarded raw tx", hash=%transaction.tx_hash());
+        if let Some(forward_provider) = self.raw_tx_forward_provider.clone() {
+            self.metrics.raw_tx_forwards_total.increment(1);
+            let tx_data = data.clone();
+            let tx_hash = transaction.tx_hash();
+            tokio::spawn(async move {
+                match forward_provider
+                    .send_raw_transaction(tx_data.iter().as_slice())
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(message = "Forwarded raw tx", hash = %tx_hash);
+                    }
+                    Err(e) => {
+                        warn!(message = "Failed to forward raw tx", hash = %tx_hash, error = %e);
+                    }
                 }
-                Err(e) => {
-                    warn!(message = "Failed to forward raw tx", hash=%transaction.tx_hash(), error = %e);
-                }
-            }
+            });
         }
 
         self.send_audit_event(&accepted_bundle, transaction.tx_hash());
