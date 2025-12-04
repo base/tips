@@ -228,9 +228,7 @@ where
         let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
 
         if let Some(meter_info) = meter_bundle_response.as_ref() {
-            self.builder_tx
-                .send(meter_info.clone())
-                .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+            _ = self.builder_tx.send(meter_info.clone());
         }
 
         let accepted_bundle =
@@ -255,7 +253,7 @@ where
                 .await;
             match response {
                 Ok(_) => {
-                    info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
+                    debug!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
                     warn!(message = "Failed to send raw transaction to mempool", error = %e);
