@@ -42,21 +42,19 @@ pub fn build_init_code_bytes(user_op: &erc4337::PackedUserOperation) -> Bytes {
     }
 }
 
-fn pack_account_gas_limits(verification_gas: U256, call_gas: U256) -> FixedBytes<32> {
+fn pack_u256_pair_to_bytes32(high: U256, low: U256) -> FixedBytes<32> {
     let mask = (U256::from(1u64) << 128) - U256::from(1u64);
-    let v = verification_gas & mask;
-    let c = call_gas & mask;
-    FixedBytes::from((v << 128) | c)
+    let hi = high & mask;
+    let lo = low & mask;
+    FixedBytes::from((hi << 128) | lo)
+}
+
+fn pack_account_gas_limits(verification_gas: U256, call_gas: U256) -> FixedBytes<32> {
+    pack_u256_pair_to_bytes32(verification_gas, call_gas)
 }
 
 pub fn calc_gas_fees(max_priority_fee_per_gas: U256, max_fee_per_gas: U256) -> FixedBytes<32> {
-    // keep only low 128 bits of each
-    let mask = (U256::from(1u64) << 128) - U256::from(1u64);
-    let hi = max_priority_fee_per_gas & mask;
-    let lo = max_fee_per_gas & mask;
-
-    // hi in high 128 bits, lo in low 128 bits
-    FixedBytes::from((hi << 128) | lo)
+    pack_u256_pair_to_bytes32(max_priority_fee_per_gas, max_fee_per_gas)
 }
 
 pub fn encode_packed_user_operation(
