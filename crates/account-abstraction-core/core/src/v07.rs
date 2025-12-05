@@ -100,7 +100,7 @@ fn pack_user_operation(uo: &erc4337::PackedUserOperation) -> PackedUserOperation
 fn hash_packed_user_operation(
     puo: &PackedUserOperation,
     entry_point: Address,
-    chain_id: u64,
+    chain_id: i32,
 ) -> FixedBytes<32> {
     let hash_init_code = alloy_primitives::keccak256(&puo.initCode);
     let hash_call_data = alloy_primitives::keccak256(&puo.callData);
@@ -128,11 +128,19 @@ fn hash_packed_user_operation(
     keccak256(encoded.abi_encode())
 }
 
+pub fn hash_user_operation_v07(
+    user_operation: &erc4337::PackedUserOperation,
+    entry_point: Address,
+    chain_id: i32,
+) -> FixedBytes<32> {
+    let packed = pack_user_operation(user_operation);
+    hash_packed_user_operation(&packed, entry_point, chain_id)
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use alloy_primitives::{address, b256, bytes, uint};
-    use alloy_rpc_types::erc4337;
     use alloy_primitives::{Bytes, U256};
     use alloy_sol_types::{SolValue, sol};
 

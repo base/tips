@@ -43,7 +43,7 @@ impl From<erc4337::UserOperation> for UserOperationPackedForHash {
     }
 }
 
-pub fn encode_user_operation_hash(
+pub fn hash_user_operation_v06(
     user_operation: &erc4337::UserOperation,
     entry_point: alloy_primitives::Address,
     chain_id: i32,
@@ -81,7 +81,7 @@ mod tests {
             signature: Bytes::default(),
         };
 
-        let hash = encode_user_operation_hash(
+        let hash = hash_user_operation_v06(
             &userOpWithZeroedInitCode,
             entry_point_address_v0_6,
             chainId,
@@ -116,7 +116,7 @@ mod tests {
             signature: bytes!("da0929f527cded8d0a1eaf2e8861d7f7e2d8160b7b13942f99dd367df4473a"),
         };
 
-        let hash = encode_user_operation_hash(
+        let hash = hash_user_operation_v06(
             &userOpWithNonZeroedInitCode,
             entry_point_address_v0_6,
             chainId,

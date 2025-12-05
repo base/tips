@@ -1,10 +1,25 @@
-use crate::userop::{
-    compute_domain_separator, encode_packed_user_operation, encode_user_operation,
-    to_typed_data_hash,
-};
+
 use alloy_primitives::{Address, B256, U256, keccak256};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
+use crate::v06;
+use crate::v07;
+pub trait UserOperation {
+    fn hash(&self, entry_point: Address, chain_id: i32) -> B256;
+}
+
+impl UserOperation for erc4337::UserOperation {
+    fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
+        v06::hash_user_operation_v06(self, entry_point, chain_id)
+    }
+}
+
+impl UserOperation for erc4337::PackedUserOperation {
+    fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
+        v07::hash_user_operation_v07(self, entry_point, chain_id)
+    }
+}
+
 use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -17,29 +32,23 @@ pub enum VersionedUserOperation {
 pub struct UserOperationRequest {
     pub user_operation: VersionedUserOperation,
     pub entry_point: Address,
+    pub chain_id: i32,
 }
 
 impl UserOperationRequest {
     pub fn hash(&self) -> B256 {
-        let chain_id = 0x2105; // TODO: LOGIC TO GET CHAIN ID
-        let abiEncoded = self.encode_user_operation(&self.user_operation);
-        let hashedUserOperation = keccak256(&abiEncoded);
-        let domainSeparator = compute_domain_separator(chain_id, self.entry_point);
-        to_typed_data_hash(domainSeparator, hashedUserOperation)
-    }
-
-    pub fn encode_user_operation(&self, op: &VersionedUserOperation) -> Vec<u8> {
-        match op {
-            VersionedUserOperation::EntryPointV06(user_op) => {
-                encode_user_operation(user_op).to_vec()
+        match &self.user_operation {
+            VersionedUserOperation::EntryPointV06(user_operation) => {
+                user_operation.hash(self.entry_point, self.chain_id)
             }
-            VersionedUserOperation::EntryPointV07(user_op) => {
-                let overrideInitCodeHash = B256::ZERO; // TODO: LOGIC TO GET OVERRIDE INIT CODE HASH
-                encode_packed_user_operation(user_op, overrideInitCodeHash).to_vec()
+            VersionedUserOperation::EntryPointV07(user_operation) => {
+                user_operation.hash(self.entry_point, self.chain_id)
             }
         }
     }
 }
+
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
