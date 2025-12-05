@@ -11,7 +11,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tips_core::MeterBundleResponse;
 use tokio::sync::broadcast;
-use tracing::error;
+use tracing::{error, warn};
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
@@ -171,6 +171,10 @@ pub struct Config {
     /// Enable backrun bundle submission to op-rbuilder
     #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
     pub backrun_enabled: bool,
+
+    /// URL of third-party RPC endpoint to forward raw transactions to (enables forwarding if set)
+    #[arg(long, env = "TIPS_INGRESS_RAW_TX_FORWARD_RPC")]
+    pub raw_tx_forward_rpc: Option<Url>,
 }
 
 pub fn connect_ingress_to_builder(
@@ -187,7 +191,11 @@ pub fn connect_ingress_to_builder(
     tokio::spawn(async move {
         let mut event_rx = metering_rx;
         while let Ok(event) = event_rx.recv().await {
-            // we only support one transaction per bundle for now
+            if event.results.is_empty() {
+                warn!(message = "received metering information with no transactions", hash=%event.bundle_hash);
+                continue;
+            }
+
             let tx_hash = event.results[0].tx_hash;
             if let Err(e) = metering_builder
                 .client()

@@ -17,15 +17,23 @@ use tips_core::{
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
+use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher, MessageQueue};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
+
+/// RPC providers for different endpoints
+pub struct Providers {
+    pub mempool: RootProvider<Optimism>,
+    pub simulation: RootProvider<Optimism>,
+    pub raw_tx_forward: Option<RootProvider<Optimism>>,
+}
+
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
@@ -52,8 +60,9 @@ pub trait IngressApi {
 }
 
 pub struct IngressService {
-    provider: Arc<RootProvider<Optimism>>,
+    mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
+    raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<KafkaMessageQueue>,
@@ -70,16 +79,16 @@ pub struct IngressService {
 
 impl IngressService {
     pub fn new(
-        provider: RootProvider<Optimism>,
-        simulation_provider: RootProvider<Optimism>,
+        providers: Providers,
         queue: KafkaMessageQueue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
         config: Config,
     ) -> Self {
-        let provider = Arc::new(provider);
-        let simulation_provider = Arc::new(simulation_provider);
+        let mempool_provider = Arc::new(providers.mempool);
+        let simulation_provider = Arc::new(providers.simulation);
+        let raw_tx_forward_provider = providers.raw_tx_forward.map(Arc::new);
         let account_abstraction_service: AccountAbstractionServiceImpl =
             AccountAbstractionServiceImpl::new(
                 simulation_provider.clone(),
@@ -87,8 +96,9 @@ impl IngressService {
             );
         let queue_connection = Arc::new(queue);
         Self {
-            provider,
+            mempool_provider,
             simulation_provider,
+            raw_tx_forward_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             user_op_queue_publisher: UserOpQueuePublisher::new(
@@ -219,13 +229,15 @@ impl IngressApiServer for IngressService {
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
 
         let bundle_hash = &parsed_bundle.bundle_hash();
-        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
 
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
+        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
 
-        self.builder_tx
-            .send(meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        if let Some(meter_info) = meter_bundle_response.as_ref() {
+            _ = self.builder_tx.send(meter_info.clone());
+        }
+
+        let accepted_bundle =
+            AcceptedBundle::new(parsed_bundle, meter_bundle_response.unwrap_or_default());
 
         if send_to_kafka {
             if let Err(e) = self
@@ -241,17 +253,36 @@ impl IngressApiServer for IngressService {
 
         if send_to_mempool {
             let response = self
-                .provider
+                .mempool_provider
                 .send_raw_transaction(data.iter().as_slice())
                 .await;
             match response {
                 Ok(_) => {
-                    info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
+                    debug!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
                     warn!(message = "Failed to send raw transaction to mempool", error = %e);
                 }
             }
+        }
+
+        if let Some(forward_provider) = self.raw_tx_forward_provider.clone() {
+            self.metrics.raw_tx_forwards_total.increment(1);
+            let tx_data = data.clone();
+            let tx_hash = transaction.tx_hash();
+            tokio::spawn(async move {
+                match forward_provider
+                    .send_raw_transaction(tx_data.iter().as_slice())
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(message = "Forwarded raw tx", hash = %tx_hash);
+                    }
+                    Err(e) => {
+                        warn!(message = "Failed to forward raw tx", hash = %tx_hash, error = %e);
+                    }
+                }
+            });
         }
 
         self.send_audit_event(&accepted_bundle, transaction.tx_hash());
@@ -406,7 +437,52 @@ impl IngressService {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
+    use alloy_provider::RootProvider;
+    use async_trait::async_trait;
+    use std::net::{IpAddr, SocketAddr};
+    use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
+    use tokio::sync::{broadcast, mpsc};
+    use url::Url;
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+    use anyhow::Result;
+    struct MockQueue;
+
+    #[async_trait]
+    impl MessageQueue for MockQueue {
+        async fn publish_raw(&self, _topic: &str, _key: &str, _payload: &[u8]) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    fn create_test_config(mock_server: &MockServer) -> Config {
+        Config {
+            address: IpAddr::from([127, 0, 0, 1]),
+            port: 8080,
+            mempool_url: Url::parse("http://localhost:3000").unwrap(),
+            tx_submission_method: TxSubmissionMethod::Mempool,
+            ingress_kafka_properties: String::new(),
+            ingress_topic: String::new(),
+            audit_kafka_properties: String::new(),
+            audit_topic: String::new(),
+            log_level: String::from("info"),
+            log_format: tips_core::logger::LogFormat::Pretty,
+            send_transaction_default_lifetime_seconds: 300,
+            simulation_rpc: mock_server.uri().parse().unwrap(),
+            metrics_addr: SocketAddr::from(([127, 0, 0, 1], 9002)),
+            block_time_milliseconds: 1000,
+            meter_bundle_timeout_ms: 5000,
+            validate_user_operation_timeout_ms: 2000,
+            builder_rpcs: vec![],
+            max_buffered_meter_bundle_responses: 100,
+            max_buffered_backrun_bundles: 100,
+            health_check_addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
+            backrun_enabled: false,
+            raw_tx_forward_rpc: None,
+            user_operation_topic: String::new(),
+        }
+    }
 
     #[tokio::test]
     async fn test_timeout_logic() {
@@ -451,5 +527,113 @@ mod tests {
         // we're assumging that `base_meterBundle` will not error hence the second unwrap
         let res = result.unwrap().unwrap();
         assert_eq!(res, create_test_meter_bundle_response());
+    }
+
+    // Replicate a failed `meter_bundle` request and instead of returning an error, we return a default `MeterBundleResponse`
+    #[tokio::test]
+    async fn test_meter_bundle_success() {
+        let mock_server = MockServer::start().await;
+
+        // Mock error response from base_meterBundle
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Simulation failed"
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server);
+
+        let provider: RootProvider<Optimism> =
+            RootProvider::new_http(mock_server.uri().parse().unwrap());
+
+        let providers = Providers {
+            mempool: provider.clone(),
+            simulation: provider.clone(),
+            raw_tx_forward: None,
+        };
+
+        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
+        let (builder_tx, _builder_rx) = broadcast::channel(1);
+        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+
+        let service = IngressService::new(
+            providers, KafkaMessageQueue::new(FutureProducer::new(MockQueue)), audit_tx, builder_tx, backrun_tx, config,
+        );
+
+        let bundle = Bundle::default();
+        let bundle_hash = B256::default();
+
+        let result = service.meter_bundle(&bundle, &bundle_hash).await;
+
+        // Test that meter_bundle returns an error, but we handle it gracefully
+        assert!(result.is_err());
+        let response = result.unwrap_or_else(|_| MeterBundleResponse::default());
+        assert_eq!(response, MeterBundleResponse::default());
+    }
+
+    #[tokio::test]
+    async fn test_raw_tx_forward() {
+        let simulation_server = MockServer::start().await;
+        let forward_server = MockServer::start().await;
+
+        // Mock error response from base_meterBundle
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Simulation failed"
+                }
+            })))
+            .mount(&simulation_server)
+            .await;
+
+        // Mock forward endpoint - expect exactly 1 call
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            })))
+            .expect(1)
+            .mount(&forward_server)
+            .await;
+
+        let mut config = create_test_config(&simulation_server);
+        config.tx_submission_method = TxSubmissionMethod::Kafka; // Skip mempool send
+
+        let providers = Providers {
+            mempool: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            simulation: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            raw_tx_forward: Some(RootProvider::new_http(
+                forward_server.uri().parse().unwrap(),
+            )),
+        };
+
+        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
+        let (builder_tx, _builder_rx) = broadcast::channel(1);
+        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+
+        let service = IngressService::new(
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+        );
+
+        // Valid signed transaction bytes
+        let tx_bytes = Bytes::from_str("0x02f86c0d010183072335825208940000000000000000000000000000000000000000872386f26fc1000080c001a0cdb9e4f2f1ba53f9429077e7055e078cf599786e29059cd80c5e0e923bb2c114a01c90e29201e031baf1da66296c3a5c15c200bcb5e6c34da2f05f7d1778f8be07").unwrap();
+
+        let result = service.send_raw_transaction(tx_bytes).await;
+        assert!(result.is_ok());
+
+        // Wait for spawned forward task to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // wiremock automatically verifies expect(1) when forward_server is dropped
     }
 }

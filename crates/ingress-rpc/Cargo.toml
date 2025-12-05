@@ -41,3 +41,7 @@ metrics-derive.workspace = true
 metrics-exporter-prometheus.workspace = true
 axum.workspace = true
 serde.workspace = true
+
+[dev-dependencies]
+wiremock.workspace = true
+serde_json.workspace = true
