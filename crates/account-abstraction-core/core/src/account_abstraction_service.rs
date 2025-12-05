@@ -89,7 +89,7 @@ mod tests {
     }
 
     fn new_test_user_operation_v06() -> VersionedUserOperation {
-        VersionedUserOperation::EntryPointV06(UserOperation {
+        VersionedUserOperation::UserOperation(UserOperation {
             sender: Address::ZERO,
             nonce: U256::from(0),
             init_code: Bytes::default(),

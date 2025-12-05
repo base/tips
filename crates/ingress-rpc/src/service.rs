@@ -276,11 +276,11 @@ impl IngressApiServer for IngressService {
             .user_op_queue_publisher
             .publish(
                 &user_operation_request.user_operation,
-                &user_operation_request.hash(),
+                &user_operation_request.hash().unwrap(),
             )
             .await
         {
-            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %user_operation_request.hash(), error = %e);
+            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %user_operation_request.hash().unwrap(), error = %e);
             return Err(
                 EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err(),
             );

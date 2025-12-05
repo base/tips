@@ -1,32 +1,62 @@
-
-use alloy_primitives::{Address, B256, U256, keccak256};
+use crate::entrypoints;
+use alloy_primitives::{Address, B256, U256, address, keccak256};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
-use crate::v06;
-use crate::v07;
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
 pub trait UserOperation {
     fn hash(&self, entry_point: Address, chain_id: i32) -> B256;
 }
 
 impl UserOperation for erc4337::UserOperation {
     fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
-        v06::hash_user_operation_v06(self, entry_point, chain_id)
+        entrypoints::v06::hash_user_operation_v06(self, entry_point, chain_id)
     }
 }
 
 impl UserOperation for erc4337::PackedUserOperation {
     fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
-        v07::hash_user_operation_v07(self, entry_point, chain_id)
+        entrypoints::v07::hash_user_operation_v07(self, entry_point, chain_id)
     }
 }
 
-use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
 pub enum VersionedUserOperation {
-    EntryPointV06(erc4337::UserOperation),
-    EntryPointV07(erc4337::PackedUserOperation),
+    UserOperation(erc4337::UserOperation),
+    PackedUserOperation(erc4337::PackedUserOperation),
 }
+
+#[derive(Debug, Clone)]
+pub enum EntryPointVersion {
+    V06,
+    V07,
+}
+
+impl EntryPointVersion {
+    pub const V06_ADDRESS: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
+    pub const V07_ADDRESS: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
+}
+
+#[derive(Debug)]
+pub struct UnknownEntryPointAddress {
+    pub address: Address,
+}
+
+impl TryFrom<Address> for EntryPointVersion {
+    type Error = UnknownEntryPointAddress;
+
+    fn try_from(addr: Address) -> Result<Self, Self::Error> {
+        if addr == Self::V06_ADDRESS {
+            Ok(EntryPointVersion::V06)
+        } else if addr == Self::V07_ADDRESS {
+            Ok(EntryPointVersion::V07)
+        } else {
+            Err(UnknownEntryPointAddress { address: addr })
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 
 pub struct UserOperationRequest {
@@ -36,19 +66,31 @@ pub struct UserOperationRequest {
 }
 
 impl UserOperationRequest {
-    pub fn hash(&self) -> B256 {
-        match &self.user_operation {
-            VersionedUserOperation::EntryPointV06(user_operation) => {
-                user_operation.hash(self.entry_point, self.chain_id)
+    pub fn hash(&self) -> Result<B256> {
+        let entry_point_version = EntryPointVersion::try_from(self.entry_point);
+        if entry_point_version.is_err() {
+            return Err(anyhow::anyhow!(
+                "Unknown entry point version: {:#x}",
+                self.entry_point
+            ));
+        }
+        match (&self.user_operation, entry_point_version) {
+            (VersionedUserOperation::UserOperation(user_operation), Ok(EntryPointVersion::V06)) => {
+                Ok(user_operation.hash(self.entry_point, self.chain_id))
             }
-            VersionedUserOperation::EntryPointV07(user_operation) => {
-                user_operation.hash(self.entry_point, self.chain_id)
+            (
+                VersionedUserOperation::PackedUserOperation(user_operation),
+                Ok(EntryPointVersion::V07),
+            ) => Ok(user_operation.hash(self.entry_point, self.chain_id)),
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Unknown entry point version: {:#x}",
+                    self.entry_point
+                ));
             }
         }
     }
 }
-
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -105,7 +147,7 @@ mod tests {
         }
         let user_operation = user_operation.unwrap();
         match user_operation {
-            VersionedUserOperation::EntryPointV06(user_operation) => {
+            VersionedUserOperation::UserOperation(user_operation) => {
                 assert_eq!(
                     user_operation.sender,
                     Address::from_str("0x1111111111111111111111111111111111111111").unwrap()
@@ -162,7 +204,7 @@ mod tests {
         }
         let user_operation = user_operation.unwrap();
         match user_operation {
-            VersionedUserOperation::EntryPointV07(user_operation) => {
+            VersionedUserOperation::PackedUserOperation(user_operation) => {
                 assert_eq!(
                     user_operation.sender,
                     Address::from_str("0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap()

@@ -1,8 +1,7 @@
 use alloy_primitives::{Address, FixedBytes, U256};
+use alloy_primitives::{Bytes, keccak256};
 use alloy_rpc_types::erc4337;
 use alloy_sol_types::{SolValue, sol};
-use alloy_primitives::{Bytes, keccak256};
-
 
 sol!(
     #[allow(missing_docs)]
@@ -42,59 +41,56 @@ sol! {
     }
 }
 
+impl From<erc4337::PackedUserOperation> for PackedUserOperation {
+    fn from(uo: erc4337::PackedUserOperation) -> Self {
+        let init_code = if let Some(factory) = uo.factory {
+            let mut init_code = factory.to_vec();
+            init_code.extend_from_slice(&uo.factory_data.clone().unwrap_or_default());
+            Bytes::from(init_code)
+        } else {
+            Bytes::new()
+        };
+        let account_gas_limits =
+            pack_u256_pair_to_bytes32(uo.verification_gas_limit.into(), uo.call_gas_limit.into());
+        let gas_fees = pack_u256_pair_to_bytes32(
+            uo.max_priority_fee_per_gas.into(),
+            uo.max_fee_per_gas.into(),
+        );
+        let pvgl: [u8; 16] = uo
+            .paymaster_verification_gas_limit
+            .unwrap_or_default()
+            .to_be_bytes();
+        let pogl: [u8; 16] = uo
+            .paymaster_post_op_gas_limit
+            .unwrap_or_default()
+            .to_be_bytes();
+        let paymaster_and_data = if let Some(paymaster) = uo.paymaster {
+            let mut paymaster_and_data = paymaster.to_vec();
+            paymaster_and_data.extend_from_slice(&pvgl);
+            paymaster_and_data.extend_from_slice(&pogl);
+            paymaster_and_data.extend_from_slice(&uo.paymaster_data.clone().unwrap());
+            Bytes::from(paymaster_and_data)
+        } else {
+            Bytes::new()
+        };
+        PackedUserOperation {
+            sender: uo.sender,
+            nonce: uo.nonce,
+            initCode: init_code,
+            callData: uo.call_data.clone(),
+            accountGasLimits: FixedBytes::from(account_gas_limits),
+            preVerificationGas: U256::from(uo.pre_verification_gas),
+            gasFees: FixedBytes::from(gas_fees),
+            paymasterAndData: paymaster_and_data,
+            signature: uo.signature.clone(),
+        }
+    }
+}
 fn pack_u256_pair_to_bytes32(high: U256, low: U256) -> FixedBytes<32> {
     let mask = (U256::from(1u64) << 128) - U256::from(1u64);
     let hi = high & mask;
     let lo = low & mask;
     FixedBytes::from((hi << 128) | lo)
-}
-
-// When packing we combine two u128s into a single bytes32
-fn concat_u128_be(a: u128, b: u128) -> [u8; 32] {
-    let a = a.to_be_bytes();
-    let b = b.to_be_bytes();
-    std::array::from_fn(|i| {
-        if let Some(i) = i.checked_sub(a.len()) {
-            b[i]
-        } else {
-            a[i]
-        }
-    })
-}
-
-fn pack_user_operation(uo: &erc4337::PackedUserOperation) -> PackedUserOperation {
-    // INIT CODE, is factory address, appended with factory data
-    let init_code = if let Some(factory) = uo.factory {
-        let mut init_code = factory.to_vec();
-        init_code.extend_from_slice(&uo.factory_data.clone().unwrap_or_default());
-        Bytes::from(init_code)
-    } else {
-        Bytes::new()
-    };
-    let account_gas_limits = pack_u256_pair_to_bytes32(uo.verification_gas_limit.into(), uo.call_gas_limit.into());
-    let gas_fees = pack_u256_pair_to_bytes32(uo.max_priority_fee_per_gas.into(), uo.max_fee_per_gas.into());
-    let pvgl: [u8; 16] = uo.paymaster_verification_gas_limit.unwrap_or_default().to_be_bytes();
-    let pogl: [u8; 16] = uo.paymaster_post_op_gas_limit.unwrap_or_default().to_be_bytes();
-    let paymaster_and_data = if let Some(paymaster) = uo.paymaster {
-        let mut paymaster_and_data = paymaster.to_vec();
-        paymaster_and_data.extend_from_slice(&pvgl);
-        paymaster_and_data.extend_from_slice(&pogl);
-        paymaster_and_data.extend_from_slice(&uo.paymaster_data.clone().unwrap());
-        Bytes::from(paymaster_and_data)
-    } else {
-        Bytes::new()
-    };
-    PackedUserOperation {
-        sender: uo.sender,
-        nonce: uo.nonce,
-        initCode: init_code,
-        callData: uo.call_data.clone(),
-        accountGasLimits: FixedBytes::from(account_gas_limits),
-        preVerificationGas: U256::from(uo.pre_verification_gas),
-        gasFees: FixedBytes::from(gas_fees),
-        paymasterAndData: paymaster_and_data,
-        signature: uo.signature.clone(),
-    }
 }
 
 fn hash_packed_user_operation(
@@ -133,20 +129,19 @@ pub fn hash_user_operation_v07(
     entry_point: Address,
     chain_id: i32,
 ) -> FixedBytes<32> {
-    let packed = pack_user_operation(user_operation);
+    let packed = PackedUserOperation::from(user_operation.clone());
     hash_packed_user_operation(&packed, entry_point, chain_id)
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use alloy_primitives::{address, b256, bytes, uint};
     use alloy_primitives::{Bytes, U256};
+    use alloy_primitives::{address, b256, bytes, uint};
     use alloy_sol_types::{SolValue, sol};
 
     #[test]
     fn test_hash() {
-        
         let puo = PackedUserOperation {
             sender: address!("b292Cf4a8E1fF21Ac27C4f94071Cd02C022C414b"),
             nonce: uint!(0xF83D07238A7C8814A48535035602123AD6DBFA63000000000000000000000001_U256),
@@ -165,12 +160,15 @@ mod test {
             paymasterAndData: Bytes::default(),  // Empty
             signature: bytes!("3c7bfe22c9c2ef8994a9637bcc4df1741c5dc0c25b209545a7aeb20f7770f351479b683bd17c4d55bc32e2a649c8d2dff49dcfcc1f3fd837bcd88d1e69a434cf1c"),
         };
-  
-        let expected_hash = b256!("e486401370d145766c3cf7ba089553214a1230d38662ae532c9b62eb6dadcf7e");
-        let uo = hash_packed_user_operation(&puo, address!("0x0000000071727De22E5E9d8BAf0edAc6f37da032"), 11155111);
-  
+
+        let expected_hash =
+            b256!("e486401370d145766c3cf7ba089553214a1230d38662ae532c9b62eb6dadcf7e");
+        let uo = hash_packed_user_operation(
+            &puo,
+            address!("0x0000000071727De22E5E9d8BAf0edAc6f37da032"),
+            11155111,
+        );
+
         assert_eq!(uo, expected_hash);
     }
 }
-
-

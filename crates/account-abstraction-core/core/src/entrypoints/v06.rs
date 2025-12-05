@@ -81,11 +81,8 @@ mod tests {
             signature: Bytes::default(),
         };
 
-        let hash = hash_user_operation_v06(
-            &userOpWithZeroedInitCode,
-            entry_point_address_v0_6,
-            chainId,
-        );
+        let hash =
+            hash_user_operation_v06(&userOpWithZeroedInitCode, entry_point_address_v0_6, chainId);
         assert_eq!(
             hash,
             b256!("dca97c3b49558ab360659f6ead939773be8bf26631e61bb17045bb70dc983b2d")

@@ -22,7 +22,7 @@ jsonrpsee.workspace = true
 async-trait = { workspace = true }
 alloy-dyn-abi = {workspace = true }
 alloy-sol-types.workspace= true
-
+anyhow.workspace = true
 
 [dev-dependencies]
 alloy-primitives.workspace = true
