@@ -4,21 +4,6 @@ use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-pub trait UserOperation {
-    fn hash(&self, entry_point: Address, chain_id: i32) -> B256;
-}
-
-impl UserOperation for erc4337::UserOperation {
-    fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
-        entrypoints::v06::hash_user_operation_v06(self, entry_point, chain_id)
-    }
-}
-
-impl UserOperation for erc4337::PackedUserOperation {
-    fn hash(&self, entry_point: Address, chain_id: i32) -> B256 {
-        entrypoints::v07::hash_user_operation_v07(self, entry_point, chain_id)
-    }
-}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type")]
@@ -76,12 +61,12 @@ impl UserOperationRequest {
         }
         match (&self.user_operation, entry_point_version) {
             (VersionedUserOperation::UserOperation(user_operation), Ok(EntryPointVersion::V06)) => {
-                Ok(user_operation.hash(self.entry_point, self.chain_id))
+                Ok(entrypoints::v06::hash_user_operation_v06(user_operation, self.entry_point, self.chain_id))
             }
             (
                 VersionedUserOperation::PackedUserOperation(user_operation),
                 Ok(EntryPointVersion::V07),
-            ) => Ok(user_operation.hash(self.entry_point, self.chain_id)),
+            ) => Ok(entrypoints::v07::hash_user_operation_v07(user_operation, self.entry_point, self.chain_id)),
             _ => {
                 return Err(anyhow::anyhow!(
                     "Unknown entry point version: {:#x}",

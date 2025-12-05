@@ -20,7 +20,7 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue2::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
+use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};

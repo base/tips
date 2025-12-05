@@ -12,7 +12,7 @@ use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::health::bind_health_server;
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
-use tips_ingress_rpc::queue2::KafkaMessageQueue;
+use tips_ingress_rpc::queue::KafkaMessageQueue;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;

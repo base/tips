@@ -1,7 +1,6 @@
 pub mod health;
 pub mod metrics;
 pub mod queue;
-pub mod queue2;
 pub mod service;
 pub mod validation;
 use alloy_primitives::TxHash;
