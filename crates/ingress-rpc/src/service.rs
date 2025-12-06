@@ -135,6 +135,7 @@ where
         let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
 
         self.metrics.backrun_bundles_received_total.increment(1);
+        info!(message = "Received backrun bundle", bundle_hash = %bundle_hash);
 
         if let Err(e) = self.builder_backrun_tx.send(bundle) {
             warn!(
@@ -196,6 +197,8 @@ where
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
         let transaction = self.get_tx(&data).await?;
+
+        info!(message = "Received raw transaction", tx_hash = %transaction.tx_hash());
 
         let send_to_kafka = matches!(
             self.tx_submission_method,

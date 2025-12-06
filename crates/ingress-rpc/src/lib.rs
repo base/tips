@@ -12,7 +12,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tips_core::MeterBundleResponse;
 use tokio::sync::broadcast;
-use tracing::error;
+use tracing::{error, info};
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
@@ -175,6 +175,7 @@ pub fn connect_ingress_to_builder(
     backrun_rx: broadcast::Receiver<tips_core::Bundle>,
     builder_rpc: Url,
 ) {
+    let builder_rpc_clone = builder_rpc.clone();
     let builder: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
@@ -209,6 +210,7 @@ pub fn connect_ingress_to_builder(
             {
                 error!(error = %e, "Failed to send backrun bundle to builder");
             }
+            info!(message = "Sent backrun bundle to builder", builder_rpc = %builder_rpc_clone);
         }
     });
 }
