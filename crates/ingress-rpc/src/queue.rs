@@ -100,7 +100,6 @@ impl<Q: MessageQueue> BundleQueuePublisher<Q> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,7 +131,13 @@ mod tests {
         let bundle_hash = &accepted_bundle.bundle_hash();
 
         let start = Instant::now();
-        let result = publisher.publish_raw("tips-ingress-rpc", bundle_hash.to_string().as_str(), &serde_json::to_vec(&accepted_bundle).unwrap()).await;
+        let result = publisher
+            .publish_raw(
+                "tips-ingress-rpc",
+                bundle_hash.to_string().as_str(),
+                &serde_json::to_vec(&accepted_bundle).unwrap(),
+            )
+            .await;
         let elapsed = start.elapsed();
 
         // the backoff tries at minimum 100ms, so verify we tried at least once
