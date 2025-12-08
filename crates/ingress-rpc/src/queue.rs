@@ -99,3 +99,44 @@ impl<Q: MessageQueue> BundleQueuePublisher<Q> {
         self.queue.publish_raw(&self.topic, &key, &payload).await
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rdkafka::config::ClientConfig;
+    use tips_core::{
+        AcceptedBundle, Bundle, BundleExtensions, test_utils::create_test_meter_bundle_response,
+    };
+    use tokio::time::{Duration, Instant};
+
+    fn create_test_bundle() -> Bundle {
+        Bundle::default()
+    }
+
+    #[tokio::test]
+    async fn test_backoff_retry_logic() {
+        // use an invalid broker address to trigger the backoff logic
+        let producer = ClientConfig::new()
+            .set("bootstrap.servers", "localhost:9999")
+            .set("message.timeout.ms", "100")
+            .create()
+            .expect("Producer creation failed");
+
+        let publisher = KafkaMessageQueue::new(producer);
+        let bundle = create_test_bundle();
+        let accepted_bundle = AcceptedBundle::new(
+            bundle.try_into().unwrap(),
+            create_test_meter_bundle_response(),
+        );
+        let bundle_hash = &accepted_bundle.bundle_hash();
+
+        let start = Instant::now();
+        let result = publisher.publish_raw("tips-ingress-rpc", bundle_hash.to_string().as_str(), &serde_json::to_vec(&accepted_bundle).unwrap()).await;
+        let elapsed = start.elapsed();
+
+        // the backoff tries at minimum 100ms, so verify we tried at least once
+        assert!(result.is_err());
+        assert!(elapsed >= Duration::from_millis(100));
+    }
+}

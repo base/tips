@@ -28,9 +28,6 @@ sol!(
         bytes signature;
     }
 
-);
-
-sol! {
     #[derive(Default, Debug, PartialEq, Eq)]
     struct UserOperationHashEncoded {
         bytes32 encodedHash;
@@ -49,7 +46,7 @@ sol! {
         bytes32 gasFees;
         bytes32 hashPaymasterAndData;
     }
-}
+);
 
 impl From<erc4337::PackedUserOperation> for PackedUserOperation {
     fn from(uo: erc4337::PackedUserOperation) -> Self {
