@@ -52,17 +52,16 @@ impl From<erc4337::PackedUserOperation> for PackedUserOperation {
         };
         let account_gas_limits =
             pack_u256_pair_to_bytes32(uo.verification_gas_limit, uo.call_gas_limit);
-        let gas_fees = pack_u256_pair_to_bytes32(
-            uo.max_priority_fee_per_gas,
-            uo.max_fee_per_gas,
-        );
+        let gas_fees = pack_u256_pair_to_bytes32(uo.max_priority_fee_per_gas, uo.max_fee_per_gas);
         let pvgl: [u8; 16] = uo
             .paymaster_verification_gas_limit
             .unwrap_or_default()
+            .to::<u128>()
             .to_be_bytes();
         let pogl: [u8; 16] = uo
             .paymaster_post_op_gas_limit
             .unwrap_or_default()
+            .to::<u128>()
             .to_be_bytes();
         let paymaster_and_data = if let Some(paymaster) = uo.paymaster {
             let mut paymaster_and_data = paymaster.to_vec();
@@ -90,7 +89,8 @@ fn pack_u256_pair_to_bytes32(high: U256, low: U256) -> FixedBytes<32> {
     let mask = (U256::from(1u64) << 128) - U256::from(1u64);
     let hi = high & mask;
     let lo = low & mask;
-    FixedBytes::from((hi << 128) | lo)
+    let combined: U256 = (hi << 128) | lo;
+    FixedBytes::from(combined.to_be_bytes::<32>())
 }
 
 fn hash_packed_user_operation(

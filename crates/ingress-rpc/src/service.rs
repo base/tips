@@ -20,7 +20,7 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, MessageQueue, UserOpQueuePublisher};
+use crate::queue::{BundleQueuePublisher, MessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
@@ -59,7 +59,7 @@ pub trait IngressApi {
     ) -> RpcResult<SendUserOperationResponse>;
 }
 
-pub struct IngressService<Q: MessageQueue = KafkaMessageQueue> {
+pub struct IngressService<Q: MessageQueue> {
     mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
