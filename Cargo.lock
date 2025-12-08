@@ -6,8 +6,6 @@ version = 4
 name = "account-abstraction-core"
 version = "0.1.0"
 dependencies = [
- "alloy-abi",
- "alloy-dyn-abi",
  "alloy-primitives",
  "alloy-provider",
  "alloy-rpc-types",
@@ -57,12 +55,6 @@ name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
-
-[[package]]
-name = "alloy-abi"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95d80fbdae433a4c98109023eada56d864e49750d131824bad158f59d79a95d2"
 
 [[package]]
 name = "alloy-chains"
@@ -116,20 +108,6 @@ dependencies = [
  "alloy-rlp",
  "alloy-serde",
  "serde",
-]
-
-[[package]]
-name = "alloy-dyn-abi"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3fdff496dd4e98a81f4861e66f7eaf5f2488971848bb42d9c892f871730245c8"
-dependencies = [
- "alloy-json-abi",
- "alloy-primitives",
- "alloy-sol-type-parser",
- "alloy-sol-types",
- "itoa",
- "winnow",
 ]
 
 [[package]]

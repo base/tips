@@ -20,7 +20,6 @@ reth-rpc-eth-types.workspace = true
 tokio.workspace = true
 jsonrpsee.workspace = true
 async-trait = { workspace = true }
-alloy-dyn-abi = {workspace = true }
 alloy-sol-types.workspace= true
 anyhow.workspace = true
 
@@ -28,4 +27,3 @@ anyhow.workspace = true
 alloy-primitives.workspace = true
 serde_json.workspace = true
 wiremock.workspace = true
-alloy-abi.workspace = true

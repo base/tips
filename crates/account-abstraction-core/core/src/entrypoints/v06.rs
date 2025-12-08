@@ -66,8 +66,8 @@ mod tests {
     #[test]
     fn test_hash_zeroed() {
         let entry_point_address_v0_6 = address!("66a15edcc3b50a663e72f1457ffd49b9ae284ddc");
-        let chainId = 1337;
-        let userOpWithZeroedInitCode = erc4337::UserOperation {
+        let chain_id = 1337;
+        let user_op_with_zeroed_init_code = erc4337::UserOperation {
             sender: address!("0x0000000000000000000000000000000000000000"),
             nonce: U256::ZERO,
             init_code: Bytes::default(),
@@ -82,7 +82,7 @@ mod tests {
         };
 
         let hash =
-            hash_user_operation(&userOpWithZeroedInitCode, entry_point_address_v0_6, chainId);
+            hash_user_operation(&user_op_with_zeroed_init_code, entry_point_address_v0_6, chain_id);
         assert_eq!(
             hash,
             b256!("dca97c3b49558ab360659f6ead939773be8bf26631e61bb17045bb70dc983b2d")
@@ -92,8 +92,8 @@ mod tests {
     #[test]
     fn test_hash_non_zeroed() {
         let entry_point_address_v0_6 = address!("66a15edcc3b50a663e72f1457ffd49b9ae284ddc");
-        let chainId = 1337;
-        let userOpWithNonZeroedInitCode = erc4337::UserOperation {
+        let chain_id = 1337;
+        let user_op_with_non_zeroed_init_code = erc4337::UserOperation {
             sender: address!("0x1306b01bc3e4ad202612d3843387e94737673f53"),
             nonce: U256::from(8942),
             init_code: "0x6942069420694206942069420694206942069420"
@@ -114,9 +114,9 @@ mod tests {
         };
 
         let hash = hash_user_operation(
-            &userOpWithNonZeroedInitCode,
+            &user_op_with_non_zeroed_init_code,
             entry_point_address_v0_6,
-            chainId,
+            chain_id,
         );
         assert_eq!(
             hash,

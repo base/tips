@@ -56,7 +56,7 @@ mod tests {
     fn should_throw_error_when_deserializing_invalid() {
         const TEST_INVALID_USER_OPERATION: &str = r#"
         {
-        "type": "EntryPointV06",
+        "type": "UserOperation",
         "sender": "0x1111111111111111111111111111111111111111",
         "nonce": "0x0",
         "callGasLimit": "0x5208"
@@ -71,7 +71,7 @@ mod tests {
     fn should_deserialize_v06() {
         const TEST_USER_OPERATION: &str = r#"
         {
-            "type": "EntryPointV06",
+            "type": "UserOperation",
             "sender": "0x1111111111111111111111111111111111111111",
             "nonce": "0x0",
             "initCode": "0x",
@@ -124,7 +124,7 @@ mod tests {
     fn should_deserialize_v07() {
         const TEST_PACKED_USER_OPERATION: &str = r#"
         {
-        "type": "EntryPointV07",
+        "type": "PackedUserOperation",
         "sender": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
         "nonce": "0x1",
         "factory": "0x2222222222222222222222222222222222222222",

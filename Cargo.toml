@@ -29,9 +29,7 @@ alloy-consensus = { version = "1.0.41" }
 alloy-provider = { version = "1.0.41" }
 alloy-serde = "1.0.41"
 alloy-rpc-types = "1.1.2"
-alloy-dyn-abi = { version = "1.2.0", default-features = false }
 alloy-sol-types = { version = "1.4.1", default-features = false }
-alloy-abi = { version = "0.1.0", default-features = false }
 
 # op-alloy
 op-alloy-network = { version = "0.22.0", default-features = false }
