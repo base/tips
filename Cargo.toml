@@ -7,12 +7,13 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
+account-abstraction-core = { path = "crates/account-abstraction-core" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
@@ -50,9 +51,11 @@ testcontainers = { version = "0.23.1", features = ["blocking"] }
 testcontainers-modules = { version = "0.11.2", features = ["postgres", "kafka", "minio"] }
 jsonrpsee = { version = "0.26.0", features = ["server", "macros"] }
 chrono = { version = "0.4.42", features = ["serde"] }
+wiremock = "0.6.2"
+axum = "0.8.3"
 
 # Kafka and S3 dependencies
-rdkafka = { version = "0.37.0", features = ["libz-static", "ssl-vendored"] }
+rdkafka = { version = "0.37.0", features = ["zstd", "ssl-vendored"] }
 aws-config = "1.1.7"
 aws-sdk-s3 = "1.106.0"
 aws-credential-types = "1.1.7"

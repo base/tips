@@ -1,4 +1,4 @@
-use metrics::Histogram;
+use metrics::{Counter, Histogram};
 use metrics_derive::Metrics;
 use metrics_exporter_prometheus::PrometheusBuilder;
 use std::net::SocketAddr;
@@ -29,6 +29,15 @@ pub struct Metrics {
 
     #[metric(describe = "Duration of send_raw_transaction")]
     pub send_raw_transaction_duration: Histogram,
+
+    #[metric(describe = "Total backrun bundles received")]
+    pub backrun_bundles_received_total: Counter,
+
+    #[metric(describe = "Duration to send backrun bundle to op-rbuilder")]
+    pub backrun_bundles_sent_duration: Histogram,
+
+    #[metric(describe = "Total raw transactions forwarded to additional endpoint")]
+    pub raw_tx_forwards_total: Counter,
 }
 
 /// Initialize Prometheus metrics exporter

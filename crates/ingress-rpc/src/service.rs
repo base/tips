@@ -14,22 +14,34 @@ use tips_audit::BundleEvent;
 use tips_core::types::ParsedBundle;
 use tips_core::{
     AcceptedBundle, Bundle, BundleExtensions, BundleHash, CancelBundle, MeterBundleResponse,
-    user_ops_types::{SendUserOperationResponse, UserOperationRequest},
 };
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{Duration, Instant, timeout};
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
 use crate::queue::QueuePublisher;
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
+use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
+use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
+use std::sync::Arc;
+
+/// RPC providers for different endpoints
+pub struct Providers {
+    pub mempool: RootProvider<Optimism>,
+    pub simulation: RootProvider<Optimism>,
+    pub raw_tx_forward: Option<RootProvider<Optimism>>,
+}
 
 #[rpc(server, namespace = "eth")]
 pub trait IngressApi {
     /// `eth_sendBundle` can be used to send your bundles to the builder.
     #[method(name = "sendBundle")]
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+
+    #[method(name = "sendBackrunBundle")]
+    async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
 
     /// `eth_cancelBundle` is used to prevent a submitted bundle from being included on-chain.
     #[method(name = "cancelBundle")]
@@ -48,8 +60,10 @@ pub trait IngressApi {
 }
 
 pub struct IngressService<Queue> {
-    provider: RootProvider<Optimism>,
-    simulation_provider: RootProvider<Optimism>,
+    mempool_provider: Arc<RootProvider<Optimism>>,
+    simulation_provider: Arc<RootProvider<Optimism>>,
+    raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
+    account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
     bundle_queue: Queue,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
@@ -58,20 +72,33 @@ pub struct IngressService<Queue> {
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
+    backrun_enabled: bool,
+    builder_backrun_tx: broadcast::Sender<Bundle>,
 }
 
 impl<Queue> IngressService<Queue> {
     pub fn new(
-        provider: RootProvider<Optimism>,
-        simulation_provider: RootProvider<Optimism>,
+        providers: Providers,
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
+        builder_backrun_tx: broadcast::Sender<Bundle>,
         config: Config,
     ) -> Self {
+        let mempool_provider = Arc::new(providers.mempool);
+        let simulation_provider = Arc::new(providers.simulation);
+        let raw_tx_forward_provider = providers.raw_tx_forward.map(Arc::new);
+        let account_abstraction_service: AccountAbstractionServiceImpl =
+            AccountAbstractionServiceImpl::new(
+                simulation_provider.clone(),
+                config.validate_user_operation_timeout_ms,
+            );
+
         Self {
-            provider,
+            mempool_provider,
             simulation_provider,
+            raw_tx_forward_provider,
+            account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
             bundle_queue: queue,
             audit_channel,
@@ -81,6 +108,8 @@ impl<Queue> IngressService<Queue> {
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
+            backrun_enabled: config.backrun_enabled,
+            builder_backrun_tx,
         }
     }
 }
@@ -90,16 +119,45 @@ impl<Queue> IngressApiServer for IngressService<Queue>
 where
     Queue: QueuePublisher + Sync + Send + 'static,
 {
+    async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
+        if !self.backrun_enabled {
+            info!(
+                message = "Backrun bundle submission is disabled",
+                backrun_enabled = self.backrun_enabled
+            );
+            return Err(
+                EthApiError::InvalidParams("Backrun bundle submission is disabled".into())
+                    .into_rpc_err(),
+            );
+        }
+
+        let start = Instant::now();
+        let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
+
+        self.metrics.backrun_bundles_received_total.increment(1);
+
+        if let Err(e) = self.builder_backrun_tx.send(bundle) {
+            warn!(
+                message = "Failed to send backrun bundle to builders",
+                bundle_hash = %bundle_hash,
+                error = %e
+            );
+        }
+
+        self.send_audit_event(&accepted_bundle, bundle_hash);
+
+        self.metrics
+            .backrun_bundles_sent_duration
+            .record(start.elapsed().as_secs_f64());
+
+        Ok(BundleHash { bundle_hash })
+    }
+
     async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
-        // validate the bundle and consume the `bundle` to get an `AcceptedBundle`
-        self.validate_bundle(&bundle).await?;
-        let parsed_bundle: ParsedBundle = bundle
-            .clone()
-            .try_into()
-            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
-        let bundle_hash = &parsed_bundle.bundle_hash();
-        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
+        let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
+
+        // Get meter_bundle_response for builder broadcast
+        let meter_bundle_response = accepted_bundle.meter_bundle_response.clone();
 
         // asynchronously send the meter bundle response to the builder
         self.builder_tx
@@ -109,7 +167,7 @@ where
         // publish the bundle to the queue
         if let Err(e) = self
             .bundle_queue
-            .publish(&accepted_bundle, bundle_hash)
+            .publish(&accepted_bundle, &bundle_hash)
             .await
         {
             warn!(message = "Failed to publish bundle to queue", bundle_hash = %bundle_hash, error = %e);
@@ -122,20 +180,9 @@ where
         );
 
         // asynchronously send the audit event to the audit channel
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: Box::new(accepted_bundle.clone()),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
-            return Err(
-                EthApiError::InvalidParams("Failed to send audit event".into()).into_rpc_err(),
-            );
-        }
+        self.send_audit_event(&accepted_bundle, bundle_hash);
 
-        Ok(BundleHash {
-            bundle_hash: *bundle_hash,
-        })
+        Ok(BundleHash { bundle_hash })
     }
 
     async fn cancel_bundle(&self, _request: CancelBundle) -> RpcResult<()> {
@@ -177,13 +224,15 @@ where
             .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
 
         let bundle_hash = &parsed_bundle.bundle_hash();
-        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await?;
 
-        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
+        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
 
-        self.builder_tx
-            .send(meter_bundle_response)
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        if let Some(meter_info) = meter_bundle_response.as_ref() {
+            _ = self.builder_tx.send(meter_info.clone());
+        }
+
+        let accepted_bundle =
+            AcceptedBundle::new(parsed_bundle, meter_bundle_response.unwrap_or_default());
 
         if send_to_kafka {
             if let Err(e) = self
@@ -199,12 +248,12 @@ where
 
         if send_to_mempool {
             let response = self
-                .provider
+                .mempool_provider
                 .send_raw_transaction(data.iter().as_slice())
                 .await;
             match response {
                 Ok(_) => {
-                    info!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
+                    debug!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
                     warn!(message = "Failed to send raw transaction to mempool", error = %e);
@@ -212,13 +261,26 @@ where
             }
         }
 
-        let audit_event = BundleEvent::Received {
-            bundle_id: *accepted_bundle.uuid(),
-            bundle: accepted_bundle.clone().into(),
-        };
-        if let Err(e) = self.audit_channel.send(audit_event) {
-            warn!(message = "Failed to send audit event", error = %e);
+        if let Some(forward_provider) = self.raw_tx_forward_provider.clone() {
+            self.metrics.raw_tx_forwards_total.increment(1);
+            let tx_data = data.clone();
+            let tx_hash = transaction.tx_hash();
+            tokio::spawn(async move {
+                match forward_provider
+                    .send_raw_transaction(tx_data.iter().as_slice())
+                    .await
+                {
+                    Ok(_) => {
+                        debug!(message = "Forwarded raw tx", hash = %tx_hash);
+                    }
+                    Err(e) => {
+                        warn!(message = "Failed to forward raw tx", hash = %tx_hash, error = %e);
+                    }
+                }
+            });
         }
+
+        self.send_audit_event(&accepted_bundle, transaction.tx_hash());
 
         self.metrics
             .send_raw_transaction_duration
@@ -236,6 +298,10 @@ where
         // STEPS:
         // 1. Reputation Service Validate
         // 2. Base Node Validate User Operation
+        let _ = self
+            .account_abstraction_service
+            .validate_user_operation(user_operation)
+            .await?;
         // 3. Send to Kafka
         // Send Hash
         // todo!("not yet implemented send_user_operation");
@@ -327,12 +393,91 @@ where
         }
         Ok(res)
     }
+
+    /// Helper method to validate, parse, and meter a bundle
+    async fn validate_parse_and_meter_bundle(
+        &self,
+        bundle: &Bundle,
+    ) -> RpcResult<(AcceptedBundle, B256)> {
+        self.validate_bundle(bundle).await?;
+        let parsed_bundle: ParsedBundle = bundle
+            .clone()
+            .try_into()
+            .map_err(|e: String| EthApiError::InvalidParams(e).into_rpc_err())?;
+        let bundle_hash = parsed_bundle.bundle_hash();
+        let meter_bundle_response = self.meter_bundle(bundle, &bundle_hash).await?;
+        let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
+        Ok((accepted_bundle, bundle_hash))
+    }
+
+    /// Helper method to send audit event for a bundle
+    fn send_audit_event(&self, accepted_bundle: &AcceptedBundle, bundle_hash: B256) {
+        let audit_event = BundleEvent::Received {
+            bundle_id: *accepted_bundle.uuid(),
+            bundle: Box::new(accepted_bundle.clone()),
+        };
+        if let Err(e) = self.audit_channel.send(audit_event) {
+            warn!(
+                message = "Failed to send audit event",
+                bundle_hash = %bundle_hash,
+                error = %e
+            );
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{Config, TxSubmissionMethod, queue::QueuePublisher};
+    use alloy_provider::RootProvider;
+    use async_trait::async_trait;
+    use std::net::{IpAddr, SocketAddr};
+    use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
+    use tokio::sync::{broadcast, mpsc};
+    use url::Url;
+    use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
+
+    struct MockQueue;
+
+    #[async_trait]
+    impl QueuePublisher for MockQueue {
+        async fn publish(
+            &self,
+            _bundle: &tips_core::AcceptedBundle,
+            _bundle_hash: &B256,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn create_test_config(mock_server: &MockServer) -> Config {
+        Config {
+            address: IpAddr::from([127, 0, 0, 1]),
+            port: 8080,
+            mempool_url: Url::parse("http://localhost:3000").unwrap(),
+            tx_submission_method: TxSubmissionMethod::Mempool,
+            ingress_kafka_properties: String::new(),
+            ingress_topic: String::new(),
+            audit_kafka_properties: String::new(),
+            audit_topic: String::new(),
+            log_level: String::from("info"),
+            log_format: tips_core::logger::LogFormat::Pretty,
+            send_transaction_default_lifetime_seconds: 300,
+            simulation_rpc: mock_server.uri().parse().unwrap(),
+            metrics_addr: SocketAddr::from(([127, 0, 0, 1], 9002)),
+            block_time_milliseconds: 1000,
+            meter_bundle_timeout_ms: 5000,
+            validate_user_operation_timeout_ms: 2000,
+            builder_rpcs: vec![],
+            max_buffered_meter_bundle_responses: 100,
+            max_buffered_backrun_bundles: 100,
+            health_check_addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
+            backrun_enabled: false,
+            raw_tx_forward_rpc: None,
+        }
+    }
 
     #[tokio::test]
     async fn test_timeout_logic() {
@@ -377,5 +522,113 @@ mod tests {
         // we're assumging that `base_meterBundle` will not error hence the second unwrap
         let res = result.unwrap().unwrap();
         assert_eq!(res, create_test_meter_bundle_response());
+    }
+
+    // Replicate a failed `meter_bundle` request and instead of returning an error, we return a default `MeterBundleResponse`
+    #[tokio::test]
+    async fn test_meter_bundle_success() {
+        let mock_server = MockServer::start().await;
+
+        // Mock error response from base_meterBundle
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Simulation failed"
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server);
+
+        let provider: RootProvider<Optimism> =
+            RootProvider::new_http(mock_server.uri().parse().unwrap());
+
+        let providers = Providers {
+            mempool: provider.clone(),
+            simulation: provider.clone(),
+            raw_tx_forward: None,
+        };
+
+        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
+        let (builder_tx, _builder_rx) = broadcast::channel(1);
+        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+
+        let service = IngressService::new(
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+        );
+
+        let bundle = Bundle::default();
+        let bundle_hash = B256::default();
+
+        let result = service.meter_bundle(&bundle, &bundle_hash).await;
+
+        // Test that meter_bundle returns an error, but we handle it gracefully
+        assert!(result.is_err());
+        let response = result.unwrap_or_else(|_| MeterBundleResponse::default());
+        assert_eq!(response, MeterBundleResponse::default());
+    }
+
+    #[tokio::test]
+    async fn test_raw_tx_forward() {
+        let simulation_server = MockServer::start().await;
+        let forward_server = MockServer::start().await;
+
+        // Mock error response from base_meterBundle
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "error": {
+                    "code": -32000,
+                    "message": "Simulation failed"
+                }
+            })))
+            .mount(&simulation_server)
+            .await;
+
+        // Mock forward endpoint - expect exactly 1 call
+        Mock::given(method("POST"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            })))
+            .expect(1)
+            .mount(&forward_server)
+            .await;
+
+        let mut config = create_test_config(&simulation_server);
+        config.tx_submission_method = TxSubmissionMethod::Kafka; // Skip mempool send
+
+        let providers = Providers {
+            mempool: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            simulation: RootProvider::new_http(simulation_server.uri().parse().unwrap()),
+            raw_tx_forward: Some(RootProvider::new_http(
+                forward_server.uri().parse().unwrap(),
+            )),
+        };
+
+        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
+        let (builder_tx, _builder_rx) = broadcast::channel(1);
+        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+
+        let service = IngressService::new(
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+        );
+
+        // Valid signed transaction bytes
+        let tx_bytes = Bytes::from_str("0x02f86c0d010183072335825208940000000000000000000000000000000000000000872386f26fc1000080c001a0cdb9e4f2f1ba53f9429077e7055e078cf599786e29059cd80c5e0e923bb2c114a01c90e29201e031baf1da66296c3a5c15c200bcb5e6c34da2f05f7d1778f8be07").unwrap();
+
+        let result = service.send_raw_transaction(tx_bytes).await;
+        assert!(result.is_ok());
+
+        // Wait for spawned forward task to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // wiremock automatically verifies expect(1) when forward_server is dropped
     }
 }
