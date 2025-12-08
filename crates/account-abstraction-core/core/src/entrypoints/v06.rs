@@ -1,4 +1,4 @@
-use alloy_primitives::U256;
+use alloy_primitives::{U256, ChainId};
 use alloy_rpc_types::erc4337;
 use alloy_sol_types::{SolValue, sol};
 sol! {
@@ -43,10 +43,10 @@ impl From<erc4337::UserOperation> for UserOperationPackedForHash {
     }
 }
 
-pub fn hash_user_operation_v06(
+pub fn hash_user_operation(
     user_operation: &erc4337::UserOperation,
     entry_point: alloy_primitives::Address,
-    chain_id: i32,
+    chain_id: ChainId,
 ) -> alloy_primitives::B256 {
     let packed = UserOperationPackedForHash::from(user_operation.clone());
     let encoded = UserOperationHashEncoded {
@@ -82,7 +82,7 @@ mod tests {
         };
 
         let hash =
-            hash_user_operation_v06(&userOpWithZeroedInitCode, entry_point_address_v0_6, chainId);
+            hash_user_operation(&userOpWithZeroedInitCode, entry_point_address_v0_6, chainId);
         assert_eq!(
             hash,
             b256!("dca97c3b49558ab360659f6ead939773be8bf26631e61bb17045bb70dc983b2d")
@@ -113,7 +113,7 @@ mod tests {
             signature: bytes!("da0929f527cded8d0a1eaf2e8861d7f7e2d8160b7b13942f99dd367df4473a"),
         };
 
-        let hash = hash_user_operation_v06(
+        let hash = hash_user_operation(
             &userOpWithNonZeroedInitCode,
             entry_point_address_v0_6,
             chainId,

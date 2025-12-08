@@ -1,5 +1,5 @@
-use crate::entrypoints;
-use alloy_primitives::{Address, B256, U256, address, keccak256};
+use crate::entrypoints::{version::EntryPointVersion, v06, v07};
+use alloy_primitives::{Address, B256, U256, ChainId};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 use anyhow::Result;
@@ -11,69 +11,29 @@ pub enum VersionedUserOperation {
     UserOperation(erc4337::UserOperation),
     PackedUserOperation(erc4337::PackedUserOperation),
 }
-
-#[derive(Debug, Clone)]
-pub enum EntryPointVersion {
-    V06,
-    V07,
-}
-
-impl EntryPointVersion {
-    pub const V06_ADDRESS: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
-    pub const V07_ADDRESS: Address = address!("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789");
-}
-
-#[derive(Debug)]
-pub struct UnknownEntryPointAddress {
-    pub address: Address,
-}
-
-impl TryFrom<Address> for EntryPointVersion {
-    type Error = UnknownEntryPointAddress;
-
-    fn try_from(addr: Address) -> Result<Self, Self::Error> {
-        if addr == Self::V06_ADDRESS {
-            Ok(EntryPointVersion::V06)
-        } else if addr == Self::V07_ADDRESS {
-            Ok(EntryPointVersion::V07)
-        } else {
-            Err(UnknownEntryPointAddress { address: addr })
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-
 pub struct UserOperationRequest {
     pub user_operation: VersionedUserOperation,
     pub entry_point: Address,
-    pub chain_id: i32,
+    pub chain_id: ChainId,
 }
 
 impl UserOperationRequest {
     pub fn hash(&self) -> Result<B256> {
-        let entry_point_version = EntryPointVersion::try_from(self.entry_point);
-        if entry_point_version.is_err() {
-            return Err(anyhow::anyhow!(
-                "Unknown entry point version: {:#x}",
-                self.entry_point
-            ));
+        let entry_point_version = EntryPointVersion::try_from(self.entry_point)
+        .map_err(|_| anyhow::anyhow!("Unknown entry point version: {:#x}", self.entry_point))?;
+
+    match (&self.user_operation, entry_point_version) {
+        (VersionedUserOperation::UserOperation(op), EntryPointVersion::V06) => {
+            Ok(v06::hash_user_operation(op, self.entry_point, self.chain_id))
         }
-        match (&self.user_operation, entry_point_version) {
-            (VersionedUserOperation::UserOperation(user_operation), Ok(EntryPointVersion::V06)) => {
-                Ok(entrypoints::v06::hash_user_operation_v06(user_operation, self.entry_point, self.chain_id))
-            }
-            (
-                VersionedUserOperation::PackedUserOperation(user_operation),
-                Ok(EntryPointVersion::V07),
-            ) => Ok(entrypoints::v07::hash_user_operation_v07(user_operation, self.entry_point, self.chain_id)),
-            _ => {
-                return Err(anyhow::anyhow!(
-                    "Unknown entry point version: {:#x}",
-                    self.entry_point
-                ));
-            }
+        (VersionedUserOperation::PackedUserOperation(op), EntryPointVersion::V07) => {
+            Ok(v07::hash_user_operation(op, self.entry_point, self.chain_id))
         }
+        _ => Err(anyhow::anyhow!(
+            "Mismatched operation type and entry point version"
+        )),
+    }
     }
 }
 
