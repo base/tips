@@ -1,5 +1,4 @@
-use alloy_primitives::{Address, B256, U256, address, keccak256};
-
+use alloy_primitives::{Address, address};
 
 #[derive(Debug, Clone)]
 pub enum EntryPointVersion {

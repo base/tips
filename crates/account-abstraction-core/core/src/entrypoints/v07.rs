@@ -1,4 +1,4 @@
-use alloy_primitives::{Address, FixedBytes, U256, ChainId};
+use alloy_primitives::{Address, ChainId, FixedBytes, U256};
 use alloy_primitives::{Bytes, keccak256};
 use alloy_rpc_types::erc4337;
 use alloy_sol_types::{SolValue, sol};
@@ -51,10 +51,10 @@ impl From<erc4337::PackedUserOperation> for PackedUserOperation {
             Bytes::new()
         };
         let account_gas_limits =
-            pack_u256_pair_to_bytes32(uo.verification_gas_limit.into(), uo.call_gas_limit.into());
+            pack_u256_pair_to_bytes32(uo.verification_gas_limit, uo.call_gas_limit);
         let gas_fees = pack_u256_pair_to_bytes32(
-            uo.max_priority_fee_per_gas.into(),
-            uo.max_fee_per_gas.into(),
+            uo.max_priority_fee_per_gas,
+            uo.max_fee_per_gas,
         );
         let pvgl: [u8; 16] = uo
             .paymaster_verification_gas_limit
@@ -78,9 +78,9 @@ impl From<erc4337::PackedUserOperation> for PackedUserOperation {
             nonce: uo.nonce,
             initCode: init_code,
             callData: uo.call_data.clone(),
-            accountGasLimits: FixedBytes::from(account_gas_limits),
+            accountGasLimits: account_gas_limits,
             preVerificationGas: U256::from(uo.pre_verification_gas),
-            gasFees: FixedBytes::from(gas_fees),
+            gasFees: gas_fees,
             paymasterAndData: paymaster_and_data,
             signature: uo.signature.clone(),
         }

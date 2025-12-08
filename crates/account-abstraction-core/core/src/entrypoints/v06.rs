@@ -1,4 +1,4 @@
-use alloy_primitives::{U256, ChainId};
+use alloy_primitives::{ChainId, U256};
 use alloy_rpc_types::erc4337;
 use alloy_sol_types::{SolValue, sol};
 sol! {

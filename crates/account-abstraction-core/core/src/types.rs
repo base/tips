@@ -1,5 +1,5 @@
-use crate::entrypoints::{version::EntryPointVersion, v06, v07};
-use alloy_primitives::{Address, B256, U256, ChainId};
+use crate::entrypoints::{v06, v07, version::EntryPointVersion};
+use alloy_primitives::{Address, B256, ChainId, U256};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 use anyhow::Result;
@@ -21,19 +21,19 @@ pub struct UserOperationRequest {
 impl UserOperationRequest {
     pub fn hash(&self) -> Result<B256> {
         let entry_point_version = EntryPointVersion::try_from(self.entry_point)
-        .map_err(|_| anyhow::anyhow!("Unknown entry point version: {:#x}", self.entry_point))?;
+            .map_err(|_| anyhow::anyhow!("Unknown entry point version: {:#x}", self.entry_point))?;
 
-    match (&self.user_operation, entry_point_version) {
-        (VersionedUserOperation::UserOperation(op), EntryPointVersion::V06) => {
-            Ok(v06::hash_user_operation(op, self.entry_point, self.chain_id))
+        match (&self.user_operation, entry_point_version) {
+            (VersionedUserOperation::UserOperation(op), EntryPointVersion::V06) => Ok(
+                v06::hash_user_operation(op, self.entry_point, self.chain_id),
+            ),
+            (VersionedUserOperation::PackedUserOperation(op), EntryPointVersion::V07) => Ok(
+                v07::hash_user_operation(op, self.entry_point, self.chain_id),
+            ),
+            _ => Err(anyhow::anyhow!(
+                "Mismatched operation type and entry point version"
+            )),
         }
-        (VersionedUserOperation::PackedUserOperation(op), EntryPointVersion::V07) => {
-            Ok(v07::hash_user_operation(op, self.entry_point, self.chain_id))
-        }
-        _ => Err(anyhow::anyhow!(
-            "Mismatched operation type and entry point version"
-        )),
-    }
     }
 }
 

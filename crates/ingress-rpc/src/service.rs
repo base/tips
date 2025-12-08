@@ -20,7 +20,7 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, UserOpQueuePublisher, MessageQueue};
+use crate::queue::{BundleQueuePublisher, KafkaMessageQueue, MessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
@@ -59,14 +59,14 @@ pub trait IngressApi {
     ) -> RpcResult<SendUserOperationResponse>;
 }
 
-pub struct IngressService {
+pub struct IngressService<Q: MessageQueue = KafkaMessageQueue> {
     mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
-    bundle_queue_publisher: BundleQueuePublisher<KafkaMessageQueue>,
-    user_op_queue_publisher: UserOpQueuePublisher<KafkaMessageQueue>,
+    bundle_queue_publisher: BundleQueuePublisher<Q>,
+    user_op_queue_publisher: UserOpQueuePublisher<Q>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -77,10 +77,10 @@ pub struct IngressService {
     builder_backrun_tx: broadcast::Sender<Bundle>,
 }
 
-impl IngressService {
+impl<Q: MessageQueue> IngressService<Q> {
     pub fn new(
         providers: Providers,
-        queue: KafkaMessageQueue,
+        queue: Q,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
@@ -123,7 +123,7 @@ impl IngressService {
 }
 
 #[async_trait]
-impl IngressApiServer for IngressService {
+impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
             info!(
@@ -298,20 +298,25 @@ impl IngressApiServer for IngressService {
         &self,
         user_operation_request: UserOperationRequest,
     ) -> RpcResult<SendUserOperationResponse> {
-        dbg!(&user_operation_request);
+        let user_op_hash = user_operation_request
+            .hash()
+            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+
         let _ = self
             .account_abstraction_service
             .validate_user_operation(&user_operation_request.user_operation)
             .await?;
+
         if let Err(e) = self
             .user_op_queue_publisher
-            .publish(
-                &user_operation_request.user_operation,
-                &user_operation_request.hash().unwrap(),
-            )
+            .publish(&user_operation_request.user_operation, &user_op_hash)
             .await
         {
-            warn!(message = "Failed to publish user operation to queue", user_operation_hash = %user_operation_request.hash().unwrap(), error = %e);
+            warn!(
+                message = "Failed to publish user operation to queue",
+                user_operation_hash = %user_op_hash,
+                error = %e
+            );
             return Err(
                 EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err(),
             );
@@ -320,7 +325,7 @@ impl IngressApiServer for IngressService {
     }
 }
 
-impl IngressService {
+impl<Q: MessageQueue> IngressService<Q> {
     async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
@@ -439,6 +444,7 @@ mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
     use alloy_provider::RootProvider;
+    use anyhow::Result;
     use async_trait::async_trait;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
@@ -446,7 +452,6 @@ mod tests {
     use tokio::sync::{broadcast, mpsc};
     use url::Url;
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
-    use anyhow::Result;
     struct MockQueue;
 
     #[async_trait]
@@ -563,7 +568,7 @@ mod tests {
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
         let service = IngressService::new(
-            providers, KafkaMessageQueue::new(FutureProducer::new(MockQueue)), audit_tx, builder_tx, backrun_tx, config,
+            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
         );
 
         let bundle = Bundle::default();
