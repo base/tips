@@ -41,7 +41,6 @@ impl UserOperationRequest {
 #[serde(rename_all = "camelCase")]
 pub struct UserOperationRequestValidationResult {
     pub expiration_timestamp: u64,
-    pub hash: B256,
     pub gas_used: U256,
 }
 
