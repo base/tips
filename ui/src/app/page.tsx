@@ -31,7 +31,13 @@ function SearchBar({ onError }: { onError: (error: string | null) => void }) {
       const result = await response.json();
 
       if (result.bundle_ids && result.bundle_ids.length > 0) {
-        router.push(`/bundles/${result.bundle_ids[0]}`);
+        if (result.bundle_ids.length === 1) {
+          // Single bundle - go directly to bundle page
+          router.push(`/bundles/${result.bundle_ids[0]}`);
+        } else {
+          // Multiple bundles - show transaction page with merged history
+          router.push(`/txn/${hash}`);
+        }
       } else {
         onError("No bundle found for this transaction");
       }
@@ -70,10 +76,10 @@ function BlockRow({ block, index }: { block: BlockSummary; index: number }) {
     timeSince <= 0
       ? "now"
       : timeSince < 60
-        ? `${timeSince}s ago`
-        : timeSince < 3600
-          ? `${Math.floor(timeSince / 60)}m ago`
-          : `${Math.floor(timeSince / 3600)}h ago`;
+      ? `${timeSince}s ago`
+      : timeSince < 3600
+      ? `${Math.floor(timeSince / 60)}m ago`
+      : `${Math.floor(timeSince / 3600)}h ago`;
 
   return (
     <Link

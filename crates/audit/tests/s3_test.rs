@@ -33,6 +33,7 @@ async fn test_event_write_and_read() -> Result<(), Box<dyn std::error::Error + S
         BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle.clone()),
+            timestamp_ms: 1234567890,
         },
     );
 
@@ -60,6 +61,7 @@ async fn test_event_write_and_read() -> Result<(), Box<dyn std::error::Error + S
         BundleEvent::Received {
             bundle_id: bundle_id_two,
             bundle: Box::new(bundle.clone()),
+            timestamp_ms: 1234567890,
         },
     );
 
@@ -91,12 +93,16 @@ async fn test_events_appended() -> Result<(), Box<dyn std::error::Error + Send +
             BundleEvent::Received {
                 bundle_id,
                 bundle: Box::new(bundle.clone()),
+                timestamp_ms: 1234567890,
             },
         ),
         create_test_event(
             "test-key-2",
             1234567891,
-            BundleEvent::Cancelled { bundle_id },
+            BundleEvent::Cancelled {
+                bundle_id,
+                timestamp_ms: 1234567891,
+            },
         ),
     ];
 
@@ -140,6 +146,7 @@ async fn test_event_deduplication() -> Result<(), Box<dyn std::error::Error + Se
         BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle.clone()),
+            timestamp_ms: 1234567890,
         },
     );
 
@@ -191,6 +198,7 @@ async fn test_concurrent_writes_for_bundle() -> Result<(), Box<dyn std::error::E
         BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle.clone()),
+            timestamp_ms: 1234567889,
         },
     );
 
@@ -212,6 +220,7 @@ async fn test_concurrent_writes_for_bundle() -> Result<(), Box<dyn std::error::E
             BundleEvent::Received {
                 bundle_id,
                 bundle: Box::new(bundle.clone()),
+                timestamp_ms: 1234567890 + i as i64,
             },
         );
 

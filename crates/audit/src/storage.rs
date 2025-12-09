@@ -63,6 +63,62 @@ pub enum BundleHistoryEvent {
         timestamp: i64,
         reason: DropReason,
     },
+    /// Transaction received by ingress-rpc
+    TransactionReceived {
+        key: String,
+        timestamp: i64,
+        bundle: Box<AcceptedBundle>,
+    },
+    /// Transaction sent from ingress-rpc
+    TransactionSent {
+        key: String,
+        timestamp: i64,
+        tx_hash: TxHash,
+    },
+    /// Backrun bundle received by ingress-rpc
+    BackrunReceived {
+        key: String,
+        timestamp: i64,
+        bundle: Box<AcceptedBundle>,
+    },
+    /// Backrun bundle sent to builder
+    BackrunSent {
+        key: String,
+        timestamp: i64,
+        target_tx_hash: TxHash,
+    },
+    /// Backrun bundle inserted into builder store
+    BackrunInserted {
+        key: String,
+        timestamp: i64,
+        target_tx_hash: TxHash,
+        backrun_tx_hashes: Vec<TxHash>,
+    },
+    /// Transaction selected for execution
+    StartExecuting {
+        key: String,
+        timestamp: i64,
+        tx_hash: TxHash,
+        block_number: u64,
+    },
+    /// Transaction successfully executed
+    Executed {
+        key: String,
+        timestamp: i64,
+        tx_hash: TxHash,
+        block_number: u64,
+        gas_used: u64,
+    },
+    /// Backrun bundle transaction executed
+    BackrunBundleExecuted {
+        key: String,
+        timestamp: i64,
+        target_tx_hash: TxHash,
+        backrun_tx_hash: TxHash,
+        block_number: u64,
+        gas_used: u64,
+        success: bool,
+    },
 }
 
 impl BundleHistoryEvent {
@@ -73,6 +129,14 @@ impl BundleHistoryEvent {
             BundleHistoryEvent::BuilderIncluded { key, .. } => key,
             BundleHistoryEvent::BlockIncluded { key, .. } => key,
             BundleHistoryEvent::Dropped { key, .. } => key,
+            BundleHistoryEvent::TransactionReceived { key, .. } => key,
+            BundleHistoryEvent::TransactionSent { key, .. } => key,
+            BundleHistoryEvent::BackrunReceived { key, .. } => key,
+            BundleHistoryEvent::BackrunSent { key, .. } => key,
+            BundleHistoryEvent::BackrunInserted { key, .. } => key,
+            BundleHistoryEvent::StartExecuting { key, .. } => key,
+            BundleHistoryEvent::Executed { key, .. } => key,
+            BundleHistoryEvent::BackrunBundleExecuted { key, .. } => key,
         }
     }
 }
@@ -87,7 +151,13 @@ fn update_bundle_history_transform(
     event: &Event,
 ) -> Option<BundleHistory> {
     let mut history = bundle_history.history;
-    let bundle_id = event.event.bundle_id();
+    let bundle_id = match event.event.bundle_id() {
+        Some(id) => id,
+        None => {
+            // Backrun events don't have bundle_ids, skip history update
+            return None;
+        }
+    };
 
     // Check for deduplication - if event with same key already exists, skip
     if history.iter().any(|h| h.key() == event.key) {
@@ -99,15 +169,18 @@ fn update_bundle_history_transform(
         return None;
     }
 
+    // Use the event's internal timestamp_ms instead of Kafka timestamp for accurate ordering
+    let timestamp = event.event.timestamp_ms();
+
     let history_event = match &event.event {
         BundleEvent::Received { bundle, .. } => BundleHistoryEvent::Received {
             key: event.key.clone(),
-            timestamp: event.timestamp,
+            timestamp,
             bundle: bundle.clone(),
         },
         BundleEvent::Cancelled { .. } => BundleHistoryEvent::Cancelled {
             key: event.key.clone(),
-            timestamp: event.timestamp,
+            timestamp,
         },
         BundleEvent::BuilderIncluded {
             builder,
@@ -116,7 +189,7 @@ fn update_bundle_history_transform(
             ..
         } => BundleHistoryEvent::BuilderIncluded {
             key: event.key.clone(),
-            timestamp: event.timestamp,
+            timestamp,
             builder: builder.clone(),
             block_number: *block_number,
             flashblock_index: *flashblock_index,
@@ -127,14 +200,84 @@ fn update_bundle_history_transform(
             ..
         } => BundleHistoryEvent::BlockIncluded {
             key: event.key.clone(),
-            timestamp: event.timestamp,
+            timestamp,
             block_number: *block_number,
             block_hash: *block_hash,
         },
         BundleEvent::Dropped { reason, .. } => BundleHistoryEvent::Dropped {
             key: event.key.clone(),
-            timestamp: event.timestamp,
+            timestamp,
             reason: reason.clone(),
+        },
+        BundleEvent::TransactionReceived { bundle, .. } => {
+            BundleHistoryEvent::TransactionReceived {
+                key: event.key.clone(),
+                timestamp,
+                bundle: bundle.clone(),
+            }
+        }
+        BundleEvent::TransactionSent { tx_hash, .. } => BundleHistoryEvent::TransactionSent {
+            key: event.key.clone(),
+            timestamp,
+            tx_hash: *tx_hash,
+        },
+        BundleEvent::BackrunReceived { bundle, .. } => BundleHistoryEvent::BackrunReceived {
+            key: event.key.clone(),
+            timestamp,
+            bundle: bundle.clone(),
+        },
+        BundleEvent::BackrunSent { target_tx_hash, .. } => BundleHistoryEvent::BackrunSent {
+            key: event.key.clone(),
+            timestamp,
+            target_tx_hash: *target_tx_hash,
+        },
+        BundleEvent::BackrunInserted {
+            target_tx_hash,
+            backrun_tx_hashes,
+            ..
+        } => BundleHistoryEvent::BackrunInserted {
+            key: event.key.clone(),
+            timestamp,
+            target_tx_hash: *target_tx_hash,
+            backrun_tx_hashes: backrun_tx_hashes.clone(),
+        },
+        BundleEvent::StartExecuting {
+            tx_hash,
+            block_number,
+            ..
+        } => BundleHistoryEvent::StartExecuting {
+            key: event.key.clone(),
+            timestamp,
+            tx_hash: *tx_hash,
+            block_number: *block_number,
+        },
+        BundleEvent::Executed {
+            tx_hash,
+            block_number,
+            gas_used,
+            ..
+        } => BundleHistoryEvent::Executed {
+            key: event.key.clone(),
+            timestamp,
+            tx_hash: *tx_hash,
+            block_number: *block_number,
+            gas_used: *gas_used,
+        },
+        BundleEvent::BackrunBundleExecuted {
+            target_tx_hash,
+            backrun_tx_hash,
+            block_number,
+            gas_used,
+            success,
+            ..
+        } => BundleHistoryEvent::BackrunBundleExecuted {
+            key: event.key.clone(),
+            timestamp,
+            target_tx_hash: *target_tx_hash,
+            backrun_tx_hash: *backrun_tx_hash,
+            block_number: *block_number,
+            gas_used: *gas_used,
+            success: *success,
         },
     };
 
@@ -190,7 +333,25 @@ impl S3EventReaderWriter {
     }
 
     async fn update_bundle_history(&self, event: Event) -> Result<()> {
-        let s3_key = S3Key::Bundle(event.event.bundle_id()).to_string();
+        let event_name = event.event.event_name();
+
+        // Backrun events without bundle_ids are skipped from S3 storage
+        let Some(bundle_id) = event.event.bundle_id() else {
+            info!(
+                event_name = %event_name,
+                tx_hash = ?event.event.tx_hash(),
+                "Skipping S3 storage for event without bundle_id"
+            );
+            return Ok(());
+        };
+
+        info!(
+            event_name = %event_name,
+            bundle_id = %bundle_id,
+            "Processing event for S3 storage"
+        );
+
+        let s3_key = S3Key::Bundle(bundle_id).to_string();
 
         self.idempotent_write::<BundleHistory, _>(&s3_key, |current_history| {
             update_bundle_history_transform(current_history, &event)
@@ -325,7 +486,11 @@ impl S3EventReaderWriter {
 #[async_trait]
 impl EventWriter for S3EventReaderWriter {
     async fn archive_event(&self, event: Event) -> Result<()> {
-        let bundle_id = event.event.bundle_id();
+        // Backrun events don't have bundle_ids, skip S3 archival
+        let Some(bundle_id) = event.event.bundle_id() else {
+            return Ok(());
+        };
+
         let transaction_ids = event.event.transaction_ids();
 
         self.update_bundle_history(event.clone()).await?;
@@ -384,6 +549,7 @@ mod tests {
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle.clone()),
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("test-key", 1234567890, bundle_event);
 
@@ -423,6 +589,7 @@ mod tests {
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle),
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("duplicate-key", 1234567890, bundle_event);
 
@@ -440,12 +607,16 @@ mod tests {
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle),
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("test-key", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
 
-        let bundle_event = BundleEvent::Cancelled { bundle_id };
+        let bundle_event = BundleEvent::Cancelled {
+            bundle_id,
+            timestamp_ms: 1234567890,
+        };
         let event = create_test_event("test-key-2", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
         assert!(result.is_some());
@@ -455,6 +626,7 @@ mod tests {
             builder: "test-builder".to_string(),
             block_number: 12345,
             flashblock_index: 1,
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("test-key-3", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
@@ -464,6 +636,7 @@ mod tests {
             bundle_id,
             block_number: 12345,
             block_hash: TxHash::from([1u8; 32]),
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("test-key-4", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history.clone(), &event);
@@ -472,6 +645,7 @@ mod tests {
         let bundle_event = BundleEvent::Dropped {
             bundle_id,
             reason: DropReason::TimedOut,
+            timestamp_ms: 1234567890,
         };
         let event = create_test_event("test-key-5", 1234567890, bundle_event);
         let result = update_bundle_history_transform(bundle_history, &event);

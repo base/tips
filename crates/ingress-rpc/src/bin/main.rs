@@ -1,3 +1,4 @@
+use alloy_primitives::TxHash;
 use alloy_provider::ProviderBuilder;
 use clap::Parser;
 use jsonrpsee::server::Server;
@@ -75,11 +76,20 @@ async fn main() -> anyhow::Result<()> {
 
     let (builder_tx, _) =
         broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
-    let (builder_backrun_tx, _) = broadcast::channel::<Bundle>(config.max_buffered_backrun_bundles);
+    let (builder_backrun_tx, _) =
+        broadcast::channel::<(Bundle, uuid::Uuid)>(config.max_buffered_backrun_bundles);
+    let (builder_tx_bundle_id_tx, _) =
+        broadcast::channel::<(TxHash, uuid::Uuid)>(config.max_buffered_meter_bundle_responses);
     config.builder_rpcs.iter().for_each(|builder_rpc| {
         let metering_rx = builder_tx.subscribe();
         let backrun_rx = builder_backrun_tx.subscribe();
-        connect_ingress_to_builder(metering_rx, backrun_rx, builder_rpc.clone());
+        let tx_bundle_id_rx = builder_tx_bundle_id_tx.subscribe();
+        connect_ingress_to_builder(
+            metering_rx,
+            backrun_rx,
+            tx_bundle_id_rx,
+            builder_rpc.clone(),
+        );
     });
 
     let health_check_addr = config.health_check_addr;
@@ -95,6 +105,7 @@ async fn main() -> anyhow::Result<()> {
         audit_tx,
         builder_tx,
         builder_backrun_tx,
+        builder_tx_bundle_id_tx,
         cfg,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);

@@ -198,7 +198,9 @@ function TransactionDetails({
             </div>
           </div>
           <svg
-            className={`w-5 h-5 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+            className={`w-5 h-5 text-gray-400 transition-transform ${
+              expanded ? "rotate-180" : ""
+            }`}
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -409,7 +411,7 @@ function Timeline({ events }: { events: BundleHistoryResponse["history"] }) {
             <TimelineEventDetails event={event} />
             <time className="text-sm text-gray-500 tabular-nums">
               {event.data?.timestamp
-                ? new Date(event.data.timestamp).toLocaleString()
+                ? formatTimestampWithMs(event.data.timestamp)
                 : "—"}
             </time>
           </div>
@@ -423,6 +425,16 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
     <h2 className="text-base font-semibold text-gray-900 mb-4">{children}</h2>
   );
+}
+
+function formatTimestampWithMs(timestamp: number): string {
+  const date = new Date(timestamp);
+  const dateStr = date.toLocaleDateString();
+  const hours = date.getHours().toString().padStart(2, "0");
+  const minutes = date.getMinutes().toString().padStart(2, "0");
+  const seconds = date.getSeconds().toString().padStart(2, "0");
+  const ms = date.getMilliseconds().toString().padStart(3, "0");
+  return `${dateStr}, ${hours}:${minutes}:${seconds}.${ms}`;
 }
 
 export default function BundlePage({ params }: PageProps) {
@@ -445,7 +457,7 @@ export default function BundlePage({ params }: PageProps) {
           setError(
             response.status === 404
               ? "Bundle not found"
-              : "Failed to fetch bundle data",
+              : "Failed to fetch bundle data"
           );
           setData(null);
           return;

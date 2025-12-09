@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{B256, Bytes, TxHash};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -73,7 +73,9 @@ pub struct IngressService<Queue> {
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
     backrun_enabled: bool,
-    builder_backrun_tx: broadcast::Sender<Bundle>,
+    builder_backrun_tx: broadcast::Sender<(Bundle, uuid::Uuid)>,
+    /// Channel to send tx_hash -> bundle_id mappings to builder for audit tracking
+    builder_tx_bundle_id_tx: broadcast::Sender<(TxHash, uuid::Uuid)>,
 }
 
 impl<Queue> IngressService<Queue> {
@@ -82,7 +84,8 @@ impl<Queue> IngressService<Queue> {
         queue: Queue,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
-        builder_backrun_tx: broadcast::Sender<Bundle>,
+        builder_backrun_tx: broadcast::Sender<(Bundle, uuid::Uuid)>,
+        builder_tx_bundle_id_tx: broadcast::Sender<(TxHash, uuid::Uuid)>,
         config: Config,
     ) -> Self {
         let mempool_provider = Arc::new(providers.mempool);
@@ -110,6 +113,7 @@ impl<Queue> IngressService<Queue> {
             builder_tx,
             backrun_enabled: config.backrun_enabled,
             builder_backrun_tx,
+            builder_tx_bundle_id_tx,
         }
     }
 }
@@ -133,19 +137,40 @@ where
 
         let start = Instant::now();
         let (accepted_bundle, bundle_hash) = self.validate_parse_and_meter_bundle(&bundle).await?;
+        let bundle_id = *accepted_bundle.uuid();
+
+        // Get target tx hash (first tx in bundle)
+        let target_tx_hash = accepted_bundle
+            .txs
+            .first()
+            .map(|tx| tx.tx_hash())
+            .unwrap_or_default();
 
         self.metrics.backrun_bundles_received_total.increment(1);
-        info!(message = "Received backrun bundle", bundle_hash = %bundle_hash);
+        info!(message = "Received backrun bundle", bundle_hash = %bundle_hash, bundle_id = %bundle_id);
 
-        if let Err(e) = self.builder_backrun_tx.send(bundle) {
+        // Emit BackrunReceived event at start of processing
+        self.send_transaction_event(BundleEvent::BackrunReceived {
+            bundle_id,
+            bundle: Box::new(accepted_bundle.clone()),
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        });
+
+        if let Err(e) = self.builder_backrun_tx.send((bundle, bundle_id)) {
             warn!(
                 message = "Failed to send backrun bundle to builders",
                 bundle_hash = %bundle_hash,
+                bundle_id = %bundle_id,
                 error = %e
             );
         }
 
-        self.send_audit_event(&accepted_bundle, bundle_hash);
+        // Emit BackrunSent event at end of processing
+        self.send_transaction_event(BundleEvent::BackrunSent {
+            bundle_id,
+            target_tx_hash,
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        });
 
         self.metrics
             .backrun_bundles_sent_duration
@@ -197,8 +222,9 @@ where
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
         let transaction = self.get_tx(&data).await?;
+        let tx_hash = transaction.tx_hash();
 
-        info!(message = "Received raw transaction", tx_hash = %transaction.tx_hash());
+        info!(message = "Received raw transaction", tx_hash = %tx_hash);
 
         let send_to_kafka = matches!(
             self.tx_submission_method,
@@ -235,6 +261,14 @@ where
             });
 
         let accepted_bundle = AcceptedBundle::new(parsed_bundle, meter_bundle_response.clone());
+        let bundle_id = *accepted_bundle.uuid();
+
+        // Emit TransactionReceived event at start of processing
+        self.send_transaction_event(BundleEvent::TransactionReceived {
+            bundle_id,
+            bundle: Box::new(accepted_bundle.clone()),
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        });
 
         self.builder_tx
             .send(meter_bundle_response)
@@ -286,13 +320,23 @@ where
             });
         }
 
-        self.send_audit_event(&accepted_bundle, transaction.tx_hash());
+        // self.send_audit_event(&accepted_bundle, tx_hash);
+
+        // Send tx_hash -> bundle_id mapping to builder for audit tracking
+        self.send_tx_bundle_id(tx_hash, bundle_id);
+
+        // Emit TransactionSent event at end of processing
+        self.send_transaction_event(BundleEvent::TransactionSent {
+            bundle_id,
+            tx_hash,
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
+        });
 
         self.metrics
             .send_raw_transaction_duration
             .record(start.elapsed().as_secs_f64());
 
-        Ok(transaction.tx_hash())
+        Ok(tx_hash)
     }
 
     async fn send_user_operation(
@@ -421,11 +465,34 @@ where
         let audit_event = BundleEvent::Received {
             bundle_id: *accepted_bundle.uuid(),
             bundle: Box::new(accepted_bundle.clone()),
+            timestamp_ms: chrono::Utc::now().timestamp_millis(),
         };
         if let Err(e) = self.audit_channel.send(audit_event) {
             warn!(
                 message = "Failed to send audit event",
                 bundle_hash = %bundle_hash,
+                error = %e
+            );
+        }
+    }
+
+    /// Helper method to send tx_hash -> bundle_id mapping to builder for audit tracking
+    fn send_tx_bundle_id(&self, tx_hash: TxHash, bundle_id: uuid::Uuid) {
+        if let Err(e) = self.builder_tx_bundle_id_tx.send((tx_hash, bundle_id)) {
+            warn!(
+                message = "Failed to send tx_bundle_id mapping",
+                tx_hash = %tx_hash,
+                bundle_id = %bundle_id,
+                error = %e
+            );
+        }
+    }
+
+    /// Helper method to send transaction lifecycle events
+    fn send_transaction_event(&self, event: BundleEvent) {
+        if let Err(e) = self.audit_channel.send(event) {
+            warn!(
+                message = "Failed to send transaction event",
                 error = %e
             );
         }
@@ -562,9 +629,16 @@ mod tests {
         let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+        let (tx_bundle_id_tx, _tx_bundle_id_rx) = broadcast::channel(1);
 
         let service = IngressService::new(
-            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+            providers,
+            MockQueue,
+            audit_tx,
+            builder_tx,
+            backrun_tx,
+            tx_bundle_id_tx,
+            config,
         );
 
         let bundle = Bundle::default();
@@ -621,9 +695,16 @@ mod tests {
         let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
+        let (tx_bundle_id_tx, _tx_bundle_id_rx) = broadcast::channel(1);
 
         let service = IngressService::new(
-            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+            providers,
+            MockQueue,
+            audit_tx,
+            builder_tx,
+            backrun_tx,
+            tx_bundle_id_tx,
+            config,
         );
 
         // Valid signed transaction bytes
