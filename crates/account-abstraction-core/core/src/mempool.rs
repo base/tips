@@ -3,10 +3,10 @@ use anyhow::Result;
 use rundler_pool::{LocalPoolBuilder, LocalPoolHandle, PoolConfig, PoolTask, PoolTaskArgs};
 use rundler_sim::PrecheckSettings;
 use rundler_sim::simulation::Settings as SimulationSettings;
+use rundler_types::pool::Pool;
 use rundler_types::{
     EntryPointVersion, PriorityFeeMode, UserOperationId, UserOperationVariant, chain::ChainSpec,
 };
-use rundler_types::pool::Pool;
 use std::collections::HashMap;
 use tokio::sync::broadcast;
 use tracing::info;

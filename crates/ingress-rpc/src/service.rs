@@ -456,7 +456,7 @@ mod tests {
 
     #[async_trait]
     impl MessageQueue for MockQueue {
-        async fn publish_raw(&self, _topic: &str, _key: &str, _payload: &[u8]) -> Result<()> {
+        async fn publish(&self, _topic: &str, _key: &str, _payload: &[u8]) -> Result<()> {
             Ok(())
         }
     }

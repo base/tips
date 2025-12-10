@@ -4,13 +4,13 @@ use anyhow::Result;
 use async_trait::async_trait;
 use backon::{ExponentialBuilder, Retryable};
 use rdkafka::producer::{FutureProducer, FutureRecord};
+use std::sync::Arc;
 use tips_core::AcceptedBundle;
 use tokio::time::Duration;
 use tracing::{error, info};
-
 #[async_trait]
 pub trait MessageQueue: Send + Sync {
-    async fn publish_raw(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()>;
+    async fn publish(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()>;
 }
 
 pub struct KafkaMessageQueue {
@@ -25,7 +25,7 @@ impl KafkaMessageQueue {
 
 #[async_trait]
 impl MessageQueue for KafkaMessageQueue {
-    async fn publish_raw(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()> {
+    async fn publish(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()> {
         let enqueue = || async {
             let record = FutureRecord::to(topic).key(key).payload(payload);
 
@@ -67,36 +67,36 @@ impl MessageQueue for KafkaMessageQueue {
 }
 
 pub struct UserOpQueuePublisher<Q: MessageQueue> {
-    queue: std::sync::Arc<Q>,
+    queue: Arc<Q>,
     topic: String,
 }
 
 impl<Q: MessageQueue> UserOpQueuePublisher<Q> {
-    pub fn new(queue: std::sync::Arc<Q>, topic: String) -> Self {
+    pub fn new(queue: Arc<Q>, topic: String) -> Self {
         Self { queue, topic }
     }
 
     pub async fn publish(&self, user_op: &VersionedUserOperation, hash: &B256) -> Result<()> {
         let key = hash.to_string();
         let payload = serde_json::to_vec(&user_op)?;
-        self.queue.publish_raw(&self.topic, &key, &payload).await
+        self.queue.publish(&self.topic, &key, &payload).await
     }
 }
 
 pub struct BundleQueuePublisher<Q: MessageQueue> {
-    queue: std::sync::Arc<Q>,
+    queue: Arc<Q>,
     topic: String,
 }
 
 impl<Q: MessageQueue> BundleQueuePublisher<Q> {
-    pub fn new(queue: std::sync::Arc<Q>, topic: String) -> Self {
+    pub fn new(queue: Arc<Q>, topic: String) -> Self {
         Self { queue, topic }
     }
 
     pub async fn publish(&self, bundle: &AcceptedBundle, hash: &B256) -> Result<()> {
         let key = hash.to_string();
         let payload = serde_json::to_vec(bundle)?;
-        self.queue.publish_raw(&self.topic, &key, &payload).await
+        self.queue.publish(&self.topic, &key, &payload).await
     }
 }
 
@@ -132,7 +132,7 @@ mod tests {
 
         let start = Instant::now();
         let result = publisher
-            .publish_raw(
+            .publish(
                 "tips-ingress-rpc",
                 bundle_hash.to_string().as_str(),
                 &serde_json::to_vec(&accepted_bundle).unwrap(),
