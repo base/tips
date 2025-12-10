@@ -19,6 +19,7 @@ pub enum TxSubmissionMethod {
     Mempool,
     Kafka,
     MempoolAndKafka,
+    None,
 }
 
 impl FromStr for TxSubmissionMethod {
@@ -29,8 +30,9 @@ impl FromStr for TxSubmissionMethod {
             "mempool" => Ok(TxSubmissionMethod::Mempool),
             "kafka" => Ok(TxSubmissionMethod::Kafka),
             "mempool,kafka" | "kafka,mempool" => Ok(TxSubmissionMethod::MempoolAndKafka),
+            "none" => Ok(TxSubmissionMethod::None),
             _ => Err(format!(
-                "Invalid submission method: '{s}'. Valid options: mempool, kafka, mempool,kafka, kafka,mempool"
+                "Invalid submission method: '{s}'. Valid options: mempool, kafka, mempool,kafka, kafka,mempool, none"
             )),
         }
     }
