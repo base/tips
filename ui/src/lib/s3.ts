@@ -165,6 +165,8 @@ export async function getBundleHistory(
   const key = `bundles/${bundleId}`;
   const content = await getObjectContent(key);
 
+  console.log("content", content);
+
   if (!content) {
     return null;
   }

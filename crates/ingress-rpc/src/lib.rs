@@ -12,7 +12,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tips_core::MeterBundleResponse;
 use tokio::sync::broadcast;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
@@ -172,9 +172,11 @@ pub struct Config {
 
 pub fn connect_ingress_to_builder(
     metering_rx: broadcast::Receiver<MeterBundleResponse>,
-    backrun_rx: broadcast::Receiver<tips_core::Bundle>,
+    backrun_rx: broadcast::Receiver<(tips_core::Bundle, uuid::Uuid)>,
+    tx_bundle_id_rx: broadcast::Receiver<(TxHash, uuid::Uuid)>,
     builder_rpc: Url,
 ) {
+    let builder_rpc_clone = builder_rpc.clone();
     let builder: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
@@ -203,16 +205,36 @@ pub fn connect_ingress_to_builder(
         }
     });
 
+    let backrun_builder = builder.clone();
+    let backrun_builder_rpc_clone = builder_rpc_clone.clone();
     tokio::spawn(async move {
         let mut event_rx = backrun_rx;
-        while let Ok(bundle) = event_rx.recv().await {
-            if let Err(e) = builder
+        while let Ok((bundle, bundle_id)) = event_rx.recv().await {
+            if let Err(e) = backrun_builder
                 .client()
-                .request::<(tips_core::Bundle,), ()>("base_sendBackrunBundle", (bundle,))
+                .request::<(tips_core::Bundle, uuid::Uuid), ()>(
+                    "base_sendBackrunBundle",
+                    (bundle, bundle_id),
+                )
                 .await
             {
                 error!(error = %e, "Failed to send backrun bundle to builder");
             }
+            info!(message = "Sent backrun bundle to builder", builder_rpc = %backrun_builder_rpc_clone, bundle_id = %bundle_id);
+        }
+    });
+
+    tokio::spawn(async move {
+        let mut event_rx = tx_bundle_id_rx;
+        while let Ok((tx_hash, bundle_id)) = event_rx.recv().await {
+            if let Err(e) = builder
+                .client()
+                .request::<(TxHash, uuid::Uuid), ()>("base_txBundleId", (tx_hash, bundle_id))
+                .await
+            {
+                error!(error = %e, "Failed to send tx_bundle_id mapping to builder");
+            }
+            info!(message = "Sent tx_bundle_id to builder", builder_rpc = %builder_rpc_clone, tx_hash = %tx_hash, bundle_id = %bundle_id);
         }
     });
 }

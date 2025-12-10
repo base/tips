@@ -24,10 +24,12 @@ async fn test_kafka_publisher_s3_archiver_integration()
         BundleEvent::Received {
             bundle_id: test_bundle_id,
             bundle: Box::new(create_bundle_from_txn_data()),
+            timestamp_ms: 1234567890,
         },
         BundleEvent::Dropped {
             bundle_id: test_bundle_id,
             reason: DropReason::TimedOut,
+            timestamp_ms: 1234567891,
         },
     ];
 

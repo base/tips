@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server";
 import {
   type BundleEvent,
+  type BundleHistory,
   getBundleHistory,
   getTransactionMetadataByHash,
 } from "@/lib/s3";
@@ -28,15 +29,17 @@ export interface TransactionEvent {
   };
 }
 
+export type BundleEventWithId = BundleEvent & { bundleId: string };
+
 export interface TransactionHistoryResponse {
   hash: string;
   bundle_ids: string[];
-  history: BundleEvent[];
+  history: BundleEventWithId[];
 }
 
 export async function GET(
   _request: NextRequest,
-  { params }: { params: Promise<{ hash: string }> },
+  { params }: { params: Promise<{ hash: string }> }
 ) {
   try {
     const { hash } = await params;
@@ -46,20 +49,51 @@ export async function GET(
     if (!metadata) {
       return NextResponse.json(
         { error: "Transaction not found" },
-        { status: 404 },
+        { status: 404 }
       );
     }
 
-    // TODO: Can be in multiple bundles
-    const bundle = await getBundleHistory(metadata.bundle_ids[0]);
-    if (!bundle) {
-      return NextResponse.json({ error: "Bundle not found" }, { status: 404 });
+    console.log("metadata", metadata);
+
+    // Fetch ALL bundle histories in parallel
+    const bundleHistories = await Promise.all(
+      metadata.bundle_ids.map((id) => getBundleHistory(id))
+    );
+
+    // Filter out nulls and merge all events, tagging each with its bundleId
+    const allEvents: BundleEventWithId[] = bundleHistories
+      .map((bundle, index) => ({
+        bundle,
+        bundleId: metadata.bundle_ids[index],
+      }))
+      .filter(
+        (item): item is { bundle: BundleHistory; bundleId: string } =>
+          item.bundle !== null
+      )
+      .flatMap(({ bundle, bundleId }) =>
+        bundle.history.map((event) => ({ ...event, bundleId }))
+      );
+
+    if (allEvents.length === 0) {
+      return NextResponse.json(
+        { error: "No bundle history found" },
+        { status: 404 }
+      );
     }
+
+    // Sort by timestamp
+    allEvents.sort((a, b) => (a.data.timestamp ?? 0) - (b.data.timestamp ?? 0));
+
+    // Deduplicate by event key
+    const uniqueEvents = allEvents.filter(
+      (event, index, self) =>
+        index === self.findIndex((e) => e.data?.key === event.data?.key)
+    );
 
     const response: TransactionHistoryResponse = {
       hash,
       bundle_ids: metadata.bundle_ids,
-      history: bundle.history,
+      history: uniqueEvents,
     };
 
     return NextResponse.json(response);
@@ -67,7 +101,7 @@ export async function GET(
     console.error("Error fetching transaction data:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }
