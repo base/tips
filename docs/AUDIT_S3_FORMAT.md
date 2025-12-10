@@ -1,6 +1,6 @@
 # S3 Storage Format
 
-This document describes the S3 storage format used by the audit system for archiving bundle lifecycle events, transaction lookups, and UserOperation audit events.
+This document describes the S3 storage format used by the audit system for archiving bundle and UserOp lifecycle events.
 
 ## Storage Structure
 
@@ -66,9 +66,9 @@ Transaction hash to bundle mapping for efficient lookups:
 }
 ```
 
-### UserOperation History: `/userops/<hash>`
+### UserOp History: `/userops/<hash>`
 
-Each UserOperation is stored as a JSON object containing its complete lifecycle history. Events track the UserOp from mempool entry through on-chain inclusion or drop.
+Each UserOperation (ERC-4337) is stored as a JSON object containing its complete lifecycle history. Events are written after validation passes.
 
 ```json
 {
@@ -110,8 +110,8 @@ Each UserOperation is stored as a JSON object containing its complete lifecycle 
 
 | Event | When | Key Fields |
 |-------|------|------------|
-| `AddedToMempool` | UserOp passes validation, enters mempool | sender, entry_point, nonce |
-| `Dropped` | UserOp removed from mempool | reason (Invalid/Expired/ReplacedByHigherFee) |
+| `AddedToMempool` | UserOp passes validation and enters the mempool | sender, entry_point, nonce |
+| `Dropped` | UserOp removed from mempool | reason (Invalid, Expired, ReplacedByHigherFee) |
 | `Included` | UserOp included in a block | block_number, tx_hash |
 
 #### Drop Reasons
