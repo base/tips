@@ -165,7 +165,13 @@ mod tests {
     #[tokio::test]
     async fn test_mempool_creation() {
         let config = MempoolConfig::default();
-        let mempool = SimpleMempool::new(config);
+        let mut mempool = SimpleMempool::new(config);
+
+        // Should start without a pool handle until initialized.
+        assert!(mempool.pool_handle.is_none());
+
+        // After initialize, a handle should be available.
+        mempool.initialize().await.unwrap();
         assert!(mempool.pool_handle.is_some());
     }
 }
