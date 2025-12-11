@@ -337,14 +337,19 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             chain_id: 1,
         };
 
-        let user_op_hash = request
-            .hash()
-            .map_err(|e| EthApiError::InvalidParams(e.to_string()).into_rpc_err())?;
+        let user_op_hash = request.hash().map_err(|e| {
+            warn!(message = "Failed to hash user operation", error = %e);
+            EthApiError::InvalidParams(e.to_string()).into_rpc_err()
+        })?;
 
         let _ = self
             .account_abstraction_service
-            .validate_user_operation(&request.user_operation)
-            .await?;
+            .validate_user_operation(&request.user_operation, &entry_point)
+            .await
+            .map_err(|e| {
+                warn!(message = "Failed to validate user operation", error = %e);
+                EthApiError::InvalidParams(e.to_string()).into_rpc_err()
+            })?;
 
         if let Err(e) = self
             .user_op_queue_publisher
