@@ -22,6 +22,15 @@ jsonrpsee.workspace = true
 async-trait = { workspace = true }
 alloy-sol-types.workspace= true
 anyhow.workspace = true
+rundler-types = { git = "https://github.com/rayyan224/rundler", package = "rundler-types" }
+rundler-pool  = { git = "https://github.com/rayyan224/rundler", package = "rundler-pool" }
+rundler-sim = { git = "https://github.com/rayyan224/rundler", package = "rundler-sim" }
+rundler-provider = { git = "https://github.com/rayyan224/rundler", package = "rundler-provider" }
+rundler-task = { git = "https://github.com/rayyan224/rundler", package = "rundler-task" }
+rundler-utils = { git = "https://github.com/rayyan224/rundler", package = "rundler-utils" }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
 
 [dev-dependencies]
 alloy-primitives.workspace = true

@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tips_core::AcceptedBundle;
 use tokio::time::Duration;
 use tracing::{error, info};
-
 #[async_trait]
 pub trait MessageQueue: Send + Sync {
     async fn publish(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()>;
