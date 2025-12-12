@@ -486,6 +486,11 @@ mod tests {
     use alloy_provider::RootProvider;
     use anyhow::Result;
     use async_trait::async_trait;
+    use jsonrpsee::core::client::ClientT;
+    use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+    use jsonrpsee::server::{ServerBuilder, ServerHandle};
+    use mockall::mock;
+    use serde_json::json;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
@@ -528,6 +533,35 @@ mod tests {
             chain_id: 11,
             user_operation_topic: String::new(),
         }
+    }
+
+    async fn setup_rpc_server(mock: MockIngressApi) -> (HttpClient, ServerHandle) {
+        let server = ServerBuilder::default().build("127.0.0.1:0").await.unwrap();
+
+        let addr = server.local_addr().unwrap();
+        let handle = server.start(mock.into_rpc());
+
+        let client = HttpClientBuilder::default()
+            .build(format!("http://{}", addr))
+            .unwrap();
+
+        (client, handle)
+    }
+
+    fn sample_user_operation_v06() -> serde_json::Value {
+        json!({
+            "sender": "0x773d604960feccc5c2ce1e388595268187cf62bf",
+            "nonce": "0x19b0ffe729f0000000000000000",
+            "initCode": "0x9406cc6185a346906296840746125a0e449764545fbfb9cf000000000000000000000000f886bc0b4f161090096b82ac0c5eb7349add429d0000000000000000000000000000000000000000000000000000000000000000",
+            "callData": "0xb61d27f600000000000000000000000066519fcaee1ed65bc9e0acc25ccd900668d3ed490000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000443f84ac0e000000000000000000000000773d604960feccc5c2ce1e388595268187cf62bf000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000",
+            "callGasLimit": "0x5a3c",
+            "verificationGasLimit": "0x5b7c7",
+            "preVerificationGas": "0x1001744e6",
+            "maxFeePerGas": "0x889fca3c",
+            "maxPriorityFeePerGas": "0x1e8480",
+            "paymasterAndData": "0x",
+            "signature": "0x42eff6474dd0b7efd0ca3070e05ee0f3e3c6c665176b80c7768f59445d3415de30b65c4c6ae35c45822b726e8827a986765027e7e2d7d2a8d72c9cf0d23194b81c"
+        })
     }
 
     #[tokio::test]
@@ -681,5 +715,75 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // wiremock automatically verifies expect(1) when forward_server is dropped
+    }
+    mock! {
+        pub IngressApi {}
+
+        #[async_trait]
+        impl IngressApiServer for IngressApi {
+            async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+            async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+            async fn cancel_bundle(&self, request: CancelBundle) -> RpcResult<()>;
+            async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+            async fn send_user_operation(
+                &self,
+                user_operation: VersionedUserOperation,
+                entry_point: Address,
+            ) -> RpcResult<FixedBytes<32>>;
+        }
+    }
+    #[tokio::test]
+    async fn test_send_user_operation_accepts_valid_payload() {
+        let mut mock = MockIngressApi::new();
+        mock.expect_send_user_operation()
+            .times(1)
+            .returning(|_, _| Ok(FixedBytes::ZERO));
+
+        let (client, _handle) = setup_rpc_server(mock).await;
+
+        let user_op = sample_user_operation_v06();
+        let entry_point =
+            account_abstraction_core::entrypoints::version::EntryPointVersion::V06_ADDRESS;
+
+        let result: Result<FixedBytes<32>, _> = client
+            .request("eth_sendUserOperation", (user_op, entry_point))
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_user_operation_rejects_invalid_payload() {
+        let mut mock = MockIngressApi::new();
+        mock.expect_send_user_operation()
+            .times(0)
+            .returning(|_, _| Ok(FixedBytes::ZERO));
+
+        let (client, _handle) = setup_rpc_server(mock).await;
+
+        let user_op = sample_user_operation_v06();
+
+        // Missing entry point argument should be rejected by the RPC layer
+        let result: Result<FixedBytes<32>, _> =
+            client.request("eth_sendUserOperation", (user_op,)).await;
+
+        assert!(result.is_err());
+
+        let wrong_user_op = json!({
+            "nonce": "0x19b0ffe729f0000000000000000",
+            "callGasLimit": "0x5a3c",
+            "verificationGasLimit": "0x5b7c7",
+            "preVerificationGas": "0x1001744e6",
+            "maxFeePerGas": "0x889fca3c",
+            "maxPriorityFeePerGas": "0x1e8480",
+            "paymasterAndData": "0x",
+            "signature": "0x42eff6474dd0b7efd0ca3070e05ee0f3e3c6c665176b80c7768f59445d3415de30b65c4c6ae35c45822b726e8827a986765027e7e2d7d2a8d72c9cf0d23194b81c"
+        });
+
+        let wrong_user_op_result: Result<FixedBytes<32>, _> = client
+            .request("eth_sendUserOperation", (wrong_user_op, Address::ZERO))
+            .await;
+
+        assert!(wrong_user_op_result.is_err());
     }
 }
