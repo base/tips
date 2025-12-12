@@ -172,8 +172,11 @@ mod tests {
                 "jsonrpc": "2.0",
                 "id": 1,
                 "result": {
-                    "expirationTimestamp": 1000,
-                    "gasUsed": "10000"
+                 "valid": true,
+                 "reason": null,
+                 "valid_until": null,
+                 "valid_after": null,
+                 "context": null
                 }
             })))
             .mount(&mock_server)
@@ -187,7 +190,6 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(result.expiration_timestamp, 1000);
-        assert_eq!(result.gas_used, U256::from(10_000));
+        assert_eq!(result.valid, true);
     }
 }

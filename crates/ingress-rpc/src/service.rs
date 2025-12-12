@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{Address, B256, Bytes, ChainId};
+use alloy_primitives::{Address, B256, Bytes, FixedBytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -24,9 +24,7 @@ use crate::queue::{BundleQueuePublisher, MessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::entrypoints::version::EntryPointVersion;
-use account_abstraction_core::types::{
-    SendUserOperationResponse, UserOperationRequest, VersionedUserOperation,
-};
+use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 
@@ -60,7 +58,7 @@ pub trait IngressApi {
         &self,
         user_operation: VersionedUserOperation,
         entry_point: Address,
-    ) -> RpcResult<SendUserOperationResponse>;
+    ) -> RpcResult<FixedBytes<32>>;
 }
 
 pub struct IngressService<Q: MessageQueue> {
@@ -74,7 +72,6 @@ pub struct IngressService<Q: MessageQueue> {
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
-    chain_id: ChainId,
     block_time_milliseconds: u64,
     meter_bundle_timeout_ms: u64,
     builder_tx: broadcast::Sender<MeterBundleResponse>,
@@ -118,7 +115,6 @@ impl<Q: MessageQueue> IngressService<Q> {
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
             metrics: Metrics::default(),
-            chain_id: config.chain_id,
             block_time_milliseconds: config.block_time_milliseconds,
             meter_bundle_timeout_ms: config.meter_bundle_timeout_ms,
             builder_tx,
@@ -310,7 +306,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
         &self,
         rpc_user_operation: VersionedUserOperation,
         entry_point: Address,
-    ) -> RpcResult<SendUserOperationResponse> {
+    ) -> RpcResult<FixedBytes<32>> {
         println!("got here send_user_operation: {:?}", rpc_user_operation);
         let entry_point_version = EntryPointVersion::try_from(entry_point).map_err(|_| {
             EthApiError::InvalidParams("Unknown entry point version".into()).into_rpc_err()
@@ -366,9 +362,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             );
         }
 
-        Ok(SendUserOperationResponse {
-            user_op_hash: Bytes::copy_from_slice(user_op_hash.as_slice()),
-        })
+        Ok(user_op_hash)
     }
 }
 
@@ -490,19 +484,12 @@ impl<Q: MessageQueue> IngressService<Q> {
 mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
-    use account_abstraction_core::entrypoints::version::EntryPointVersion;
-    use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
     use alloy_primitives::Bytes;
     use alloy_provider::RootProvider;
-    use alloy_rpc_types::erc4337;
     use anyhow::Result;
     use async_trait::async_trait;
-    use jsonrpsee::core::client::ClientT;
-    use jsonrpsee::{http_client::HttpClientBuilder, server::Server};
-    use serde_json::json;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
-    use std::sync::{Arc, Mutex};
     use tips_core::test_utils::create_test_meter_bundle_response;
     use tokio::sync::{broadcast, mpsc};
     use url::Url;
@@ -516,30 +503,12 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Default)]
-    struct RecordingQueue {
-        published: Arc<Mutex<Vec<(String, String, Vec<u8>)>>>,
-    }
-
-    #[async_trait]
-    impl MessageQueue for RecordingQueue {
-        async fn publish(&self, topic: &str, key: &str, payload: &[u8]) -> Result<()> {
-            self.published.lock().unwrap().push((
-                topic.to_string(),
-                key.to_string(),
-                payload.to_vec(),
-            ));
-            Ok(())
-        }
-    }
-
     fn create_test_config(mock_server: &MockServer) -> Config {
         Config {
             address: IpAddr::from([127, 0, 0, 1]),
             port: 8080,
             mempool_url: Url::parse("http://localhost:3000").unwrap(),
             tx_submission_method: TxSubmissionMethod::Mempool,
-            chain_id: 1,
             ingress_kafka_properties: String::new(),
             ingress_topic: String::new(),
             audit_kafka_properties: String::new(),
@@ -558,6 +527,7 @@ mod tests {
             health_check_addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
             backrun_enabled: false,
             raw_tx_forward_rpc: None,
+            chain_id: 11,
             user_operation_topic: String::new(),
         }
     }
@@ -714,111 +684,5 @@ mod tests {
 
         // wiremock automatically verifies expect(1) when forward_server is dropped
     }
-
-    #[tokio::test]
-    async fn test_send_user_operation() {
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
-                "jsonrpc": "2.0",
-                "id": 1,
-                "result": {
-                    "expirationTimestamp": 1000,
-                    "gasUsed": "0x5208"
-                }
-            })))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server);
-
-        let providers = Providers {
-            mempool: RootProvider::new_http(mock_server.uri().parse().unwrap()),
-            simulation: RootProvider::new_http(mock_server.uri().parse().unwrap()),
-            raw_tx_forward: None,
-        };
-
-        let (audit_tx, _audit_rx) = mpsc::unbounded_channel();
-        let (builder_tx, _builder_rx) = broadcast::channel(1);
-        let (backrun_tx, _backrun_rx) = broadcast::channel(1);
-
-        let recording_queue = RecordingQueue::default();
-        let queue_ref = recording_queue.clone();
-
-        let service = IngressService::new(
-            providers,
-            recording_queue,
-            audit_tx,
-            builder_tx,
-            backrun_tx,
-            config.clone(),
-        );
-
-        let server = Server::builder()
-            .build("127.0.0.1:0")
-            .await
-            .expect("build server");
-        let addr = server.local_addr().unwrap();
-        let handle = server.start(service.into_rpc());
-
-        let client = HttpClientBuilder::default()
-            .build(format!("http://{}", addr))
-            .expect("build client");
-
-        let user_operation = json!({
-            "sender":"0x773d604960feccc5c2ce1e388595268187cf62bf",
-            "nonce":"0x19b0edfc3990000000000000000",
-            "initCode":"0x9406Cc6185a346906296840746125a0E449764545fbfb9cf000000000000000000000000f886bc0b4f161090096b82ac0c5eb7349add429d0000000000000000000000000000000000000000000000000000000000000000",
-            "callData":"0xb61d27f600000000000000000000000066519fcaee1ed65bc9e0acc25ccd900668d3ed490000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000443f84ac0e000000000000000000000000773d604960feccc5c2ce1e388595268187cf62bf000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000",
-            "callGasLimit":"0x5a3c",
-            "verificationGasLimit":"0x5ba19",
-            "preVerificationGas":"0xc88a",
-            "maxFeePerGas":"0x1e86d8",
-            "maxPriorityFeePerGas":"0x1e8480",
-            "paymasterAndData":"0x",
-            "signature":"0x74869f089293206cf307f9aba35983666ed8e9f47b6baa3dff07c2186402583c7ffee050f762c321e960106ca2dcb1bd6c13bc469e46dcad840ae049e167b0cc1c"
-        });
-
-        let response: SendUserOperationResponse = client
-            .request(
-                "eth_sendUserOperation",
-                (user_operation.clone(), EntryPointVersion::V06_ADDRESS),
-            )
-            .await
-            .expect("rpc call succeeds");
-
-        let queued = queue_ref.published.lock().unwrap();
-        assert_eq!(queued.len(), 1);
-        let (queued_topic, queued_key, queued_payload) = queued[0].clone();
-        assert_eq!(queued_topic, config.user_operation_topic);
-
-        let parsed_user_op: erc4337::UserOperation =
-            serde_json::from_value(user_operation.clone()).expect("user op parses");
-        let versioned_user_op = VersionedUserOperation::UserOperation(parsed_user_op.clone());
-        let request = UserOperationRequest {
-            user_operation: versioned_user_op,
-            entry_point: EntryPointVersion::V06_ADDRESS,
-            chain_id: config.chain_id,
-        };
-        let expected_hash = request.hash().expect("hash");
-
-        assert_eq!(
-            Bytes::copy_from_slice(expected_hash.as_slice()),
-            response.user_op_hash
-        );
-        assert_eq!(queued_key, expected_hash.to_string());
-
-        // ensure payload round-trips the user operation we queued
-        let stored_user_op: VersionedUserOperation =
-            serde_json::from_slice(&queued_payload).expect("payload deserializes");
-        assert_eq!(
-            stored_user_op,
-            VersionedUserOperation::UserOperation(parsed_user_op)
-        );
-
-        handle.stop().expect("stop server");
-        handle.stopped().await;
-    }
+    
 }

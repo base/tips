@@ -3,7 +3,7 @@ pub mod metrics;
 pub mod queue;
 pub mod service;
 pub mod validation;
-use alloy_primitives::{ChainId, TxHash};
+use alloy_primitives::TxHash;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use clap::Parser;
 use op_alloy_network::Optimism;
@@ -60,10 +60,6 @@ pub struct Config {
         default_value = "mempool"
     )]
     pub tx_submission_method: TxSubmissionMethod,
-
-    /// Chain id to use when hashing user operations
-    #[arg(long, env = "TIPS_INGRESS_CHAIN_ID", default_value = "1")]
-    pub chain_id: ChainId,
 
     /// Kafka brokers for publishing mempool events
     #[arg(long, env = "TIPS_INGRESS_KAFKA_INGRESS_PROPERTIES_FILE")]
@@ -173,6 +169,10 @@ pub struct Config {
         default_value = "0.0.0.0:8081"
     )]
     pub health_check_addr: SocketAddr,
+
+    /// chain id
+    #[arg(long, env = "TIPS_INGRESS_CHAIN_ID", default_value = "11")]
+    pub chain_id: u64,
 
     /// Enable backrun bundle submission to op-rbuilder
     #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
