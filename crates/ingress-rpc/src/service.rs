@@ -307,7 +307,6 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
         rpc_user_operation: VersionedUserOperation,
         entry_point: Address,
     ) -> RpcResult<FixedBytes<32>> {
-        println!("got here send_user_operation: {:?}", rpc_user_operation);
         let entry_point_version = EntryPointVersion::try_from(entry_point).map_err(|_| {
             EthApiError::InvalidParams("Unknown entry point version".into()).into_rpc_err()
         })?;
@@ -484,7 +483,6 @@ impl<Q: MessageQueue> IngressService<Q> {
 mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
-    use alloy_primitives::Bytes;
     use alloy_provider::RootProvider;
     use anyhow::Result;
     use async_trait::async_trait;
@@ -684,5 +682,4 @@ mod tests {
 
         // wiremock automatically verifies expect(1) when forward_server is dropped
     }
-    
 }
