@@ -202,6 +202,8 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
         let start = Instant::now();
         let transaction = self.get_tx(&data).await?;
 
+        self.metrics.transactions_received.increment(1);
+
         let send_to_kafka = matches!(
             self.tx_submission_method,
             TxSubmissionMethod::Kafka | TxSubmissionMethod::MempoolAndKafka
@@ -223,6 +225,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+
         let parsed_bundle: ParsedBundle = bundle
             .clone()
             .try_into()
@@ -230,10 +233,15 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
 
         let bundle_hash = &parsed_bundle.bundle_hash();
 
+        self.metrics.bundles_parsed.increment(1);
+
         let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
 
         if let Some(meter_info) = meter_bundle_response.as_ref() {
+            self.metrics.successful_simulations.increment(1);
             _ = self.builder_tx.send(meter_info.clone());
+        } else {
+            self.metrics.failed_simulations.increment(1);
         }
 
         let accepted_bundle =
@@ -248,7 +256,8 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
                 warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
             }
 
-            info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
+            self.metrics.sent_to_kafka.increment(1);
+            debug!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
         }
 
         if send_to_mempool {
@@ -258,6 +267,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
                 .await;
             match response {
                 Ok(_) => {
+                    self.metrics.sent_to_mempool.increment(1);
                     debug!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
@@ -285,7 +295,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             });
         }
 
-        debug!(
+        info!(
             message = "processed transaction",
             bundle_hash = %bundle_hash,
             transaction_hash = %transaction.tx_hash(),
