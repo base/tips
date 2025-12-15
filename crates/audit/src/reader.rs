@@ -86,7 +86,7 @@ impl EventReader for KafkaAuditLogReader {
                     timestamp = timestamp,
                     offset = message.offset(),
                     partition = message.partition(),
-                    "Received event from Kafka"
+                    "Received event with timestamp"
                 );
 
                 self.last_message_offset = Some(message.offset());

@@ -24,6 +24,7 @@ impl KafkaBundleEventPublisher {
     }
 
     async fn send_event(&self, event: &BundleEvent) -> Result<()> {
+        let bundle_id = event.bundle_id();
         let key = event.generate_event_key();
         let payload = serde_json::to_vec(event)?;
 
@@ -36,8 +37,7 @@ impl KafkaBundleEventPublisher {
         {
             Ok(_) => {
                 debug!(
-                    bundle_id = ?event.bundle_id(),
-                    tx_hash = ?event.tx_hash(),
+                    bundle_id = ?bundle_id,
                     topic = %self.topic,
                     payload_size = payload.len(),
                     "successfully published event"
@@ -46,8 +46,7 @@ impl KafkaBundleEventPublisher {
             }
             Err((err, _)) => {
                 error!(
-                    bundle_id = ?event.bundle_id(),
-                    tx_hash = ?event.tx_hash(),
+                    bundle_id = ?bundle_id,
                     topic = %self.topic,
                     error = %err,
                     "failed to publish event"
@@ -92,7 +91,6 @@ impl BundleEventPublisher for LoggingBundleEventPublisher {
     async fn publish(&self, event: BundleEvent) -> Result<()> {
         info!(
             bundle_id = ?event.bundle_id(),
-            tx_hash = ?event.tx_hash(),
             event = ?event,
             "Received bundle event"
         );

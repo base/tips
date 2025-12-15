@@ -185,7 +185,6 @@ pub fn connect_ingress_to_builder(
     tx_bundle_id_rx: broadcast::Receiver<(TxHash, uuid::Uuid)>,
     builder_rpc: Url,
 ) {
-    let builder_rpc_clone = builder_rpc.clone();
     let builder: RootProvider<Optimism> = ProviderBuilder::new()
         .disable_recommended_fillers()
         .network::<Optimism>()
@@ -215,7 +214,6 @@ pub fn connect_ingress_to_builder(
     });
 
     let backrun_builder = builder.clone();
-    let backrun_builder_rpc_clone = builder_rpc_clone.clone();
     tokio::spawn(async move {
         let mut event_rx = backrun_rx;
         while let Ok((bundle, bundle_id)) = event_rx.recv().await {
@@ -229,7 +227,6 @@ pub fn connect_ingress_to_builder(
             {
                 error!(error = %e, "Failed to send backrun bundle to builder");
             }
-            info!(message = "Sent backrun bundle to builder", builder_rpc = %backrun_builder_rpc_clone, bundle_id = %bundle_id);
         }
     });
 
@@ -243,7 +240,6 @@ pub fn connect_ingress_to_builder(
             {
                 error!(error = %e, "Failed to send tx_bundle_id mapping to builder");
             }
-            info!(message = "Sent tx_bundle_id to builder", builder_rpc = %builder_rpc_clone, tx_hash = %tx_hash, bundle_id = %bundle_id);
         }
     });
 }

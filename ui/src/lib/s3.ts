@@ -66,7 +66,7 @@ async function getObjectContent(key: string): Promise<string | null> {
 }
 
 export async function getTransactionMetadataByHash(
-  hash: string,
+  hash: string
 ): Promise<TransactionMetadata | null> {
   const key = `transactions/by_hash/${hash}`;
   const content = await getObjectContent(key);
@@ -80,7 +80,7 @@ export async function getTransactionMetadataByHash(
   } catch (error) {
     console.error(
       `Failed to parse transaction metadata for hash ${hash}:`,
-      error,
+      error
     );
     return null;
   }
@@ -160,12 +160,10 @@ export interface BundleHistory {
 }
 
 export async function getBundleHistory(
-  bundleId: string,
+  bundleId: string
 ): Promise<BundleHistory | null> {
   const key = `bundles/${bundleId}`;
   const content = await getObjectContent(key);
-
-  console.log("content", content);
 
   if (!content) {
     return null;
@@ -176,7 +174,7 @@ export async function getBundleHistory(
   } catch (error) {
     console.error(
       `Failed to parse bundle history for bundle ${bundleId}:`,
-      error,
+      error
     );
     return null;
   }
@@ -203,7 +201,7 @@ export interface BlockData {
 }
 
 export async function getBlockFromCache(
-  blockHash: string,
+  blockHash: string
 ): Promise<BlockData | null> {
   const key = `blocks/${blockHash}`;
   const content = await getObjectContent(key);
@@ -224,7 +222,7 @@ export async function getBlockFromCache(
         (tx: BlockTransaction & { gasUsed: string }) => ({
           ...tx,
           gasUsed: BigInt(tx.gasUsed),
-        }),
+        })
       ),
     } as BlockData;
   } catch (error) {
@@ -241,7 +239,7 @@ export async function cacheBlockData(blockData: BlockData): Promise<void> {
       Bucket: BUCKET_NAME,
       Key: key,
       Body: JSON.stringify(blockData, (_, value) =>
-        typeof value === "bigint" ? value.toString() : value,
+        typeof value === "bigint" ? value.toString() : value
       ),
       ContentType: "application/json",
     });

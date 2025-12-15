@@ -75,7 +75,6 @@ pub struct IngressService<Q: MessageQueue> {
     builder_tx: broadcast::Sender<MeterBundleResponse>,
     backrun_enabled: bool,
     builder_backrun_tx: broadcast::Sender<(Bundle, uuid::Uuid)>,
-    /// Channel to send tx_hash -> bundle_id mappings to builder for audit tracking
     builder_tx_bundle_id_tx: broadcast::Sender<(TxHash, uuid::Uuid)>,
 }
 
@@ -152,9 +151,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             .unwrap_or_default();
 
         self.metrics.backrun_bundles_received_total.increment(1);
-        info!(message = "Received backrun bundle", bundle_hash = %bundle_hash, bundle_id = %bundle_id);
 
-        // Emit BackrunReceived event at start of processing
         self.send_transaction_event(BundleEvent::BackrunReceived {
             bundle_id,
             bundle: Box::new(accepted_bundle.clone()),
@@ -170,7 +167,6 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             );
         }
 
-        // Emit BackrunSent event at end of processing
         self.send_transaction_event(BundleEvent::BackrunSent {
             bundle_id,
             target_tx_hash,
@@ -227,9 +223,6 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
     async fn send_raw_transaction(&self, data: Bytes) -> RpcResult<B256> {
         let start = Instant::now();
         let transaction = self.get_tx(&data).await?;
-        let tx_hash = transaction.tx_hash();
-
-        info!(message = "Received raw transaction", tx_hash = %tx_hash);
 
         let send_to_kafka = matches!(
             self.tx_submission_method,
@@ -270,7 +263,6 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
 
         let bundle_id = *accepted_bundle.uuid();
 
-        // Emit TransactionReceived event at start of processing
         self.send_transaction_event(BundleEvent::TransactionReceived {
             bundle_id,
             bundle: Box::new(accepted_bundle.clone()),
@@ -330,12 +322,11 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
         );
 
         // Send tx_hash -> bundle_id mapping to builder for audit tracking
-        self.send_tx_bundle_id(tx_hash, bundle_id);
+        self.send_tx_bundle_id(transaction.tx_hash(), bundle_id);
 
-        // Emit TransactionSent event at end of processing
         self.send_transaction_event(BundleEvent::TransactionSent {
             bundle_id,
-            tx_hash,
+            tx_hash: transaction.tx_hash(),
             timestamp_ms: chrono::Utc::now().timestamp_millis(),
         });
 
@@ -343,7 +334,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             .send_raw_transaction_duration
             .record(start.elapsed().as_secs_f64());
 
-        Ok(tx_hash)
+        Ok(transaction.tx_hash())
     }
 
     async fn send_user_operation(
@@ -491,7 +482,6 @@ impl<Q: MessageQueue> IngressService<Q> {
         }
     }
 
-    /// Helper method to send tx_hash -> bundle_id mapping to builder for audit tracking
     fn send_tx_bundle_id(&self, tx_hash: TxHash, bundle_id: uuid::Uuid) {
         if let Err(e) = self.builder_tx_bundle_id_tx.send((tx_hash, bundle_id)) {
             warn!(
@@ -503,7 +493,6 @@ impl<Q: MessageQueue> IngressService<Q> {
         }
     }
 
-    /// Helper method to send transaction lifecycle events
     fn send_transaction_event(&self, event: BundleEvent) {
         if let Err(e) = self.audit_channel.send(event) {
             warn!(

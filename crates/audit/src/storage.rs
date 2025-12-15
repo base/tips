@@ -81,13 +81,13 @@ pub enum BundleHistoryEvent {
         timestamp: i64,
         bundle: Box<AcceptedBundle>,
     },
-    /// Backrun bundle sent to builder
+    /// Backrun bundle sent to builder from ingress-rpc
     BackrunSent {
         key: String,
         timestamp: i64,
         target_tx_hash: TxHash,
     },
-    /// Backrun bundle inserted into builder store
+    /// Backrun bundle inserted into builder store in builder
     BackrunInserted {
         key: String,
         timestamp: i64,
@@ -154,7 +154,6 @@ fn update_bundle_history_transform(
     let bundle_id = match event.event.bundle_id() {
         Some(id) => id,
         None => {
-            // Backrun events don't have bundle_ids, skip history update
             return None;
         }
     };
@@ -486,7 +485,6 @@ impl S3EventReaderWriter {
 #[async_trait]
 impl EventWriter for S3EventReaderWriter {
     async fn archive_event(&self, event: Event) -> Result<()> {
-        // Backrun events don't have bundle_ids, skip S3 archival
         let Some(bundle_id) = event.event.bundle_id() else {
             return Ok(());
         };

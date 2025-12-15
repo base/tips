@@ -53,8 +53,6 @@ export async function GET(
       );
     }
 
-    console.log("metadata", metadata);
-
     // Fetch ALL bundle histories in parallel
     const bundleHistories = await Promise.all(
       metadata.bundle_ids.map((id) => getBundleHistory(id))
