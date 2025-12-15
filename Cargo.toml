@@ -20,6 +20,9 @@ tips-builder = { path = "crates/builder" }
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-cli = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-node = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-optimism-rpc = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 
 # alloy
 alloy-primitives = { version = "1.4.1", default-features = false, features = [
@@ -70,7 +73,7 @@ revm-context-interface = "12.0.0"
 alloy-signer-local = "1.0.41"
 
 # tips-builder
-rblib = { git = "https://github.com/flashbots/rblib", tag = "v0.4.1", default-features = false }
+rblib = { git = "https://github.com/flashbots/rblib", tag = "v0.4.1", default-features = false, features = ["optimism"] }
 
 # Misc
 metrics = "0.24.1"

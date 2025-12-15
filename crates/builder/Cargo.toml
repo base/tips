@@ -9,3 +9,6 @@ repository.workspace = true
 
 [dependencies]
 rblib.workspace = true
+reth-optimism-cli.workspace = true
+reth-optimism-node.workspace = true
+reth-optimism-rpc.workspace = true
