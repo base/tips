@@ -22,7 +22,10 @@ jsonrpsee.workspace = true
 async-trait = { workspace = true }
 alloy-sol-types.workspace= true
 anyhow.workspace = true
-
+rundler-pool = { git = "https://github.com/rayyan224/rundler", rev = "d3896c286e1688a4ac4241043af0747a45971d32" }
+rundler-provider = { git = "https://github.com/rayyan224/rundler", rev = "d3896c286e1688a4ac4241043af0747a45971d32" }
+rundler-types = { git = "https://github.com/rayyan224/rundler", rev = "d3896c286e1688a4ac4241043af0747a45971d32"}
+rundler-utils = { git = "https://github.com/rayyan224/rundler", rev = "d3896c286e1688a4ac4241043af0747a45971d32"}
 [dev-dependencies]
 alloy-primitives.workspace = true
 serde_json.workspace = true
