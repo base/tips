@@ -257,7 +257,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             }
 
             self.metrics.sent_to_kafka.increment(1);
-            debug!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
+            info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
         }
 
         if send_to_mempool {
