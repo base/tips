@@ -40,7 +40,7 @@ impl KafkaBundleEventPublisher {
                     tx_hash = ?event.tx_hash(),
                     topic = %self.topic,
                     payload_size = payload.len(),
-                    "Successfully published event"
+                    "successfully published event"
                 );
                 Ok(())
             }
@@ -50,7 +50,7 @@ impl KafkaBundleEventPublisher {
                     tx_hash = ?event.tx_hash(),
                     topic = %self.topic,
                     error = %err,
-                    "Failed to publish event"
+                    "failed to publish event"
                 );
                 Err(anyhow::anyhow!("Failed to publish event: {err}"))
             }

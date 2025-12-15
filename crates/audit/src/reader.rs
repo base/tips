@@ -13,7 +13,7 @@ use tokio::time::sleep;
 use tracing::{error, info};
 
 pub fn create_kafka_consumer(kafka_properties_file: &str) -> Result<StreamConsumer> {
-    let client_config =
+    let client_config: ClientConfig =
         ClientConfig::from_iter(load_kafka_config_from_file(kafka_properties_file)?);
     let consumer: StreamConsumer = client_config.create()?;
     Ok(consumer)
@@ -106,7 +106,6 @@ impl EventReader for KafkaAuditLogReader {
                 Ok(event_result)
             }
             Err(e) => {
-                println!("received error {e:?}");
                 error!(error = %e, "Error receiving message from Kafka");
                 sleep(Duration::from_secs(1)).await;
                 Err(e.into())
