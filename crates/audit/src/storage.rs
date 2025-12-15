@@ -63,45 +63,38 @@ pub enum BundleHistoryEvent {
         timestamp: i64,
         reason: DropReason,
     },
-    /// Transaction received by ingress-rpc
     TransactionReceived {
         key: String,
         timestamp: i64,
         bundle: Box<AcceptedBundle>,
     },
-    /// Transaction sent from ingress-rpc
     TransactionSent {
         key: String,
         timestamp: i64,
         tx_hash: TxHash,
     },
-    /// Backrun bundle received by ingress-rpc
     BackrunReceived {
         key: String,
         timestamp: i64,
         bundle: Box<AcceptedBundle>,
     },
-    /// Backrun bundle sent to builder from ingress-rpc
     BackrunSent {
         key: String,
         timestamp: i64,
         target_tx_hash: TxHash,
     },
-    /// Backrun bundle inserted into builder store in builder
     BackrunInserted {
         key: String,
         timestamp: i64,
         target_tx_hash: TxHash,
         backrun_tx_hashes: Vec<TxHash>,
     },
-    /// Transaction selected for execution
     StartExecuting {
         key: String,
         timestamp: i64,
         tx_hash: TxHash,
         block_number: u64,
     },
-    /// Transaction successfully executed
     Executed {
         key: String,
         timestamp: i64,
@@ -109,7 +102,6 @@ pub enum BundleHistoryEvent {
         block_number: u64,
         gas_used: u64,
     },
-    /// Backrun bundle transaction executed
     BackrunBundleExecuted {
         key: String,
         timestamp: i64,

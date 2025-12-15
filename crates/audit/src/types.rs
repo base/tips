@@ -268,22 +268,13 @@ impl BundleEvent {
             BundleEvent::BackrunInserted { bundle_id, .. } => {
                 format!("backrun-inserted-{bundle_id}")
             }
-            BundleEvent::StartExecuting {
-                tx_hash,
-                ..
-            } => {
+            BundleEvent::StartExecuting { tx_hash, .. } => {
                 format!("tx-start-executing-{tx_hash}")
-            },
-            BundleEvent::Executed {
-                tx_hash,
-                ..
-            } => {
+            }
+            BundleEvent::Executed { tx_hash, .. } => {
                 format!("tx-executed-{tx_hash}")
-            },
-            BundleEvent::BackrunBundleExecuted {
-                bundle_id,
-                ..
-            } => {
+            }
+            BundleEvent::BackrunBundleExecuted { bundle_id, .. } => {
                 format!("backrun-bundle-executed-{bundle_id}")
             }
             _ => {

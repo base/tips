@@ -10,7 +10,7 @@ use rdkafka::{
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tips_core::kafka::load_kafka_config_from_file;
 use tokio::time::sleep;
-use tracing::{error, info};
+use tracing::{debug, error};
 
 pub fn create_kafka_consumer(kafka_properties_file: &str) -> Result<StreamConsumer> {
     let client_config: ClientConfig =
@@ -79,7 +79,7 @@ impl EventReader for KafkaAuditLogReader {
 
                 let event: BundleEvent = serde_json::from_slice(payload)?;
 
-                info!(
+                debug!(
                     event_name = %event.event_name(),
                     bundle_id = ?event.bundle_id(),
                     tx_hash = ?event.tx_hash(),

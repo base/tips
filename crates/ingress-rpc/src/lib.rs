@@ -11,7 +11,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
 use tips_core::MeterBundleResponse;
 use tokio::sync::broadcast;
-use tracing::{error, info, warn};
+use tracing::{error, warn};
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
