@@ -7,9 +7,9 @@ use rdkafka::consumer::Consumer;
 use std::net::SocketAddr;
 use tips_audit::{
     KafkaAuditArchiver, KafkaAuditLogReader, S3EventReaderWriter, create_kafka_consumer,
-    metrics::init_prometheus_exporter,
 };
 use tips_core::logger::init_logger_with_format;
+use tips_core::metrics::init_prometheus_exporter;
 use tracing::info;
 
 #[derive(Debug, Clone, ValueEnum)]

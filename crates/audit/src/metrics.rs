@@ -1,7 +1,5 @@
 use metrics::{Counter, Histogram};
 use metrics_derive::Metrics;
-use metrics_exporter_prometheus::PrometheusBuilder;
-use std::net::SocketAddr;
 
 #[derive(Metrics, Clone)]
 #[metrics(scope = "tips_audit")]
@@ -35,11 +33,4 @@ pub struct Metrics {
 
     #[metric(describe = "Total S3 writes skipped due to dedup")]
     pub s3_writes_skipped: Counter,
-}
-
-pub fn init_prometheus_exporter(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
-    PrometheusBuilder::new()
-        .with_http_listener(addr)
-        .install()
-        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
