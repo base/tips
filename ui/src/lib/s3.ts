@@ -60,7 +60,6 @@ async function getObjectContent(key: string): Promise<string | null> {
     const body = await response.Body?.transformToString();
     return body || null;
   } catch (error) {
-    console.error(`Failed to get S3 object ${key}:`, error);
     return null;
   }
 }
