@@ -7,13 +7,14 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/builder"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
+tips-builder = { path = "crates/builder" }
 
 # Reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
@@ -28,7 +29,7 @@ alloy-primitives = { version = "1.4.1", default-features = false, features = [
 alloy-consensus = { version = "1.0.41" }
 alloy-provider = { version = "1.0.41" }
 alloy-serde = "1.0.41"
-alloy-rpc-types = "1.1.2"
+alloy-rpc-types = "1.0.41"
 alloy-sol-types = { version = "1.4.1", default-features = false }
 
 # op-alloy
@@ -67,6 +68,9 @@ backon = "1.5.2"
 op-revm = { version = "12.0.0", default-features = false }
 revm-context-interface = "12.0.0"
 alloy-signer-local = "1.0.41"
+
+# tips-builder
+rblib = { git = "https://github.com/flashbots/rblib", tag = "v0.4.1", default-features = false }
 
 # Misc
 metrics = "0.24.1"
