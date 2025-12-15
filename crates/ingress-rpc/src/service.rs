@@ -299,7 +299,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
 
         info!(
             message = "processed transaction",
-            bundle_hash = %bundle_hash,
+            bundle_id = %accepted_bundle.uuid(),
             transaction_hash = %transaction.tx_hash(),
         );
 

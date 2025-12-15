@@ -32,6 +32,9 @@ aws-config = { workspace = true }
 aws-sdk-s3 = { workspace = true }
 aws-credential-types = { workspace = true }
 bytes = { workspace = true }
+metrics.workspace = true
+metrics-derive.workspace = true
+metrics-exporter-prometheus.workspace = true
 
 [dev-dependencies]
 testcontainers = { workspace = true }

@@ -3,7 +3,8 @@ use aws_config::{BehaviorVersion, Region};
 use aws_credential_types::Credentials;
 use aws_sdk_s3::{Client as S3Client, config::Builder as S3ConfigBuilder};
 use clap::{Parser, ValueEnum};
-use rdkafka::consumer::Consumer;
+use std::net::SocketAddr;
+use tips_audit::metrics::init_prometheus_exporter;
 use tips_audit::{
     KafkaAuditArchiver, KafkaAuditLogReader, S3EventReaderWriter, create_kafka_consumer,
 };
@@ -31,6 +32,9 @@ struct Args {
     #[arg(long, env = "TIPS_AUDIT_LOG_LEVEL", default_value = "info")]
     log_level: String,
 
+    #[arg(long, env = "TIPS_AUDIT_METRICS_ADDR", default_value = "0.0.0.0:9002")]
+    metrics_addr: SocketAddr,
+
     #[arg(long, env = "TIPS_AUDIT_LOG_FORMAT", default_value = "pretty")]
     log_format: tips_core::logger::LogFormat,
 
@@ -57,6 +61,7 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     init_logger_with_format(&args.log_level, args.log_format);
+    init_prometheus_exporter(args.metrics_addr).expect("Failed to install Prometheus exporter");
 
     info!(
         kafka_properties_file = %args.kafka_properties_file,
@@ -66,8 +71,6 @@ async fn main() -> Result<()> {
     );
 
     let consumer = create_kafka_consumer(&args.kafka_properties_file)?;
-    consumer.subscribe(&[&args.kafka_topic])?;
-
     let reader = KafkaAuditLogReader::new(consumer, args.kafka_topic.clone())?;
 
     let s3_client = create_s3_client(&args).await?;

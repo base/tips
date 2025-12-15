@@ -1,6 +1,7 @@
 use crate::types::BundleEvent;
 use anyhow::Result;
 use async_trait::async_trait;
+use rdkafka::consumer::CommitMode;
 use rdkafka::{
     Timestamp, TopicPartitionList,
     config::ClientConfig,
@@ -36,7 +37,6 @@ pub struct Event {
 #[async_trait]
 pub trait EventReader {
     async fn read_event(&mut self) -> Result<Event>;
-    async fn commit(&mut self) -> Result<()>;
 }
 
 pub struct KafkaAuditLogReader {
@@ -101,6 +101,8 @@ impl EventReader for KafkaAuditLogReader {
                     timestamp,
                 };
 
+                self.consumer.commit_message(&message, CommitMode::Async)?;
+
                 Ok(event_result)
             }
             Err(e) => {
@@ -109,18 +111,6 @@ impl EventReader for KafkaAuditLogReader {
                 Err(e.into())
             }
         }
-    }
-
-    async fn commit(&mut self) -> Result<()> {
-        if let (Some(offset), Some(partition)) =
-            (self.last_message_offset, self.last_message_partition)
-        {
-            let mut tpl = TopicPartitionList::new();
-            tpl.add_partition_offset(&self.topic, partition, rdkafka::Offset::Offset(offset + 1))?;
-            self.consumer
-                .commit(&tpl, rdkafka::consumer::CommitMode::Async)?;
-        }
-        Ok(())
     }
 }
 
