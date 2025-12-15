@@ -51,7 +51,7 @@ struct Args {
     #[arg(long, env = "TIPS_AUDIT_S3_SECRET_ACCESS_KEY")]
     s3_secret_access_key: Option<String>,
 
-    #[arg(long, env = "TIPS_AUDIT_METRICS_ADDR", default_value = "0.0.0.0:9090")]
+    #[arg(long, env = "TIPS_AUDIT_METRICS_ADDR", default_value = "0.0.0.0:9002")]
     metrics_addr: SocketAddr,
 }
 
