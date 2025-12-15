@@ -1,7 +1,6 @@
 use crate::types::BundleEvent;
 use anyhow::Result;
 use async_trait::async_trait;
-use rdkafka::consumer::CommitMode;
 use rdkafka::{
     Timestamp, TopicPartitionList,
     config::ClientConfig,
@@ -100,8 +99,6 @@ impl EventReader for KafkaAuditLogReader {
                     event,
                     timestamp,
                 };
-
-                self.consumer.commit_message(&message, CommitMode::Async)?;
 
                 Ok(event_result)
             }

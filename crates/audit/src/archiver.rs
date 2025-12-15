@@ -19,7 +19,7 @@ where
 impl<R, W> KafkaAuditArchiver<R, W>
 where
     R: EventReader,
-    W: EventWriter,
+    W: EventWriter + Clone + Send + Sync + 'static,
 {
     pub fn new(reader: R, writer: W) -> Self {
         Self {
@@ -37,15 +37,19 @@ where
                 Ok(event) => {
                     self.metrics.event_received.increment(1);
 
-                    if let Err(e) = self.writer.archive_event(event).await {
-                        self.metrics.event_writing_error.increment(1);
-                        error!(
-                            error = %e,
-                            "Failed to write event"
-                        );
-                    }
+                    let writer = self.writer.clone();
+                    let metrics = self.metrics.clone();
 
-                    self.metrics.event_written.increment(1);
+                    tokio::spawn(async move {
+                        if let Err(e) = writer.archive_event(event).await {
+                            metrics.event_writing_error.increment(1);
+                            error!(
+                                error = %e,
+                                "Failed to write event"
+                            );
+                        }
+                        metrics.event_written.increment(1);
+                    });
                 }
                 Err(e) => {
                     error!(error = %e, "Error reading events");
