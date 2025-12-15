@@ -118,14 +118,14 @@ function TransactionRow({
               href={`${BLOCK_EXPLORER_URL}/tx/${tx.hash}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-sm text-blue-600 hover:underline truncate"
+              className="font-mono text-sm text-blue-600 hover:underline break-all"
               onClick={(e) => e.stopPropagation()}
             >
-              {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+              {tx.hash}
             </a>
           ) : (
-            <span className="font-mono text-sm text-gray-900 truncate">
-              {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
+            <span className="font-mono text-sm text-gray-900 break-all">
+              {tx.hash}
             </span>
           )}
           {hasBundle && (
@@ -214,20 +214,20 @@ function BlockStats({ block }: { block: BlockData }) {
       </div>
       <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50 grid grid-cols-3 gap-4 text-xs">
         <div>
-          <span className="text-gray-500">Gas Used</span>
-          <span className="ml-2 font-medium">
+          <span className="text-black">Gas Used</span>
+          <span className="ml-2 font-medium text-black">
             {block.gasUsed.toLocaleString()}
           </span>
         </div>
         <div>
-          <span className="text-gray-500">Gas Limit</span>
-          <span className="ml-2 font-medium">
+          <span className="text-black">Gas Limit</span>
+          <span className="ml-2 font-medium text-black">
             {block.gasLimit.toLocaleString()}
           </span>
         </div>
         <div>
-          <span className="text-gray-500">Timestamp</span>
-          <span className="ml-2 font-medium">
+          <span className="text-black">Timestamp</span>
+          <span className="ml-2 font-medium text-black">
             {new Date(Number(block.timestamp) * 1000).toLocaleString()}
           </span>
         </div>
