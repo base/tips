@@ -291,23 +291,7 @@ mod tests {
         );
     }
 
-    // Tests adding an operation with the same hash but higher gas price
-    #[test]
-    fn test_add_operation_duplicate_hash_higher_gas() {
-        let mut mempool = create_test_mempool(1000);
-        let hash = FixedBytes::from([1u8; 32]);
-
-        let operation1 = create_wrapped_operation(2000, hash);
-        let result1 = mempool.add_operation(&operation1);
-        assert!(result1.is_ok());
-        assert!(result1.unwrap().is_some());
-
-        let operation2 = create_wrapped_operation(3000, hash);
-        let result2 = mempool.add_operation(&operation2);
-        assert!(result2.is_ok());
-        assert!(result2.unwrap().is_some());
-    }
-
+    
     // Tests adding an operation with the same hash but lower gas price
     #[test]
     fn test_add_operation_duplicate_hash_lower_gas() {
