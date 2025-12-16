@@ -1,5 +1,4 @@
-use crate::types::{PoolOperation, UserOpHash, VersionedUserOperation};
-use alloy_primitives::{FixedBytes};
+use crate::types::{PoolOperation, UserOpHash};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -17,11 +16,14 @@ pub struct OrderedPoolOperation {
 }
 
 impl Ord for OrderedPoolOperation {
+    /// TODO: There can be invalid opperations, where base fee, + expected gas price 
+    /// is greater that the maximum gas, in that case we don't include it in the mempool as such mempool changes.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other
-            .pool_operation.operation
-            .max_fee_per_gas()
-            .cmp(&self.pool_operation.operation.max_fee_per_gas())
+            .pool_operation
+            .operation
+            .max_priority_fee_per_gas()
+            .cmp(&self.pool_operation.operation.max_priority_fee_per_gas())
             .then_with(|| self.submission_id.cmp(&other.submission_id))
     }
 }
@@ -51,7 +53,7 @@ pub trait Mempool {
     fn remove_operation(
         &mut self,
         operation_hash: &UserOpHash,
-    ) -> Result<Option<PoolOperation>, anyhow::Error>;
+    ) -> Result<Option<PoolOperation>, anyhow::Error>
 }
 
 pub struct MempoolImpl {
@@ -135,10 +137,10 @@ impl MempoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::{Address, Uint};
-    use alloy_rpc_types::erc4337;
-
-    fn create_test_user_operation(max_fee_per_gas: u128) -> VersionedUserOperation {
+    use alloy_primitives::{Address, FixedBytes, Uint};
+    use alloy_rpc_types::{erc4337};
+    use crate::types::VersionedUserOperation;
+    fn create_test_user_operation(max_priority_fee_per_gas: u128) -> VersionedUserOperation {
         VersionedUserOperation::UserOperation(erc4337::UserOperation {
             sender: Address::ZERO,
             nonce: Uint::from(0),
@@ -147,16 +149,16 @@ mod tests {
             call_gas_limit: Uint::from(100000),
             verification_gas_limit: Uint::from(100000),
             pre_verification_gas: Uint::from(21000),
-            max_fee_per_gas: Uint::from(max_fee_per_gas),
-            max_priority_fee_per_gas: Uint::from(max_fee_per_gas),
+            max_fee_per_gas: Uint::from(max_priority_fee_per_gas),
+            max_priority_fee_per_gas: Uint::from(max_priority_fee_per_gas),
             paymaster_and_data: Default::default(),
             signature: Default::default(),
         })
     }
 
-    fn create_pool_operation(max_fee_per_gas: u128, hash: UserOpHash) -> PoolOperation {
+    fn create_pool_operation(max_priority_fee_per_gas: u128, hash: UserOpHash) -> PoolOperation {
         PoolOperation {
-            operation: create_test_user_operation(max_fee_per_gas),
+            operation: create_test_user_operation(max_priority_fee_per_gas),
             hash,
         }
     }

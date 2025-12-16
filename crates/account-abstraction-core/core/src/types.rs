@@ -19,6 +19,13 @@ impl VersionedUserOperation {
             VersionedUserOperation::PackedUserOperation(op) => op.max_fee_per_gas,
         }
     }
+
+    pub fn max_priority_fee_per_gas(&self) -> U256 {
+        match self {
+            VersionedUserOperation::UserOperation(op) => op.max_priority_fee_per_gas,
+            VersionedUserOperation::PackedUserOperation(op) => op.max_priority_fee_per_gas,
+        }
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserOperationRequest {
