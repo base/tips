@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
 pub struct PoolConfig {
-    minimum_required_pvg_gas: u128,
+    minimum_max_fee_per_gas: u128,
 }
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -16,7 +16,7 @@ pub struct OrderedPoolOperation {
 }
 
 impl Ord for OrderedPoolOperation {
-    /// TODO: There can be invalid opperations, where base fee, + expected gas price 
+    /// TODO: There can be invalid opperations, where base fee, + expected gas price
     /// is greater that the maximum gas, in that case we don't include it in the mempool as such mempool changes.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other
@@ -53,7 +53,7 @@ pub trait Mempool {
     fn remove_operation(
         &mut self,
         operation_hash: &UserOpHash,
-    ) -> Result<Option<PoolOperation>, anyhow::Error>
+    ) -> Result<Option<PoolOperation>, anyhow::Error>;
 }
 
 pub struct MempoolImpl {
@@ -68,7 +68,7 @@ impl Mempool for MempoolImpl {
         &mut self,
         operation: &PoolOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error> {
-        if operation.operation.max_fee_per_gas() < self.config.minimum_required_pvg_gas {
+        if operation.operation.max_fee_per_gas() < self.config.minimum_max_fee_per_gas {
             return Err(anyhow::anyhow!(
                 "Gas price is below the minimum required PVG gas"
             ));
@@ -137,9 +137,9 @@ impl MempoolImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloy_primitives::{Address, FixedBytes, Uint};
-    use alloy_rpc_types::{erc4337};
     use crate::types::VersionedUserOperation;
+    use alloy_primitives::{Address, FixedBytes, Uint};
+    use alloy_rpc_types::erc4337;
     fn create_test_user_operation(max_priority_fee_per_gas: u128) -> VersionedUserOperation {
         VersionedUserOperation::UserOperation(erc4337::UserOperation {
             sender: Address::ZERO,
@@ -165,7 +165,7 @@ mod tests {
 
     fn create_test_mempool(minimum_required_pvg_gas: u128) -> MempoolImpl {
         MempoolImpl::new(PoolConfig {
-            minimum_required_pvg_gas,
+            minimum_max_fee_per_gas: minimum_required_pvg_gas,
         })
     }
 
@@ -221,7 +221,7 @@ mod tests {
         let operation2 = create_pool_operation(3000, hash);
         let result2 = mempool.add_operation(&operation2);
         assert!(result2.is_ok());
-        assert!(result2.unwrap().is_none());
+        assert!(result2.unwrap().is_some());
     }
 
     // Tests adding an operation with the same hash but lower gas price
@@ -238,13 +238,7 @@ mod tests {
         let operation2 = create_pool_operation(2000, hash);
         let result2 = mempool.add_operation(&operation2);
         assert!(result2.is_ok());
-        let ordered_op = result2.unwrap();
-        assert!(ordered_op.is_some());
-        let ordered_op = ordered_op.unwrap();
-        assert_eq!(
-            ordered_op.pool_operation.operation.max_fee_per_gas(),
-            Uint::from(2000)
-        );
+        assert!(result2.unwrap().is_none());
     }
 
     // Tests adding an operation with the same hash and equal gas price

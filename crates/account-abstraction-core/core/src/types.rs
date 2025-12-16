@@ -1,5 +1,5 @@
 use crate::entrypoints::{v06, v07, version::EntryPointVersion};
-use alloy_primitives::{Address, B256, ChainId, U256, FixedBytes};
+use alloy_primitives::{Address, B256, ChainId, FixedBytes, U256};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 use anyhow::Result;
@@ -123,7 +123,6 @@ pub struct AggregatorInfo {
     pub stake_info: EntityStakeInfo,
 }
 
-
 pub type UserOpHash = FixedBytes<32>;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -134,7 +133,7 @@ pub struct PoolOperation {
 
 impl PoolOperation {
     pub fn should_replace(&self, other: &PoolOperation) -> bool {
-        self.operation.max_fee_per_gas() < other.operation.max_fee_per_gas()
+        self.operation.max_fee_per_gas() > other.operation.max_fee_per_gas()    
     }
 }
 
