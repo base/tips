@@ -1,6 +1,6 @@
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::{Address, B256, Bytes, FixedBytes};
 use alloy_provider::{Provider, RootProvider, network::eip2718::Decodable2718};
 use jsonrpsee::{
     core::{RpcResult, async_trait},
@@ -20,10 +20,11 @@ use tokio::time::{Duration, Instant, timeout};
 use tracing::{debug, info, warn};
 
 use crate::metrics::{Metrics, record_histogram};
-use crate::queue::QueuePublisher;
+use crate::queue::{BundleQueuePublisher, MessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use account_abstraction_core::types::{SendUserOperationResponse, UserOperationRequest};
+use account_abstraction_core::entrypoints::version::EntryPointVersion;
+use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
 use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
 use std::sync::Arc;
 
@@ -55,17 +56,19 @@ pub trait IngressApi {
     #[method(name = "sendUserOperation")]
     async fn send_user_operation(
         &self,
-        user_operation: UserOperationRequest,
-    ) -> RpcResult<SendUserOperationResponse>;
+        user_operation: VersionedUserOperation,
+        entry_point: Address,
+    ) -> RpcResult<FixedBytes<32>>;
 }
 
-pub struct IngressService<Queue> {
+pub struct IngressService<Q: MessageQueue> {
     mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
     account_abstraction_service: AccountAbstractionServiceImpl,
     tx_submission_method: TxSubmissionMethod,
-    bundle_queue: Queue,
+    bundle_queue_publisher: BundleQueuePublisher<Q>,
+    user_op_queue_publisher: UserOpQueuePublisher<Q>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -76,10 +79,10 @@ pub struct IngressService<Queue> {
     builder_backrun_tx: broadcast::Sender<Bundle>,
 }
 
-impl<Queue> IngressService<Queue> {
+impl<Q: MessageQueue> IngressService<Q> {
     pub fn new(
         providers: Providers,
-        queue: Queue,
+        queue: Q,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
@@ -93,14 +96,21 @@ impl<Queue> IngressService<Queue> {
                 simulation_provider.clone(),
                 config.validate_user_operation_timeout_ms,
             );
-
+        let queue_connection = Arc::new(queue);
         Self {
             mempool_provider,
             simulation_provider,
             raw_tx_forward_provider,
             account_abstraction_service,
             tx_submission_method: config.tx_submission_method,
-            bundle_queue: queue,
+            user_op_queue_publisher: UserOpQueuePublisher::new(
+                queue_connection.clone(),
+                config.user_operation_topic,
+            ),
+            bundle_queue_publisher: BundleQueuePublisher::new(
+                queue_connection.clone(),
+                config.ingress_topic,
+            ),
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -115,10 +125,7 @@ impl<Queue> IngressService<Queue> {
 }
 
 #[async_trait]
-impl<Queue> IngressApiServer for IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
-{
+impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
             info!(
@@ -166,7 +173,7 @@ where
 
         // publish the bundle to the queue
         if let Err(e) = self
-            .bundle_queue
+            .bundle_queue_publisher
             .publish(&accepted_bundle, &bundle_hash)
             .await
         {
@@ -197,6 +204,8 @@ where
         let start = Instant::now();
         let transaction = self.get_tx(&data).await?;
 
+        self.metrics.transactions_received.increment(1);
+
         let send_to_kafka = matches!(
             self.tx_submission_method,
             TxSubmissionMethod::Kafka | TxSubmissionMethod::MempoolAndKafka
@@ -218,6 +227,7 @@ where
             reverting_tx_hashes: vec![transaction.tx_hash()],
             ..Default::default()
         };
+
         let parsed_bundle: ParsedBundle = bundle
             .clone()
             .try_into()
@@ -225,10 +235,15 @@ where
 
         let bundle_hash = &parsed_bundle.bundle_hash();
 
+        self.metrics.bundles_parsed.increment(1);
+
         let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
 
         if let Some(meter_info) = meter_bundle_response.as_ref() {
+            self.metrics.successful_simulations.increment(1);
             _ = self.builder_tx.send(meter_info.clone());
+        } else {
+            self.metrics.failed_simulations.increment(1);
         }
 
         let accepted_bundle =
@@ -236,13 +251,14 @@ where
 
         if send_to_kafka {
             if let Err(e) = self
-                .bundle_queue
+                .bundle_queue_publisher
                 .publish(&accepted_bundle, bundle_hash)
                 .await
             {
                 warn!(message = "Failed to publish Queue::enqueue_bundle", bundle_hash = %bundle_hash, error = %e);
             }
 
+            self.metrics.sent_to_kafka.increment(1);
             info!(message="queued singleton bundle", txn_hash=%transaction.tx_hash());
         }
 
@@ -253,6 +269,7 @@ where
                 .await;
             match response {
                 Ok(_) => {
+                    self.metrics.sent_to_mempool.increment(1);
                     debug!(message = "sent transaction to the mempool", hash=%transaction.tx_hash());
                 }
                 Err(e) => {
@@ -280,7 +297,13 @@ where
             });
         }
 
-        self.send_audit_event(&accepted_bundle, transaction.tx_hash());
+        info!(
+            message = "processed transaction",
+            bundle_hash = %bundle_hash,
+            transaction_hash = %transaction.tx_hash(),
+        );
+
+        self.send_audit_event(&accepted_bundle, accepted_bundle.bundle_hash());
 
         self.metrics
             .send_raw_transaction_duration
@@ -291,28 +314,68 @@ where
 
     async fn send_user_operation(
         &self,
-        user_operation: UserOperationRequest,
-    ) -> RpcResult<SendUserOperationResponse> {
-        dbg!(&user_operation);
+        rpc_user_operation: VersionedUserOperation,
+        entry_point: Address,
+    ) -> RpcResult<FixedBytes<32>> {
+        let entry_point_version = EntryPointVersion::try_from(entry_point).map_err(|_| {
+            EthApiError::InvalidParams("Unknown entry point version".into()).into_rpc_err()
+        })?;
 
-        // STEPS:
-        // 1. Reputation Service Validate
-        // 2. Base Node Validate User Operation
+        let versioned_user_operation = match (rpc_user_operation, entry_point_version) {
+            (VersionedUserOperation::UserOperation(op), EntryPointVersion::V06) => {
+                VersionedUserOperation::UserOperation(op)
+            }
+            (VersionedUserOperation::PackedUserOperation(op), EntryPointVersion::V07) => {
+                VersionedUserOperation::PackedUserOperation(op)
+            }
+            _ => {
+                return Err(EthApiError::InvalidParams(
+                    "User operation type does not match entry point version".into(),
+                )
+                .into_rpc_err());
+            }
+        };
+
+        let request = UserOperationRequest {
+            user_operation: versioned_user_operation,
+            entry_point,
+            chain_id: 1,
+        };
+
+        let user_op_hash = request.hash().map_err(|e| {
+            warn!(message = "Failed to hash user operation", error = %e);
+            EthApiError::InvalidParams(e.to_string()).into_rpc_err()
+        })?;
+
         let _ = self
             .account_abstraction_service
-            .validate_user_operation(user_operation)
-            .await?;
-        // 3. Send to Kafka
-        // Send Hash
-        // todo!("not yet implemented send_user_operation");
-        todo!("not yet implemented send_user_operation");
+            .validate_user_operation(&request.user_operation, &entry_point)
+            .await
+            .map_err(|e| {
+                warn!(message = "Failed to validate user operation", error = %e);
+                EthApiError::InvalidParams(e.to_string()).into_rpc_err()
+            })?;
+
+        if let Err(e) = self
+            .user_op_queue_publisher
+            .publish(&request.user_operation, &user_op_hash)
+            .await
+        {
+            warn!(
+                message = "Failed to publish user operation to queue",
+                user_operation_hash = %user_op_hash,
+                error = %e
+            );
+            return Err(
+                EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err(),
+            );
+        }
+
+        Ok(user_op_hash)
     }
 }
 
-impl<Queue> IngressService<Queue>
-where
-    Queue: QueuePublisher + Sync + Send + 'static,
-{
+impl<Q: MessageQueue> IngressService<Q> {
     async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
@@ -418,7 +481,7 @@ where
         };
         if let Err(e) = self.audit_channel.send(audit_event) {
             warn!(
-                message = "Failed to send audit event",
+                message = "failed to send audit event",
                 bundle_hash = %bundle_hash,
                 error = %e
             );
@@ -429,25 +492,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Config, TxSubmissionMethod, queue::QueuePublisher};
+    use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
     use alloy_provider::RootProvider;
+    use anyhow::Result;
     use async_trait::async_trait;
+    use jsonrpsee::core::client::ClientT;
+    use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+    use jsonrpsee::server::{ServerBuilder, ServerHandle};
+    use mockall::mock;
+    use serde_json::json;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
     use tokio::sync::{broadcast, mpsc};
     use url::Url;
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
-
     struct MockQueue;
 
     #[async_trait]
-    impl QueuePublisher for MockQueue {
-        async fn publish(
-            &self,
-            _bundle: &tips_core::AcceptedBundle,
-            _bundle_hash: &B256,
-        ) -> anyhow::Result<()> {
+    impl MessageQueue for MockQueue {
+        async fn publish(&self, _topic: &str, _key: &str, _payload: &[u8]) -> Result<()> {
             Ok(())
         }
     }
@@ -476,7 +540,38 @@ mod tests {
             health_check_addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
             backrun_enabled: false,
             raw_tx_forward_rpc: None,
+            chain_id: 11,
+            user_operation_topic: String::new(),
         }
+    }
+
+    async fn setup_rpc_server(mock: MockIngressApi) -> (HttpClient, ServerHandle) {
+        let server = ServerBuilder::default().build("127.0.0.1:0").await.unwrap();
+
+        let addr = server.local_addr().unwrap();
+        let handle = server.start(mock.into_rpc());
+
+        let client = HttpClientBuilder::default()
+            .build(format!("http://{}", addr))
+            .unwrap();
+
+        (client, handle)
+    }
+
+    fn sample_user_operation_v06() -> serde_json::Value {
+        json!({
+            "sender": "0x773d604960feccc5c2ce1e388595268187cf62bf",
+            "nonce": "0x19b0ffe729f0000000000000000",
+            "initCode": "0x9406cc6185a346906296840746125a0e449764545fbfb9cf000000000000000000000000f886bc0b4f161090096b82ac0c5eb7349add429d0000000000000000000000000000000000000000000000000000000000000000",
+            "callData": "0xb61d27f600000000000000000000000066519fcaee1ed65bc9e0acc25ccd900668d3ed490000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000443f84ac0e000000000000000000000000773d604960feccc5c2ce1e388595268187cf62bf000000000000000000000000000000000000000000000000000000000000000100000000000000000000000000000000000000000000000000000000",
+            "callGasLimit": "0x5a3c",
+            "verificationGasLimit": "0x5b7c7",
+            "preVerificationGas": "0x1001744e6",
+            "maxFeePerGas": "0x889fca3c",
+            "maxPriorityFeePerGas": "0x1e8480",
+            "paymasterAndData": "0x",
+            "signature": "0x42eff6474dd0b7efd0ca3070e05ee0f3e3c6c665176b80c7768f59445d3415de30b65c4c6ae35c45822b726e8827a986765027e7e2d7d2a8d72c9cf0d23194b81c"
+        })
     }
 
     #[tokio::test]
@@ -630,5 +725,75 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // wiremock automatically verifies expect(1) when forward_server is dropped
+    }
+    mock! {
+        pub IngressApi {}
+
+        #[async_trait]
+        impl IngressApiServer for IngressApi {
+            async fn send_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+            async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash>;
+            async fn cancel_bundle(&self, request: CancelBundle) -> RpcResult<()>;
+            async fn send_raw_transaction(&self, tx: Bytes) -> RpcResult<B256>;
+            async fn send_user_operation(
+                &self,
+                user_operation: VersionedUserOperation,
+                entry_point: Address,
+            ) -> RpcResult<FixedBytes<32>>;
+        }
+    }
+    #[tokio::test]
+    async fn test_send_user_operation_accepts_valid_payload() {
+        let mut mock = MockIngressApi::new();
+        mock.expect_send_user_operation()
+            .times(1)
+            .returning(|_, _| Ok(FixedBytes::ZERO));
+
+        let (client, _handle) = setup_rpc_server(mock).await;
+
+        let user_op = sample_user_operation_v06();
+        let entry_point =
+            account_abstraction_core::entrypoints::version::EntryPointVersion::V06_ADDRESS;
+
+        let result: Result<FixedBytes<32>, _> = client
+            .request("eth_sendUserOperation", (user_op, entry_point))
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_user_operation_rejects_invalid_payload() {
+        let mut mock = MockIngressApi::new();
+        mock.expect_send_user_operation()
+            .times(0)
+            .returning(|_, _| Ok(FixedBytes::ZERO));
+
+        let (client, _handle) = setup_rpc_server(mock).await;
+
+        let user_op = sample_user_operation_v06();
+
+        // Missing entry point argument should be rejected by the RPC layer
+        let result: Result<FixedBytes<32>, _> =
+            client.request("eth_sendUserOperation", (user_op,)).await;
+
+        assert!(result.is_err());
+
+        let wrong_user_op = json!({
+            "nonce": "0x19b0ffe729f0000000000000000",
+            "callGasLimit": "0x5a3c",
+            "verificationGasLimit": "0x5b7c7",
+            "preVerificationGas": "0x1001744e6",
+            "maxFeePerGas": "0x889fca3c",
+            "maxPriorityFeePerGas": "0x1e8480",
+            "paymasterAndData": "0x",
+            "signature": "0x42eff6474dd0b7efd0ca3070e05ee0f3e3c6c665176b80c7768f59445d3415de30b65c4c6ae35c45822b726e8827a986765027e7e2d7d2a8d72c9cf0d23194b81c"
+        });
+
+        let wrong_user_op_result: Result<FixedBytes<32>, _> = client
+            .request("eth_sendUserOperation", (wrong_user_op, Address::ZERO))
+            .await;
+
+        assert!(wrong_user_op_result.is_err());
     }
 }

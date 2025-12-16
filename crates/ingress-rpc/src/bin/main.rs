@@ -7,12 +7,12 @@ use rdkafka::producer::FutureProducer;
 use tips_audit::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
+use tips_core::metrics::init_prometheus_exporter;
 use tips_core::{Bundle, MeterBundleResponse};
 use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::health::bind_health_server;
-use tips_ingress_rpc::metrics::init_prometheus_exporter;
-use tips_ingress_rpc::queue::KafkaQueuePublisher;
+use tips_ingress_rpc::queue::KafkaMessageQueue;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService, Providers};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
@@ -62,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
 
     let queue_producer: FutureProducer = ingress_client_config.create()?;
 
-    let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
+    let queue = KafkaMessageQueue::new(queue_producer);
 
     let audit_client_config =
         ClientConfig::from_iter(load_kafka_config_from_file(&config.audit_kafka_properties)?);

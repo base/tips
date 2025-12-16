@@ -27,6 +27,7 @@ impl VersionedUserOperation {
         }
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserOperationRequest {
     pub user_operation: VersionedUserOperation,
@@ -133,7 +134,7 @@ pub struct PoolOperation {
 
 impl PoolOperation {
     pub fn should_replace(&self, other: &PoolOperation) -> bool {
-        self.operation.max_fee_per_gas() > other.operation.max_fee_per_gas()    
+        self.operation.max_fee_per_gas() > other.operation.max_fee_per_gas()
     }
 }
 
