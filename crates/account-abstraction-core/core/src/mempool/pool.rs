@@ -1,5 +1,5 @@
-use crate::types::VersionedUserOperation;
-use alloy_primitives::FixedBytes;
+use crate::types::{PoolOperation, UserOpHash, VersionedUserOperation};
+use alloy_primitives::{FixedBytes};
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -9,23 +9,9 @@ pub struct PoolConfig {
     minimum_required_pvg_gas: u128,
 }
 
-pub type UserOpHash = FixedBytes<32>;
-
-#[derive(Eq, PartialEq, Clone, Debug)]
-pub struct PoolOperation {
-    pub operation: VersionedUserOperation,
-    pub hash: UserOpHash,
-}
-
-impl PoolOperation {
-    pub fn should_replace(&self, other: &PoolOperation) -> bool {
-        self.operation.max_fee_per_gas() < other.operation.max_fee_per_gas()
-    }
-}
-
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
-    pub operation: PoolOperation,
+    pub pool_operation: PoolOperation,
     pub submission_id: u64,
     pub priority_order: u64,
 }
@@ -33,9 +19,9 @@ pub struct OrderedPoolOperation {
 impl Ord for OrderedPoolOperation {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         other
-            .operation.operation
+            .pool_operation.operation
             .max_fee_per_gas()
-            .cmp(&self.operation.operation.max_fee_per_gas())
+            .cmp(&self.pool_operation.operation.max_fee_per_gas())
             .then_with(|| self.submission_id.cmp(&other.submission_id))
     }
 }
@@ -49,7 +35,7 @@ impl PartialOrd for OrderedPoolOperation {
 impl OrderedPoolOperation {
     pub fn create_from_pool_operation(operation: &PoolOperation, submission_id: u64) -> Self {
         Self {
-            operation: operation.clone(),
+            pool_operation: operation.clone(),
             priority_order: submission_id,
             submission_id,
         }
@@ -62,7 +48,6 @@ pub trait Mempool {
         operation: &PoolOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error>;
     fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<PoolOperation>>;
-
     fn remove_operation(
         &mut self,
         operation_hash: &UserOpHash,
@@ -94,7 +79,7 @@ impl Mempool for MempoolImpl {
         self.best
             .iter()
             .take(n)
-            .map(|o| Arc::new(o.operation.clone()))
+            .map(|o| Arc::new(o.pool_operation.clone()))
     }
 
     fn remove_operation(
@@ -103,7 +88,7 @@ impl Mempool for MempoolImpl {
     ) -> Result<Option<PoolOperation>, anyhow::Error> {
         if let Some(ordered_operation) = self.hash_to_operation.remove(operation_hash) {
             self.best.remove(&ordered_operation);
-            Ok(Some(ordered_operation.operation))
+            Ok(Some(ordered_operation.pool_operation))
         } else {
             Ok(None)
         }
@@ -116,7 +101,7 @@ impl MempoolImpl {
         operation: &PoolOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error> {
         if let Some(old_ordered_operation) = self.hash_to_operation.get(&operation.hash) {
-            if operation.should_replace(&old_ordered_operation.operation) {
+            if operation.should_replace(&old_ordered_operation.pool_operation) {
                 self.best.remove(old_ordered_operation);
                 self.hash_to_operation.remove(&operation.hash);
             } else {
@@ -195,9 +180,9 @@ mod tests {
         let ordered_op = result.unwrap();
         assert!(ordered_op.is_some());
         let ordered_op = ordered_op.unwrap();
-        assert_eq!(ordered_op.operation.hash, hash);
+        assert_eq!(ordered_op.pool_operation.hash, hash);
         assert_eq!(
-            ordered_op.operation.operation.max_fee_per_gas(),
+            ordered_op.pool_operation.operation.max_fee_per_gas(),
             Uint::from(2000)
         );
     }
@@ -255,7 +240,7 @@ mod tests {
         assert!(ordered_op.is_some());
         let ordered_op = ordered_op.unwrap();
         assert_eq!(
-            ordered_op.operation.operation.max_fee_per_gas(),
+            ordered_op.pool_operation.operation.max_fee_per_gas(),
             Uint::from(2000)
         );
     }
