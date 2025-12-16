@@ -16,10 +16,7 @@ pub struct OrderedPoolOperation {
 }
 
 impl OrderedPoolOperation {
-    pub fn from_wrapped(
-        operation: &WrappedUserOperation,
-        submission_id: u64,
-    ) -> Self {
+    pub fn from_wrapped(operation: &WrappedUserOperation, submission_id: u64) -> Self {
         Self {
             pool_operation: operation.clone(),
             submission_id,
@@ -129,7 +126,7 @@ impl Mempool for MempoolImpl {
     }
 
     fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
-        // TODO: There is a case where we skip operations that are not the lowest nonce for an account. 
+        // TODO: There is a case where we skip operations that are not the lowest nonce for an account.
         // But we still have not given the N number of operations, meaning we don't return those operations.
 
         self.best
@@ -253,7 +250,10 @@ mod tests {
         })
     }
 
-    fn create_wrapped_operation(max_priority_fee_per_gas: u128, hash: UserOpHash) -> WrappedUserOperation {
+    fn create_wrapped_operation(
+        max_priority_fee_per_gas: u128,
+        hash: UserOpHash,
+    ) -> WrappedUserOperation {
         WrappedUserOperation {
             operation: create_test_user_operation(max_priority_fee_per_gas),
             hash,
@@ -503,13 +503,13 @@ mod tests {
         let mut mempool = create_test_mempool(1000);
         let hash1 = FixedBytes::from([1u8; 32]);
         let test_user_operation = create_test_user_operation(2000);
-        
+
         // Destructure to the inner struct, then update nonce
         let base_op = match test_user_operation.clone() {
             VersionedUserOperation::UserOperation(op) => op,
             _ => panic!("expected UserOperation variant"),
         };
-        
+
         let operation1 = WrappedUserOperation {
             operation: VersionedUserOperation::UserOperation(erc4337::UserOperation {
                 nonce: Uint::from(0),
@@ -518,7 +518,7 @@ mod tests {
             }),
             hash: hash1,
         };
-        
+
         mempool.add_operation(&operation1).unwrap().unwrap();
         let hash2 = FixedBytes::from([2u8; 32]);
         let operation2 = WrappedUserOperation {
