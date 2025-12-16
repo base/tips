@@ -16,7 +16,7 @@ pub struct OrderedPoolOperation {
 }
 
 impl OrderedPoolOperation {
-    pub fn create_from_pool_operation(
+    pub fn from_wrapped(
         operation: &WrappedUserOperation,
         submission_id: u64,
     ) -> Self {
@@ -110,7 +110,7 @@ pub struct MempoolImpl {
     config: PoolConfig,
     best: BTreeSet<ByMaxFeeAndSubmissionId>,
     hash_to_operation: HashMap<UserOpHash, OrderedPoolOperation>,
-    account_to_operation: HashMap<Address, BTreeSet<ByNonce>>,
+    operations_by_account: HashMap<Address, BTreeSet<ByNonce>>,
     submission_id_counter: AtomicU64,
 }
 
@@ -134,7 +134,7 @@ impl Mempool for MempoolImpl {
             .iter()
             .filter_map(|op_by_fee| {
                 let lowest = self
-                    .account_to_operation
+                    .operations_by_account
                     .get(&op_by_fee.0.sender())
                     .and_then(|set| set.first());
 
@@ -164,14 +164,9 @@ impl Mempool for MempoolImpl {
         if let Some(ordered_operation) = self.hash_to_operation.remove(operation_hash) {
             self.best
                 .remove(&ByMaxFeeAndSubmissionId(ordered_operation.clone()));
-
-            let sender = ordered_operation.sender();
-            if let Some(by_nonce_set) = self.account_to_operation.get_mut(&sender) {
-                by_nonce_set.remove(&ByNonce(ordered_operation.clone()));
-                if by_nonce_set.is_empty() {
-                    self.account_to_operation.remove(&sender);
-                }
-            }
+            self.operations_by_account
+                .get_mut(&ordered_operation.sender())
+                .map(|set| set.remove(&ByNonce(ordered_operation.clone())));
             Ok(Some(ordered_operation.pool_operation))
         } else {
             Ok(None)
@@ -192,10 +187,10 @@ impl MempoolImpl {
                 self.best
                     .remove(&ByMaxFeeAndSubmissionId(old_ordered_operation.clone()));
                 let sender = old_ordered_operation.sender();
-                if let Some(by_nonce_set) = self.account_to_operation.get_mut(&sender) {
+                if let Some(by_nonce_set) = self.operations_by_account.get_mut(&sender) {
                     by_nonce_set.remove(&ByNonce(old_ordered_operation.clone()));
                     if by_nonce_set.is_empty() {
-                        self.account_to_operation.remove(&sender);
+                        self.operations_by_account.remove(&sender);
                     }
                 }
                 self.hash_to_operation.remove(&operation.hash);
@@ -205,11 +200,11 @@ impl MempoolImpl {
         }
 
         let order = self.get_next_order_id();
-        let ordered_operation = OrderedPoolOperation::create_from_pool_operation(operation, order);
+        let ordered_operation = OrderedPoolOperation::from_wrapped(operation, order);
 
         self.best
             .insert(ByMaxFeeAndSubmissionId(ordered_operation.clone()));
-        self.account_to_operation
+        self.operations_by_account
             .entry(ordered_operation.sender())
             .or_default()
             .insert(ByNonce(ordered_operation.clone()));
@@ -228,7 +223,7 @@ impl MempoolImpl {
             config,
             best: BTreeSet::new(),
             hash_to_operation: HashMap::new(),
-            account_to_operation: HashMap::new(),
+            operations_by_account: HashMap::new(),
             submission_id_counter: AtomicU64::new(0),
         }
     }
