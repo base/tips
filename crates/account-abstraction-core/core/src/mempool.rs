@@ -129,7 +129,9 @@ impl Mempool for MempoolImpl {
     }
 
     fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
-        // Filter so we only surface an account's lowest-nonce op (no gaps)
+        // TODO: There is a case where we skip operations that are not the lowest nonce for an account. 
+        // But we still have not given the N number of operations, meaning we don't return those operations.
+
         self.best
             .iter()
             .filter_map(|op_by_fee| {
