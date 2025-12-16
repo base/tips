@@ -1,0 +1,28 @@
+# .cursor/rules/python/api-design.mdc
+---
+description: API design principles for Python microservices
+globs: ["*.py"]
+alwaysApply: true
+---
+# API Design Principles
+
+## REST API Design
+- Use proper HTTP methods (GET, POST, PUT, DELETE)
+- Implement proper status codes
+- Use plural nouns for resource endpoints
+- Version APIs in the URL (e.g., /v1/resources)
+- Use query parameters for filtering and pagination
+
+## Request/Response
+- Validate all input data
+- Use Pydantic models for request/response schemas
+- Include proper error responses
+- Implement pagination for list endpoints
+- Use consistent response formats
+
+## Security
+- Implement proper authentication
+- Use JWT for stateless authentication
+- Implement rate limiting
+- Validate and sanitize all inputs
+- Use HTTPS only

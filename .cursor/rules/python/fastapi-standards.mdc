@@ -1,0 +1,41 @@
+# .cursor/rules/python/fastapi-standards.mdc
+---
+description: FastAPI-specific development standards and patterns
+globs: ["*.py"]
+alwaysApply: true
+---
+# FastAPI Development Standards
+
+## Project Structure
+- Use the following directory structure:
+  ```
+  app/
+  ├── api/
+  │   └── v1/
+  │       └── endpoints/
+  ├── core/
+  │   ├── config.py
+  │   └── security.py
+  ├── models/
+  ├── schemas/
+  └── services/
+  ```
+
+## FastAPI Best Practices
+- Use dependency injection for service dependencies
+- Implement proper exception handlers
+- Use background tasks for async operations
+- Implement proper middleware chain
+- Use FastAPI's built-in OpenAPI support
+
+## Performance Optimization
+- Use async/await properly
+- Implement caching strategies
+- Use connection pooling for databases
+- Implement proper background tasks
+
+## Security
+- Use FastAPI's security dependencies
+- Implement proper CORS policies
+- Use rate limiting
+- Implement proper authentication middleware

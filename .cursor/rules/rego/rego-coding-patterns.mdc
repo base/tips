@@ -1,0 +1,94 @@
+---
+description: 
+globs: *.rego
+alwaysApply: false
+---
+# Common Rego Patterns and Idioms
+
+## Data Access Patterns
+```rego
+# Safe object access
+value := object.get("key", "default")
+
+# Array iteration
+result := [item | item := array[_]]
+
+# Set operations
+combined := set_union(set1, set2)
+```
+
+## Control Flow
+```rego
+# Conditional logic
+allow {
+    condition1
+    condition2
+} else {
+    condition3
+}
+
+# Early returns
+deny["reason"] {
+    not is_valid
+}
+
+# Multiple conditions
+allow {
+    count(violations) == 0
+    is_authorized
+}
+```
+
+## Common Functions
+```rego
+# Existence check
+exists {
+    count(array) > 0
+}
+
+# Contains check
+contains {
+    array[_] == value
+}
+
+# All elements satisfy condition
+all_valid {
+    count([x | x := array[_]; not is_valid(x)]) == 0
+}
+```
+
+## Testing Patterns
+```rego
+# Test case structure
+test_allow_when_valid {
+    allow with input as {"valid": true}
+}
+
+# Test helper functions
+test_is_valid {
+    is_valid with input as {"value": "test"}
+}
+```
+
+## Error Handling
+```rego
+# Error collection
+errors[msg] {
+    not is_valid
+    msg := "Invalid input"
+}
+
+# Multiple error messages
+errors[msg] {
+    not is_authorized
+    msg := "Not authorized"
+}
+```
+
+## Best Practices
+1. Use helper functions for complex logic
+2. Keep rules focused and single-purpose
+3. Use meaningful variable names
+4. Document complex logic with comments
+5. Use consistent formatting
+6. Break down complex conditions into smaller rules

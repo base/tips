@@ -1,0 +1,28 @@
+# .cursor/rules/python/testing-standards.mdc
+---
+description: Testing requirements for Python microservices
+globs: ["*_test.py", "test_*.py"]
+alwaysApply: true
+---
+# Testing Standards
+
+## Unit Tests
+- Use pytest as the testing framework
+- Maintain minimum 80% code coverage
+- Mock external dependencies
+- Use fixtures for test data
+- Test both success and error cases
+
+## Integration Tests
+- Test service integrations
+- Use docker-compose for local testing
+- Implement API tests using pytest-asyncio
+- Test database interactions
+- Verify message queue operations
+
+## Performance Tests
+- Implement load tests using locust
+- Test service scalability
+- Measure response times
+- Test rate limiting
+- Verify resource usage
