@@ -291,7 +291,6 @@ mod tests {
         );
     }
 
-    
     // Tests adding an operation with the same hash but lower gas price
     #[test]
     fn test_add_operation_duplicate_hash_lower_gas() {
