@@ -9,6 +9,14 @@ pub struct PoolConfig {
     minimum_max_fee_per_gas: u128,
 }
 
+impl PoolConfig {
+    pub fn new(minimum_max_fee_per_gas: u128) -> Self {
+        Self {
+            minimum_max_fee_per_gas,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
     pub pool_operation: WrappedUserOperation,
