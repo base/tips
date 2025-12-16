@@ -1,4 +1,5 @@
 pub mod archiver;
+pub mod metrics;
 pub mod publisher;
 pub mod reader;
 pub mod storage;
@@ -21,7 +22,7 @@ where
         let mut event_rx = event_rx;
         while let Some(event) = event_rx.recv().await {
             if let Err(e) = publisher.publish(event).await {
-                error!(error = %e, "Failed to publish bundle event");
+                error!(error = %e, "failed to publish bundle event");
             }
         }
     });
@@ -31,7 +32,7 @@ pub fn connect_userop_audit_to_publisher<P>(
     event_rx: mpsc::UnboundedReceiver<UserOpEvent>,
     publisher: P,
 ) where
-    P: UserOpEventPublisher + 'static,
+    P: UserOpEventPublisher + 'static,  
 {
     tokio::spawn(async move {
         let mut event_rx = event_rx;
