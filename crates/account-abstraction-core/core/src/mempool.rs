@@ -181,21 +181,8 @@ impl MempoolImpl {
         operation: &WrappedUserOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error> {
         // Account
-        if let Some(old_ordered_operation) = self.hash_to_operation.get(&operation.hash) {
-            if operation.has_higher_max_fee(&old_ordered_operation.pool_operation) {
-                self.best
-                    .remove(&ByMaxFeeAndSubmissionId(old_ordered_operation.clone()));
-                let sender = old_ordered_operation.sender();
-                if let Some(by_nonce_set) = self.operations_by_account.get_mut(&sender) {
-                    by_nonce_set.remove(&ByNonce(old_ordered_operation.clone()));
-                    if by_nonce_set.is_empty() {
-                        self.operations_by_account.remove(&sender);
-                    }
-                }
-                self.hash_to_operation.remove(&operation.hash);
-            } else {
-                return Ok(None);
-            }
+        if self.hash_to_operation.contains_key(&operation.hash) {
+            return Ok(None);
         }
 
         let order = self.get_next_order_id();
