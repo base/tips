@@ -1,5 +1,4 @@
 pub mod health;
-pub mod kafka_mempool_consumer;
 pub mod metrics;
 pub mod queue;
 pub mod service;

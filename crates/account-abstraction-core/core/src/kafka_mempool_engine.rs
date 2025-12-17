@@ -2,12 +2,17 @@ use crate::mempool::PoolConfig;
 use crate::mempool::{self, Mempool};
 use crate::types::WrappedUserOperation;
 use async_trait::async_trait;
-use rdkafka::{Message, consumer::StreamConsumer, message::OwnedMessage};
+use rdkafka::{
+    ClientConfig, Message,
+    consumer::{Consumer, StreamConsumer},
+    message::OwnedMessage,
+};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::sync::Arc;
+use tips_core::kafka::load_kafka_config_from_file;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
@@ -68,9 +73,11 @@ impl KafkaMempoolEngine {
         self.mempool.clone()
     }
 
-    pub async fn run(&self) -> anyhow::Result<()> {
+    pub async fn run(&self) {
         loop {
-            self.process_next().await?;
+            if let Err(err) = self.process_next().await {
+                warn!(error = %err, "Kafka mempool engine error, continuing");
+            }
         }
     }
 
@@ -104,6 +111,36 @@ impl KafkaMempoolEngine {
         }
         Ok(())
     }
+}
+
+fn create_user_operation_consumer(
+    properties_file: &str,
+    topic: &str,
+    consumer_group_id: &str,
+) -> anyhow::Result<StreamConsumer> {
+    let mut client_config = ClientConfig::from_iter(load_kafka_config_from_file(properties_file)?);
+
+    client_config.set("group.id", consumer_group_id);
+    client_config.set("enable.auto.commit", "true");
+
+    let consumer: StreamConsumer = client_config.create()?;
+    consumer.subscribe(&[topic])?;
+
+    Ok(consumer)
+}
+
+pub fn create_mempool_engine(
+    properties_file: &str,
+    topic: &str,
+    consumer_group_id: &str,
+    pool_config: Option<PoolConfig>,
+) -> anyhow::Result<Arc<KafkaMempoolEngine>> {
+    let consumer: StreamConsumer =
+        create_user_operation_consumer(properties_file, topic, consumer_group_id)?;
+    Ok(Arc::new(KafkaMempoolEngine::with_kafka_consumer(
+        Arc::new(consumer),
+        pool_config,
+    )))
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use account_abstraction_core::kafka_mempool_engine::create_mempool_engine;
 use alloy_provider::ProviderBuilder;
 use clap::Parser;
 use jsonrpsee::server::Server;
@@ -11,7 +12,6 @@ use tips_core::{Bundle, MeterBundleResponse};
 use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::health::bind_health_server;
-use tips_ingress_rpc::kafka_mempool_consumer::{create_mempool_engine, run_mempool_engine};
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
 use tips_ingress_rpc::queue::KafkaMessageQueue;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService, Providers};
@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
 
     let mempool_engine_handle = {
         let engine = mempool_engine.clone();
-        tokio::spawn(async move { run_mempool_engine(engine).await })
+        tokio::spawn(async move { engine.run().await })
     };
 
     let (builder_tx, _) =

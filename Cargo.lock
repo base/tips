@@ -19,6 +19,7 @@ dependencies = [
  "reth-rpc-eth-types",
  "serde",
  "serde_json",
+ "tips-core",
  "tokio",
  "tracing",
  "wiremock",
