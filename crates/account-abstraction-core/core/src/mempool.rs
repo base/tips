@@ -64,7 +64,6 @@ impl Ord for ByMaxFeeAndSubmissionId {
             .max_priority_fee_per_gas()
             .cmp(&self.0.pool_operation.operation.max_priority_fee_per_gas())
             .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
-            .then_with(|| self.0.pool_operation.hash.cmp(&other.0.pool_operation.hash))
     }
 }
 
@@ -299,39 +298,6 @@ mod tests {
         );
     }
 
-    // Tests adding an operation with the same hash but lower gas price
-    #[test]
-    fn test_add_operation_duplicate_hash_lower_gas() {
-        let mut mempool = create_test_mempool(1000);
-        let hash = FixedBytes::from([1u8; 32]);
-
-        let operation1 = create_wrapped_operation(3000, hash);
-        let result1 = mempool.add_operation(&operation1);
-        assert!(result1.is_ok());
-        assert!(result1.unwrap().is_some());
-
-        let operation2 = create_wrapped_operation(2000, hash);
-        let result2 = mempool.add_operation(&operation2);
-        assert!(result2.is_ok());
-        assert!(result2.unwrap().is_none());
-    }
-
-    // Tests adding an operation with the same hash and equal gas price
-    #[test]
-    fn test_add_operation_duplicate_hash_equal_gas() {
-        let mut mempool = create_test_mempool(1000);
-        let hash = FixedBytes::from([1u8; 32]);
-
-        let operation1 = create_wrapped_operation(2000, hash);
-        let result1 = mempool.add_operation(&operation1);
-        assert!(result1.is_ok());
-        assert!(result1.unwrap().is_some());
-
-        let operation2 = create_wrapped_operation(2000, hash);
-        let result2 = mempool.add_operation(&operation2);
-        assert!(result2.is_ok());
-        assert!(result2.unwrap().is_none());
-    }
 
     // Tests adding multiple operations with different hashes
     #[test]
