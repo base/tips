@@ -29,11 +29,9 @@ use account_abstraction_core::entrypoints::version::EntryPointVersion;
 use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
 use account_abstraction_core::{
     AccountAbstractionService, AccountAbstractionServiceImpl,
-    mempool::{Mempool, PoolConfig},
     reputation_service::{ReputationService, ReputationServiceImpl},
 };
 use std::sync::Arc;
-use tokio::sync::RwLock;
 
 /// RPC providers for different endpoints
 pub struct Providers {

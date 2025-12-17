@@ -4,7 +4,6 @@ use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
-use std::sync::Arc;
 use tips_audit::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;

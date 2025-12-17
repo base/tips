@@ -29,7 +29,7 @@ impl ReputationServiceImpl {
 }
 
 impl ReputationService for ReputationServiceImpl {
-    fn get_reputation(&self, entity: &Address) -> ReputationStatus {
+    fn get_reputation(&self, _entity: &Address) -> ReputationStatus {
         ReputationStatus::Ok
     }
 }
