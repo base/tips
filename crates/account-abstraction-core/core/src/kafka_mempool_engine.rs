@@ -24,7 +24,7 @@ pub enum KafkaEvent {
 }
 
 #[async_trait]
-pub trait KafkaConsumer {
+pub trait KafkaConsumer: Send + Sync {
     async fn recv_msg(&self) -> anyhow::Result<OwnedMessage>;
 }
 
