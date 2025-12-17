@@ -74,10 +74,7 @@ async fn main() -> anyhow::Result<()> {
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
 
-    let user_op_properties_file = config
-        .user_operation_consumer_properties
-        .as_deref()
-        .unwrap_or(&config.ingress_kafka_properties);
+    let user_op_properties_file = &config.user_operation_consumer_properties;
 
     let mempool_engine = create_mempool_engine(
         user_op_properties_file,

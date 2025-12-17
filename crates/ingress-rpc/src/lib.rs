@@ -86,12 +86,12 @@ pub struct Config {
     )]
     pub audit_topic: String,
 
-    /// Kafka properties file for the user operation consumer (defaults to ingress properties if unset)
+    /// Kafka properties file for the user operation consumer
     #[arg(
         long,
         env = "TIPS_INGRESS_KAFKA_USER_OPERATION_CONSUMER_PROPERTIES_FILE"
     )]
-    pub user_operation_consumer_properties: Option<String>,
+    pub user_operation_consumer_properties: String,
 
     /// Consumer group id for user operation topic (set uniquely per deployment)
     #[arg(

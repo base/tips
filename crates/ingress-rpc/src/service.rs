@@ -562,7 +562,7 @@ mod tests {
             ingress_topic: String::new(),
             audit_kafka_properties: String::new(),
             audit_topic: String::new(),
-            user_operation_consumer_properties: None,
+            user_operation_consumer_properties: String::new(),
             user_operation_consumer_group_id: "tips-user-operation".to_string(),
             log_level: String::from("info"),
             log_format: tips_core::logger::LogFormat::Pretty,
