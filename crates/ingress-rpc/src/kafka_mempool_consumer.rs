@@ -38,7 +38,8 @@ pub fn create_mempool_engine(
     consumer_group_id: &str,
     pool_config: Option<PoolConfig>,
 ) -> anyhow::Result<Arc<KafkaMempoolEngine>> {
-    let consumer = create_user_operation_consumer(properties_file, topic, consumer_group_id)?;
+    let consumer: StreamConsumer =
+        create_user_operation_consumer(properties_file, topic, consumer_group_id)?;
     Ok(Arc::new(KafkaMempoolEngine::with_kafka_consumer(
         Arc::new(consumer),
         pool_config,

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
@@ -86,7 +87,10 @@ impl KafkaMempoolEngine {
     }
 
     async fn handle_event(&self, event: KafkaEvent) -> anyhow::Result<()> {
-        println!("Handling Kafka event: {:?}", event);
+        info!(
+            event = ?event,
+            "Kafka mempool engine handling event"
+        );
         match event {
             KafkaEvent::UserOpAdded { user_op } => {
                 self.mempool.write().await.add_operation(&user_op)?;
