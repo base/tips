@@ -1,3 +1,5 @@
+use account_abstraction_core::kafka_mempool_engine::KafkaMempoolEngine;
+use account_abstraction_core::reputation_service::ReputationStatus;
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{Address, B256, Bytes, FixedBytes};
@@ -25,8 +27,9 @@ use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::entrypoints::version::EntryPointVersion;
 use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
-use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
+use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl, reputation_service::{ReputationService, ReputationServiceImpl}, mempool::{Mempool, PoolConfig}};
 use std::sync::Arc;
+use tokio::sync::RwLock;
 
 /// RPC providers for different endpoints
 pub struct Providers {
@@ -69,6 +72,7 @@ pub struct IngressService<Q: MessageQueue> {
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<Q>,
     user_op_queue_publisher: UserOpQueuePublisher<Q>,
+    reputation_service: Arc<ReputationServiceImpl>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -97,6 +101,8 @@ impl<Q: MessageQueue> IngressService<Q> {
                 config.validate_user_operation_timeout_ms,
             );
         let queue_connection = Arc::new(queue);
+
+        let mempool = KafkaMempoolEngine::with_kafka_consumer(kafka_consumer, None);
         Self {
             mempool_provider,
             simulation_provider,
@@ -111,6 +117,7 @@ impl<Q: MessageQueue> IngressService<Q> {
                 queue_connection.clone(),
                 config.ingress_topic,
             ),
+            reputation_service: Arc::new(ReputationServiceImpl::new(mempool.get_mempool())),
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -346,6 +353,13 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             warn!(message = "Failed to hash user operation", error = %e);
             EthApiError::InvalidParams(e.to_string()).into_rpc_err()
         })?;
+
+        let reputation = self.reputation_service.get_reputation(&request.user_operation.sender());
+        if reputation == ReputationStatus::Banned {
+            return Err(EthApiError::InvalidParams("User operation sender is banned".into()).into_rpc_err());
+        }else if reputation == ReputationStatus::Throttled {
+            return Err(EthApiError::InvalidParams("User operation sender is throttled".into()).into_rpc_err());
+        }
 
         let _ = self
             .account_abstraction_service

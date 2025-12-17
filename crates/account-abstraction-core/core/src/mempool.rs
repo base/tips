@@ -10,9 +10,9 @@ pub struct PoolConfig {
 }
 
 impl PoolConfig {
-    pub fn new(minimum_max_fee_per_gas: u128) -> Self {
+    pub fn default() -> Self {
         Self {
-            minimum_max_fee_per_gas,
+            minimum_max_fee_per_gas: 0,
         }
     }
 }
