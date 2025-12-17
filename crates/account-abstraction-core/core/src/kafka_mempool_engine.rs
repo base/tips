@@ -1,3 +1,4 @@
+use crate::mempool::PoolConfig;
 use crate::mempool::{self, Mempool};
 use crate::types::WrappedUserOperation;
 use async_trait::async_trait;
@@ -6,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use crate::mempool::PoolConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
@@ -51,14 +51,16 @@ impl KafkaMempoolEngine {
         }
     }
 
-    pub fn with_kafka_consumer(kafka_consumer: Arc<dyn KafkaConsumer>, pool_config: Option<PoolConfig>) -> Self {
+    pub fn with_kafka_consumer(
+        kafka_consumer: Arc<dyn KafkaConsumer>,
+        pool_config: Option<PoolConfig>,
+    ) -> Self {
         let pool_config = pool_config.unwrap_or(PoolConfig::default());
         let mempool = Arc::new(RwLock::new(mempool::MempoolImpl::new(pool_config)));
         Self {
             mempool,
             kafka_consumer,
         }
-
     }
 
     pub fn get_mempool(&self) -> Arc<RwLock<mempool::MempoolImpl>> {
@@ -133,7 +135,9 @@ mod tests {
 
     #[tokio::test]
     async fn handle_add_operation() {
-        let mempool = Arc::new(RwLock::new(mempool::MempoolImpl::new(PoolConfig::default())));
+        let mempool = Arc::new(RwLock::new(
+            mempool::MempoolImpl::new(PoolConfig::default()),
+        ));
 
         let op_hash = [1u8; 32];
         let wrapped = make_wrapped_op(1_000, op_hash);
@@ -162,7 +166,9 @@ mod tests {
 
     #[tokio::test]
     async fn remove_opperation_should_remove_from_mempool() {
-        let mempool = Arc::new(RwLock::new(mempool::MempoolImpl::new(PoolConfig::default())));
+        let mempool = Arc::new(RwLock::new(
+            mempool::MempoolImpl::new(PoolConfig::default()),
+        ));
         let op_hash = [1u8; 32];
         let wrapped = make_wrapped_op(1_000, op_hash);
         let add_mempool = KafkaEvent::UserOpAdded {

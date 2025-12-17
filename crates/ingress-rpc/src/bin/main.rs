@@ -4,6 +4,7 @@ use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
+use std::sync::Arc;
 use tips_audit::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
@@ -11,6 +12,7 @@ use tips_core::{Bundle, MeterBundleResponse};
 use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
 use tips_ingress_rpc::health::bind_health_server;
+use tips_ingress_rpc::kafka_mempool_consumer::{create_mempool_engine, run_mempool_engine};
 use tips_ingress_rpc::metrics::init_prometheus_exporter;
 use tips_ingress_rpc::queue::KafkaMessageQueue;
 use tips_ingress_rpc::service::{IngressApiServer, IngressService, Providers};
@@ -73,6 +75,23 @@ async fn main() -> anyhow::Result<()> {
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
 
+    let user_op_properties_file = config
+        .user_operation_consumer_properties
+        .as_deref()
+        .unwrap_or(&config.ingress_kafka_properties);
+
+    let mempool_engine = create_mempool_engine(
+        user_op_properties_file,
+        &config.user_operation_topic,
+        &config.user_operation_consumer_group_id,
+        None,
+    )?;
+
+    let mempool_engine_handle = {
+        let engine = mempool_engine.clone();
+        tokio::spawn(async move { run_mempool_engine(engine).await })
+    };
+
     let (builder_tx, _) =
         broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
     let (builder_backrun_tx, _) = broadcast::channel::<Bundle>(config.max_buffered_backrun_bundles);
@@ -95,6 +114,7 @@ async fn main() -> anyhow::Result<()> {
         audit_tx,
         builder_tx,
         builder_backrun_tx,
+        mempool_engine.clone(),
         cfg,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
@@ -110,6 +130,7 @@ async fn main() -> anyhow::Result<()> {
 
     handle.stopped().await;
     health_handle.abort();
+    mempool_engine_handle.abort();
 
     Ok(())
 }

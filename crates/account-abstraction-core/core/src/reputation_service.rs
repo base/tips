@@ -1,7 +1,7 @@
+use crate::mempool;
+use alloy_primitives::Address;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use alloy_primitives::Address;
-use crate::mempool;
 
 /// Reputation status for an entity
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
