@@ -298,7 +298,6 @@ mod tests {
         );
     }
 
-
     // Tests adding multiple operations with different hashes
     #[test]
     fn test_add_multiple_operations_with_different_hashes() {
