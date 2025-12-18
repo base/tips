@@ -1,39 +1,24 @@
-use super::ports::event_source::EventSource;
-use crate::domain::{
-    events::MempoolEvent,
-    mempool::{Mempool, MempoolImpl, PoolConfig},
-};
+use super::interfaces::event_source::EventSource;
+use crate::domain::{events::MempoolEvent, mempool::Mempool};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-pub struct MempoolEngine {
-    mempool: Arc<RwLock<MempoolImpl>>,
+pub struct MempoolEngine<T: Mempool> {
+    mempool: Arc<RwLock<T>>,
     event_source: Arc<dyn EventSource>,
 }
 
-impl MempoolEngine {
-    pub fn new(mempool: Arc<RwLock<MempoolImpl>>, event_source: Arc<dyn EventSource>) -> Self {
+impl<T: Mempool> MempoolEngine<T> {
+    pub fn new(mempool: Arc<RwLock<T>>, event_source: Arc<dyn EventSource>) -> MempoolEngine<T> {
         Self {
             mempool,
             event_source,
         }
     }
 
-    pub fn with_event_source(
-        event_source: Arc<dyn EventSource>,
-        pool_config: Option<PoolConfig>,
-    ) -> Self {
-        let pool_config = pool_config.unwrap_or_default();
-        let mempool = Arc::new(RwLock::new(MempoolImpl::new(pool_config)));
-        Self {
-            mempool,
-            event_source,
-        }
-    }
-
-    pub fn get_mempool(&self) -> Arc<RwLock<MempoolImpl>> {
-        self.mempool.clone()
+    pub fn get_mempool(&self) -> Arc<RwLock<T>> {
+        Arc::clone(&self.mempool)
     }
 
     pub async fn run(&self) {
@@ -72,8 +57,11 @@ impl MempoolEngine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::types::{VersionedUserOperation, WrappedUserOperation};
-    use crate::services::ports::event_source::EventSource;
+    use crate::domain::{
+        mempool::{InMemoryMempool, PoolConfig},
+        types::{VersionedUserOperation, WrappedUserOperation},
+    };
+    use crate::services::interfaces::event_source::EventSource;
     use alloy_primitives::{Address, FixedBytes, Uint};
     use alloy_rpc_types::erc4337;
     use async_trait::async_trait;
@@ -126,7 +114,7 @@ mod tests {
 
     #[tokio::test]
     async fn handle_add_operation() {
-        let mempool = Arc::new(RwLock::new(MempoolImpl::new(PoolConfig::default())));
+        let mempool = Arc::new(RwLock::new(InMemoryMempool::new(PoolConfig::default())));
 
         let op_hash = [1u8; 32];
         let wrapped = make_wrapped_op(1_000, op_hash);
@@ -146,7 +134,7 @@ mod tests {
 
     #[tokio::test]
     async fn remove_operation_should_remove_from_mempool() {
-        let mempool = Arc::new(RwLock::new(MempoolImpl::new(PoolConfig::default())));
+        let mempool = Arc::new(RwLock::new(InMemoryMempool::new(PoolConfig::default())));
         let op_hash = [1u8; 32];
         let wrapped = make_wrapped_op(1_000, op_hash);
         let add_event = MempoolEvent::UserOpAdded {

@@ -1,6 +1,6 @@
-use account_abstraction_core_v2::MempoolEngine;
 use account_abstraction_core_v2::infrastructure::base_node::validator::BaseNodeValidator;
-use account_abstraction_core_v2::services::ports::user_op_validator::UserOperationValidator;
+use account_abstraction_core_v2::services::interfaces::user_op_validator::UserOperationValidator;
+use account_abstraction_core_v2::{Mempool, MempoolEngine};
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{Address, B256, Bytes, FixedBytes};
@@ -63,7 +63,7 @@ pub trait IngressApi {
     ) -> RpcResult<FixedBytes<32>>;
 }
 
-pub struct IngressService<Q: MessageQueue> {
+pub struct IngressService<Q: MessageQueue, M: Mempool> {
     mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
@@ -71,7 +71,7 @@ pub struct IngressService<Q: MessageQueue> {
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<Q>,
     user_op_queue_publisher: UserOpQueuePublisher<Q>,
-    mempool_engine: Arc<MempoolEngine>,
+    mempool_engine: Arc<MempoolEngine<M>>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -82,14 +82,14 @@ pub struct IngressService<Q: MessageQueue> {
     builder_backrun_tx: broadcast::Sender<Bundle>,
 }
 
-impl<Q: MessageQueue> IngressService<Q> {
+impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
     pub fn new(
         providers: Providers,
         queue: Q,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
-        mempool_engine: Arc<MempoolEngine>,
+        mempool_engine: Arc<MempoolEngine<M>>,
         config: Config,
     ) -> Self {
         let mempool_provider = Arc::new(providers.mempool);
@@ -130,7 +130,7 @@ impl<Q: MessageQueue> IngressService<Q> {
 }
 
 #[async_trait]
-impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
+impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for IngressService<Q, M> {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
         if !self.backrun_enabled {
             info!(
@@ -380,7 +380,7 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
     }
 }
 
-impl<Q: MessageQueue> IngressService<Q> {
+impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
     async fn get_tx(&self, data: &Bytes) -> RpcResult<Recovered<OpTxEnvelope>> {
         if data.is_empty() {
             return Err(EthApiError::EmptyRawTransactionData.into_rpc_err());
@@ -499,7 +499,8 @@ mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
     use account_abstraction_core_v2::MempoolEvent;
-    use account_abstraction_core_v2::services::ports::event_source::EventSource;
+    use account_abstraction_core_v2::domain::{InMemoryMempool, PoolConfig};
+    use account_abstraction_core_v2::services::interfaces::event_source::EventSource;
     use alloy_provider::RootProvider;
     use anyhow::Result;
     use async_trait::async_trait;
@@ -511,7 +512,7 @@ mod tests {
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
     use tips_core::test_utils::create_test_meter_bundle_response;
-    use tokio::sync::{broadcast, mpsc};
+    use tokio::sync::{RwLock, broadcast, mpsc};
     use url::Url;
     use wiremock::{Mock, MockServer, ResponseTemplate, matchers::method};
     struct MockQueue;
@@ -670,9 +671,9 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
-        let mempool_engine = Arc::new(MempoolEngine::with_event_source(
+        let mempool_engine = Arc::new(MempoolEngine::<InMemoryMempool>::new(
+            Arc::new(RwLock::new(InMemoryMempool::new(PoolConfig::default()))),
             Arc::new(NoopEventSource),
-            None,
         ));
 
         let service = IngressService::new(
@@ -740,9 +741,9 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
-        let mempool_engine = Arc::new(MempoolEngine::with_event_source(
+        let mempool_engine = Arc::new(MempoolEngine::<InMemoryMempool>::new(
+            Arc::new(RwLock::new(InMemoryMempool::new(PoolConfig::default()))),
             Arc::new(NoopEventSource),
-            None,
         ));
 
         let service = IngressService::new(

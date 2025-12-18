@@ -14,8 +14,8 @@ pub use domain::{
 };
 
 pub use services::{
+    interfaces::{event_source::EventSource, user_op_validator::UserOperationValidator},
     mempool_engine::MempoolEngine,
-    ports::{event_source::EventSource, user_op_validator::UserOperationValidator},
 };
 
 pub use factories::kafka_engine::create_mempool_engine;

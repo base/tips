@@ -6,6 +6,8 @@ Clean architecture implementation for ERC-4337 account abstraction mempool and v
 
 This crate follows **Clean Architecture** (also known as Hexagonal Architecture or Ports & Adapters). The goal is to keep business logic independent of external concerns like databases, message queues, or RPC providers.
 
+**Note**: We use the term "interfaces" for what Hexagonal Architecture traditionally calls "ports" - both refer to the same concept of defining contracts between layers.
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Factories                             │
@@ -21,7 +23,7 @@ This crate follows **Clean Architecture** (also known as Hexagonal Architecture 
 ┌───────────────────────▼─────────────────────────────────────┐
 │                      Services                                │
 │              (Orchestration & use cases)                     │
-│                   defines ▼ ports                            │
+│                 defines ▼ interfaces                         │
 └───────────────────────┬─────────────────────────────────────┘
                         │
 ┌───────────────────────▼─────────────────────────────────────┐
@@ -71,7 +73,7 @@ pub enum MempoolEvent {
 
 **Contains**:
 - Use case implementations (`MempoolEngine` - handles mempool events)
-- **Ports** (interfaces that infrastructure must implement)
+- **Interfaces** (contracts that infrastructure must implement)
 
 **Purpose**:
 - Reusable across different binaries (ingress-rpc, batch-processor, CLI tools)
@@ -83,7 +85,7 @@ pub enum MempoolEvent {
 // services/mempool_engine.rs
 pub struct MempoolEngine {
     mempool: Arc<RwLock<MempoolImpl>>,
-    event_source: Arc<dyn EventSource>, // ← uses a port, not Kafka directly
+    event_source: Arc<dyn EventSource>, // ← uses an interface, not Kafka directly
 }
 
 impl MempoolEngine {
@@ -96,22 +98,22 @@ impl MempoolEngine {
 }
 ```
 
-### 🔌 Ports (`src/services/ports/`)
+### 🔌 Interfaces (`src/services/interfaces/`)
 
-**What they are**: Interfaces (traits) that define what the services layer needs from the outside world.
+**What they are**: Traits that define what the services layer needs from the outside world.
 
 **Why they exist**:
 - **Dependency Inversion**: Services define what they need; infrastructure provides it
-- **Testability**: Easy to mock ports with fake implementations
+- **Testability**: Easy to mock interfaces with fake implementations
 - **Flexibility**: Swap Kafka for Redis without touching service code
 
-**Ports in this crate**:
+**Interfaces in this crate**:
 - `EventSource` - "I need a stream of MempoolEvents" (Kafka? Redis? In-memory? Don't care!)
 - `UserOperationValidator` - "I need to validate user operations" (RPC? Mock? Don't care!)
 
 **Example**:
 ```rust
-// services/ports/event_source.rs
+// services/interfaces/event_source.rs
 #[async_trait]
 pub trait EventSource: Send + Sync {
     async fn receive(&self) -> anyhow::Result<MempoolEvent>;
@@ -137,7 +139,7 @@ pub trait EventSource: Send + Sync {
 **Purpose**:
 - Translate between external systems and our domain
 - Handle external concerns (serialization, retries, connection pooling)
-- Implement the ports defined by services
+- Implement the interfaces defined by services
 
 **Example**:
 ```rust
@@ -147,7 +149,7 @@ pub struct KafkaEventSource {
 }
 
 #[async_trait]
-impl EventSource for KafkaEventSource { // ← Implements the port
+impl EventSource for KafkaEventSource { // ← Implements the interface
     async fn receive(&self) -> anyhow::Result<MempoolEvent> {
         let msg = self.consumer.recv().await?.detach();
         let payload = msg.payload().ok_or(...)?;
@@ -190,10 +192,10 @@ pub fn create_mempool_engine(
     // 1. Create Kafka consumer (infrastructure)
     let consumer: StreamConsumer = create_kafka_consumer(...)?;
 
-    // 2. Wrap in port adapter
+    // 2. Wrap in interface adapter
     let event_source = Arc::new(KafkaEventSource::new(Arc::new(consumer)));
 
-    // 3. Create service with port
+    // 3. Create service with interface
     let engine = MempoolEngine::with_event_source(event_source, pool_config);
 
     Ok(Arc::new(engine))
@@ -204,7 +206,7 @@ pub fn create_mempool_engine(
 
 ### ✅ Benefits
 
-1. **Testability**: Mock ports instead of real Kafka/RPC
+1. **Testability**: Mock interfaces instead of real Kafka/RPC
    ```rust
    // Test with fake event source
    let mock_source = Arc::new(MockEventSource::new(vec![event1, event2]));
@@ -282,7 +284,7 @@ let engine = MempoolEngine::with_event_source(event_source, Some(custom_config))
 ```rust
 use account_abstraction_core_v2::{
     MempoolEngine, MempoolEvent,
-    services::ports::event_source::EventSource,
+    services::interfaces::event_source::EventSource,
 };
 
 struct MockEventSource {

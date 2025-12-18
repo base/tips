@@ -83,7 +83,7 @@ impl Ord for ByNonce {
     }
 }
 
-pub trait Mempool {
+pub trait Mempool: Send + Sync {
     fn add_operation(
         &mut self,
         operation: &WrappedUserOperation,

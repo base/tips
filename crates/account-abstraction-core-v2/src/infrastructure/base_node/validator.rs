@@ -1,5 +1,5 @@
 use crate::domain::types::{ValidationResult, VersionedUserOperation};
-use crate::services::ports::user_op_validator::UserOperationValidator;
+use crate::services::interfaces::user_op_validator::UserOperationValidator;
 use alloy_primitives::Address;
 use alloy_provider::{Provider, RootProvider};
 use async_trait::async_trait;

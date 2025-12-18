@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use tracing::warn;
 
-pub struct MempoolImpl {
+pub struct InMemoryMempool {
     config: PoolConfig,
     best: BTreeSet<ByMaxFeeAndSubmissionId>,
     hash_to_operation: HashMap<UserOpHash, OrderedPoolOperation>,
@@ -14,7 +14,7 @@ pub struct MempoolImpl {
     submission_id_counter: AtomicU64,
 }
 
-impl Mempool for MempoolImpl {
+impl Mempool for InMemoryMempool {
     fn add_operation(
         &mut self,
         operation: &WrappedUserOperation,
@@ -73,7 +73,7 @@ impl Mempool for MempoolImpl {
     }
 }
 
-impl MempoolImpl {
+impl InMemoryMempool {
     fn handle_add_operation(
         &mut self,
         operation: &WrappedUserOperation,
@@ -145,8 +145,8 @@ mod tests {
         }
     }
 
-    fn create_test_mempool(minimum_required_pvg_gas: u128) -> MempoolImpl {
-        MempoolImpl::new(PoolConfig {
+    fn create_test_mempool(minimum_required_pvg_gas: u128) -> InMemoryMempool {
+        InMemoryMempool::new(PoolConfig {
             minimum_max_fee_per_gas: minimum_required_pvg_gas,
         })
     }

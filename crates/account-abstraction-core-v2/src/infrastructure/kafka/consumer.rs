@@ -1,5 +1,5 @@
 use crate::domain::events::MempoolEvent;
-use crate::services::ports::event_source::EventSource;
+use crate::services::interfaces::event_source::EventSource;
 use async_trait::async_trait;
 use rdkafka::{Message, consumer::StreamConsumer};
 use serde_json;
