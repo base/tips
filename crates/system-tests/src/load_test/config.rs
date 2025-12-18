@@ -35,9 +35,9 @@ pub struct SetupArgs {
     #[arg(long, default_value = "0.1")]
     pub fund_amount: f64,
 
-    /// Output file for wallet data (optional, allows for wallet reuse)
+    /// Output file for wallet data (required)
     #[arg(long)]
-    pub output: Option<PathBuf>,
+    pub output: PathBuf,
 }
 
 #[derive(Parser)]
@@ -50,8 +50,8 @@ pub struct LoadArgs {
     #[arg(long, env = "SEQUENCER_URL", default_value = "http://localhost:8547")]
     pub sequencer: String,
 
-    /// Path to wallets JSON file
-    #[arg(long, default_value = "wallets.json")]
+    /// Path to wallets JSON file (required)
+    #[arg(long)]
     pub wallets: PathBuf,
 
     /// Target transaction rate (transactions per second)

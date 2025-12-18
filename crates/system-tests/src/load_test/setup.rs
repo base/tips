@@ -1,5 +1,6 @@
 use super::config::SetupArgs;
 use super::wallet::{Wallet, generate_wallets, save_wallets};
+use crate::fixtures::create_optimism_provider;
 use alloy_consensus::{SignableTransaction, TxEip1559};
 use alloy_primitives::U256;
 use alloy_provider::Provider;
@@ -7,7 +8,6 @@ use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use op_alloy_network::TxSignerSync;
 use op_alloy_network::eip2718::Encodable2718;
-use crate::fixtures::create_optimism_provider;
 
 const CHAIN_ID: u64 = 13; // builder-playground local chain ID
 
@@ -50,6 +50,8 @@ pub async fn run(args: SetupArgs) -> Result<()> {
 
     let fund_amount_wei = U256::from((args.fund_amount * 1e18) as u64);
 
+    // Send all funding transactions
+    let mut pending_txs = Vec::new();
     for (i, wallet) in wallets.iter().enumerate() {
         let mut tx = TxEip1559 {
             chain_id: CHAIN_ID,
@@ -68,22 +70,21 @@ pub async fn run(args: SetupArgs) -> Result<()> {
 
         let mut buf = Vec::new();
         envelope.encode_2718(&mut buf);
-        let _pending = provider
+        let pending = provider
             .send_raw_transaction(buf.as_ref())
             .await
             .with_context(|| format!("Failed to send funding tx for wallet {}", i))?;
 
+        pending_txs.push(pending);
         nonce += 1;
-        pb.set_message(format!("Funded wallet {}", i + 1));
+        pb.set_message(format!("Sent funding tx {}", i + 1));
         pb.inc(1);
     }
 
-    pb.finish_with_message("All wallets funded!");
+    pb.finish_with_message("All funding transactions sent!");
 
-    // Save wallets to file (if output specified)
-    if let Some(output_path) = &args.output {
-        save_wallets(&wallets, args.fund_amount, output_path)?;
-    }
+    // Save wallets to file
+    save_wallets(&wallets, args.fund_amount, &args.output)?;
 
     Ok(())
 }

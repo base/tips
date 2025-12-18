@@ -5,14 +5,14 @@ use super::poller::ReceiptPoller;
 use super::sender::SenderTask;
 use super::tracker::TransactionTracker;
 use super::wallet::load_wallets;
+use crate::client::TipsRpcClient;
+use crate::fixtures::create_optimism_provider;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use std::sync::Arc;
 use std::time::Duration;
-use crate::client::TipsRpcClient;
-use crate::fixtures::create_optimism_provider;
 
 pub async fn run(args: LoadArgs) -> Result<()> {
     let wallets = load_wallets(&args.wallets).context("Failed to load wallets")?;
@@ -21,6 +21,8 @@ pub async fn run(args: LoadArgs) -> Result<()> {
         anyhow::bail!("No wallets found in file. Run 'setup' command first.");
     }
 
+    let num_wallets = wallets.len();
+
     let sequencer = create_optimism_provider(&args.sequencer)?;
 
     let tips_provider = create_optimism_provider(&args.target)?;
@@ -28,7 +30,7 @@ pub async fn run(args: LoadArgs) -> Result<()> {
 
     let tracker = TransactionTracker::new(Duration::from_secs(args.duration));
 
-    let rate_per_wallet = args.rate as f64 / wallets.len() as f64;
+    let rate_per_wallet = args.rate as f64 / num_wallets as f64;
 
     let pb = ProgressBar::new(args.duration);
     pb.set_style(
@@ -110,9 +112,9 @@ pub async fn run(args: LoadArgs) -> Result<()> {
     }
 
     let config = TestConfig {
-        target: args.target,
-        sequencer: args.sequencer,
-        wallets: tracker.total_sent() as usize,
+        target: args.target.clone(),
+        sequencer: args.sequencer.clone(),
+        wallets: num_wallets,
         target_rate: args.rate,
         duration_secs: args.duration,
         tx_timeout_secs: args.tx_timeout,
@@ -123,8 +125,8 @@ pub async fn run(args: LoadArgs) -> Result<()> {
     print_results(&results);
 
     // Save results if output file specified
-    if let Some(output_path) = args.output {
-        save_results(&results, &output_path)?;
+    if let Some(output_path) = args.output.as_ref() {
+        save_results(&results, output_path)?;
     }
 
     Ok(())

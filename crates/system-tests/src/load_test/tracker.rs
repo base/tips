@@ -8,11 +8,11 @@ pub struct TransactionTracker {
     // Pending transactions (tx_hash -> send_time)
     pending: DashMap<B256, Instant>,
 
-    // Included transactions (tx_hash -> time_to_inclusion)
-    included: DashMap<B256, Duration>,
+    // Included transactions
+    included: DashMap<B256, ()>,
 
     // Timed out transactions
-    timed_out: DashMap<B256, Instant>,
+    timed_out: DashMap<B256, ()>,
 
     // Send errors (not transaction-specific)
     send_errors: AtomicU64,
@@ -42,14 +42,14 @@ impl TransactionTracker {
         self.send_errors.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_included(&self, tx_hash: B256, inclusion_time: Duration) {
+    pub fn record_included(&self, tx_hash: B256) {
         self.pending.remove(&tx_hash);
-        self.included.insert(tx_hash, inclusion_time);
+        self.included.insert(tx_hash, ());
     }
 
     pub fn record_timeout(&self, tx_hash: B256) {
-        if let Some((_, send_time)) = self.pending.remove(&tx_hash) {
-            self.timed_out.insert(tx_hash, send_time);
+        if self.pending.remove(&tx_hash).is_some() {
+            self.timed_out.insert(tx_hash, ());
         }
     }
 

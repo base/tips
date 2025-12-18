@@ -56,7 +56,7 @@ All 5 tests will run:
 
 For load testing and performance metrics, see [METRICS.md](./METRICS.md).
 
-The `tips-e2e-runner` binary provides:
+The `load-test` binary provides:
 - Multi-wallet concurrent load generation
 - Time-to-inclusion tracking
 - Throughput and latency metrics
@@ -65,13 +65,13 @@ The `tips-e2e-runner` binary provides:
 Quick start:
 ```bash
 # Build
-cargo build --release --bin tips-e2e-runner
+cargo build --release --bin load-test
 
 # Setup wallets (optional: add --output wallets.json to save)
-./target/release/tips-e2e-runner setup --master-key <KEY> --num-wallets 100 --output wallets.json
+./target/release/load-test setup --master-key <KEY> --num-wallets 100 --output wallets.json
 
-# Run load test
-./target/release/tips-e2e-runner load --rate 100 --duration 5m
+# Run load test 
+./target/release/load-test load --wallets wallets.json --rate 100 --duration 5m 
 ```
 
 See [METRICS.md](./METRICS.md) for complete documentation.

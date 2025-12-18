@@ -44,12 +44,8 @@ impl ReceiptPoller {
 
                 match self.sequencer.get_transaction_receipt(tx_hash).await {
                     Ok(Some(_receipt)) => {
-                        let inclusion_time = send_time.elapsed();
-                        self.tracker.record_included(tx_hash, inclusion_time);
-                        debug!(
-                            "Transaction included: {:?} in {:?}",
-                            tx_hash, inclusion_time
-                        );
+                        self.tracker.record_included(tx_hash);
+                        debug!("Transaction included: {:?}", tx_hash);
                     }
                     Ok(None) => {
                         // Transaction not yet included, continue polling

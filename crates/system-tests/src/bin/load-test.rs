@@ -11,4 +11,3 @@ async fn main() -> Result<()> {
         config::Commands::Load(args) => load::run(args).await,
     }
 }
-
