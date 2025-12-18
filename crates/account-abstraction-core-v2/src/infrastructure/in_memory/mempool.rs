@@ -1,10 +1,86 @@
+use crate::domain::mempool::{Mempool, PoolConfig};
 use crate::domain::types::{UserOpHash, WrappedUserOperation};
-use crate::domain::mempool::{ByMaxFeeAndSubmissionId, ByNonce, Mempool, OrderedPoolOperation, PoolConfig};
 use alloy_primitives::Address;
+use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::Arc;
 use tracing::warn;
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+struct OrderedPoolOperation {
+    pool_operation: WrappedUserOperation,
+    submission_id: u64,
+}
+
+impl OrderedPoolOperation {
+    fn from_wrapped(operation: &WrappedUserOperation, submission_id: u64) -> Self {
+        Self {
+            pool_operation: operation.clone(),
+            submission_id,
+        }
+    }
+
+    fn sender(&self) -> Address {
+        self.pool_operation.operation.sender()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ByMaxFeeAndSubmissionId(OrderedPoolOperation);
+
+impl PartialEq for ByMaxFeeAndSubmissionId {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.pool_operation.hash == other.0.pool_operation.hash
+    }
+}
+impl Eq for ByMaxFeeAndSubmissionId {}
+
+impl PartialOrd for ByMaxFeeAndSubmissionId {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ByMaxFeeAndSubmissionId {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other
+            .0
+            .pool_operation
+            .operation
+            .max_priority_fee_per_gas()
+            .cmp(&self.0.pool_operation.operation.max_priority_fee_per_gas())
+            .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
+    }
+}
+
+#[derive(Clone, Debug)]
+struct ByNonce(OrderedPoolOperation);
+
+impl PartialEq for ByNonce {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.pool_operation.hash == other.0.pool_operation.hash
+    }
+}
+impl Eq for ByNonce {}
+
+impl PartialOrd for ByNonce {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for ByNonce {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0
+            .pool_operation
+            .operation
+            .nonce()
+            .cmp(&other.0.pool_operation.operation.nonce())
+            .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
+            .then_with(|| self.0.pool_operation.hash.cmp(&other.0.pool_operation.hash))
+    }
+}
 
 pub struct InMemoryMempool {
     config: PoolConfig,
@@ -18,14 +94,14 @@ impl Mempool for InMemoryMempool {
     fn add_operation(
         &mut self,
         operation: &WrappedUserOperation,
-    ) -> Result<Option<OrderedPoolOperation>, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         if operation.operation.max_fee_per_gas() < self.config.minimum_max_fee_per_gas {
             return Err(anyhow::anyhow!(
                 "Gas price is below the minimum required PVG gas"
             ));
         }
-        let ordered_operation_result = self.handle_add_operation(operation)?;
-        Ok(ordered_operation_result)
+        self.handle_add_operation(operation)?;
+        Ok(())
     }
 
     fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
@@ -77,9 +153,9 @@ impl InMemoryMempool {
     fn handle_add_operation(
         &mut self,
         operation: &WrappedUserOperation,
-    ) -> Result<Option<OrderedPoolOperation>, anyhow::Error> {
+    ) -> Result<(), anyhow::Error> {
         if self.hash_to_operation.contains_key(&operation.hash) {
-            return Ok(None);
+            return Ok(());
         }
 
         let order = self.get_next_order_id();
@@ -93,7 +169,7 @@ impl InMemoryMempool {
             .insert(ByNonce(ordered_operation.clone()));
         self.hash_to_operation
             .insert(operation.hash, ordered_operation.clone());
-        Ok(Some(ordered_operation))
+        Ok(())
     }
 
     fn get_next_order_id(&self) -> u64 {
@@ -160,14 +236,6 @@ mod tests {
         let result = mempool.add_operation(&operation);
 
         assert!(result.is_ok());
-        let ordered_op = result.unwrap();
-        assert!(ordered_op.is_some());
-        let ordered_op = ordered_op.unwrap();
-        assert_eq!(ordered_op.pool_operation.hash, hash);
-        assert_eq!(
-            ordered_op.pool_operation.operation.max_fee_per_gas(),
-            Uint::from(2000)
-        );
     }
 
     #[test]
@@ -195,19 +263,16 @@ mod tests {
         let operation1 = create_wrapped_operation(2000, hash1);
         let result1 = mempool.add_operation(&operation1);
         assert!(result1.is_ok());
-        assert!(result1.unwrap().is_some());
 
         let hash2 = FixedBytes::from([2u8; 32]);
         let operation2 = create_wrapped_operation(3000, hash2);
         let result2 = mempool.add_operation(&operation2);
         assert!(result2.is_ok());
-        assert!(result2.unwrap().is_some());
 
         let hash3 = FixedBytes::from([3u8; 32]);
         let operation3 = create_wrapped_operation(1500, hash3);
         let result3 = mempool.add_operation(&operation3);
         assert!(result3.is_ok());
-        assert!(result3.unwrap().is_some());
 
         assert_eq!(mempool.hash_to_operation.len(), 3);
         assert_eq!(mempool.best.len(), 3);
@@ -311,11 +376,11 @@ mod tests {
 
         let hash1 = FixedBytes::from([1u8; 32]);
         let operation1 = create_wrapped_operation(2000, hash1);
-        mempool.add_operation(&operation1).unwrap().unwrap();
+        mempool.add_operation(&operation1).unwrap();
 
         let hash2 = FixedBytes::from([2u8; 32]);
         let operation2 = create_wrapped_operation(2000, hash2);
-        mempool.add_operation(&operation2).unwrap().unwrap();
+        mempool.add_operation(&operation2).unwrap();
 
         let best: Vec<_> = mempool.get_top_operations(2).collect();
         assert_eq!(best.len(), 2);
@@ -343,7 +408,7 @@ mod tests {
             hash: hash1,
         };
 
-        mempool.add_operation(&operation1).unwrap().unwrap();
+        mempool.add_operation(&operation1).unwrap();
         let hash2 = FixedBytes::from([2u8; 32]);
         let operation2 = WrappedUserOperation {
             operation: VersionedUserOperation::UserOperation(erc4337::UserOperation {
@@ -353,7 +418,7 @@ mod tests {
             }),
             hash: hash2,
         };
-        mempool.add_operation(&operation2).unwrap().unwrap();
+        mempool.add_operation(&operation2).unwrap();
 
         let best: Vec<_> = mempool.get_top_operations(2).collect();
         assert_eq!(best.len(), 1);

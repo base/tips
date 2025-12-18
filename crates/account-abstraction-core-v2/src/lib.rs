@@ -9,9 +9,11 @@ pub mod services;
 // Convenient re-exports for common imports
 pub use domain::{
     events::MempoolEvent,
-    mempool::Mempool,
+    mempool::{Mempool, PoolConfig},
     types::{ValidationResult, VersionedUserOperation, WrappedUserOperation},
 };
+
+pub use infrastructure::in_memory::InMemoryMempool;
 
 pub use services::{
     interfaces::{event_source::EventSource, user_op_validator::UserOperationValidator},
