@@ -46,8 +46,7 @@ impl PartialOrd for ByMaxFeeAndSubmissionId {
 }
 
 impl Ord for ByMaxFeeAndSubmissionId {
-    /// TODO: There can be invalid opperations, where base fee, + expected gas price
-    /// is greater that the maximum gas, in that case we don't include it in the mempool as such mempool changes.
+
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .0
