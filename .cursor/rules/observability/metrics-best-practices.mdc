@@ -1,0 +1,136 @@
+---
+description: Rules to follow when emitting metrics
+globs: ["*.go", "*.py"]
+---
+## Rule
+Do not use high-cardinality values as tags when emitting metrics. High-cardinality tags can significantly increase observability costs and impact system performance. Every tag that contains an ID must be flagged.
+
+Refer to [tagging strategy](https://docs.cbhq.net/infra/observability/metrics#tagging-strategy) for more details.
+
+## Scope
+This rule applies to ANY metric emission found ANYWHERE in the code changes, regardless of the primary purpose of the PR. ALL metric emission calls (statsd) must be checked for violations.
+
+Violation happens when ALL the following conditions are met:
+1. Code is emitting metrics to a monitoring system (Datadog, StatsD, etc.)
+2. Tags or labels are being added to the metric
+3. The tag values contain AT LEAST ONE high-cardinality.
+
+### High-cardinality Guidelines:
+A tag value is considered high-cardinality if it falls into any of these categories:
+- **Looks unique** – anything that sounds like it will generate a one-off value (e.g., id, uuid, token, session, generated_x)
+- **Continuous values** – non-discrete numbers that can vary infinitely, like current_price, latitude, longitude, sensor readings, etc.
+- **High entropy values** – anything random or cryptographic such as random, hash, sha1, md5, encrypted, signature
+
+### Common High-cardinality Examples:
+- **Identifiers**: User IDs, customer IDs, account identifiers (`user_id`, `customer_id`, `account_id`)
+- **Request tracking**: Request IDs, trace IDs, transaction IDs (`message_id`, `request_id`, `trace_id`)
+- **Pattern-based keys**: Any tag key ending with `_id`, `_uuid`, `_token`
+- **Time-based values**: Timestamps or time-based values
+- **Network data**: URLs with parameters, dynamic paths, IP addresses, specific hostnames
+- **Unique identifiers**: UUIDs, hashes, or other unique identifiers
+- **Personal data**: Email addresses or user-specific data
+
+## Good Examples
+
+1. Using low-cardinality status codes:
+```go
+statsdClient.CountWithTags("api.requests_total", 1, map[string]string{
+  "method": "GET",
+  "status": "200",
+  "endpoint": "/api/users",
+})
+```
+
+2. Building tags separately with low-cardinality values:
+```go
+tags := map[string]string{
+  "method": "GET",
+  "status": "200", 
+  "endpoint": "/api/users",
+}
+statsdClient.CountWithTags("api.requests_total", 1, tags)
+```
+
+3. Using bounded categorical values:
+```go
+statsdClient.CountWithTags("payment.processed", 1, map[string]string{
+  "payment_method": "card",    // Limited values: card, bank, crypto
+  "region": "us-east-1",      // Limited AWS regions
+  "user_tier": "premium",     // Limited tiers: basic, premium, enterprise
+})
+```
+
+4. Aggregating instead of individual IDs:
+```go
+// Instead of user_id tag, use aggregated user tier
+statsdClient.GaugeWithTags("user.active_sessions", sessionCount, map[string]string{
+  "user_tier": getUserTier(userID),  // Low cardinality
+  "region": "us-west-2",
+})
+```
+
+## Bad Examples
+
+1. Using user IDs or message IDs as tags:
+```go
+// VIOLATION: user_id and message_id are high-cardinality IDs
+statsd.IncrWithTags(statsdUSTEventProcessingFailure, map[string]string{
+  "message_id": messageID,  // VIOLATION: message_id is high-cardinality
+  "error_type": "nil_body",
+})
+```
+
+2. Building tags separately with ID values:
+```go
+// VIOLATION: Still problematic when tags are built separately
+tags := map[string]string{
+  "user_id": userID,        // VIOLATION: user_id is high-cardinality
+  "message_id": messageID,  // VIOLATION: message_id is high-cardinality
+}
+statsd.HistogramWithTags(statsdUSTRepositoryOperationTime, value, tags)
+```
+
+3. Using request IDs or trace IDs:
+```go
+// VIOLATION: Request IDs are unique for every request
+statsdClient.TimingWithTags("api.response_time", duration, map[string]string{
+  "request_id": "req_abc123def456", // VIOLATION: request_id is high-cardinality
+  "trace_id": "7d5d747be160e280504c099d984bcfe0", // VIOLATION: trace_id is high-cardinality
+})
+```
+
+4. Using timestamps as tags:
+```go
+// VIOLATION: Timestamps create unlimited unique values
+stats.CountWithTags("queue.length", 1, map[string]string{
+  "timestamp": time.Now().Format("2006-01-02T15:04:05"), // VIOLATION: timestamp is high-cardinality
+  "queue_name": "payments",
+})
+```
+
+5. Using IP addresses:
+```go
+// VIOLATION: IP addresses have very high cardinality
+statsd.GaugeWithTags("connections.active", 1, map[string]string{
+  "client_ip": "192.168.1.100", // VIOLATION: IP address is high-cardinality
+  "hostname": "server-abc123-def456", // VIOLATION: Dynamic hostnames are high-cardinality
+})
+```
+
+## Evaluation Process
+1. Search the entire code change for ANY calls to `statsd` function that ends with `WithTags` (`statsd.*WithTags`) or tags map building, regardless of the PR's stated purpose
+2. For each metric emission found, examine ALL tag keys in the map
+3. If ANY tag key contains high-cardinality patterns, flag as violation. Examples for violations:
+   - `user_id`, `message_id`, `request_id`, `trace_id`, `session_id`, `customer_id`
+   - Any key ending with `_id`, `_uuid`, `_token`
+   - Timestamps, IP addresses, URLs with parameters
+4. Do not skip metric calls because they seem unrelated to the main PR purpose
+5. Check ANY function that contains these strings in its name: `CountWithTags`, `IncrWithTags`, `GaugeWithTags`, `HistogramWithTags`, `TimingWithTags`, `DistributionWithTags`. This includes methods from any package or client (e.g., `statsd.CountWithTags()`, `client.IncrWithTags()`, `metrics.GaugeWithTags()`, etc.)
+
+**Example**: Even if a PR is titled "Add configuration options", still check ALL metric emissions like:
+```go
+statsd.IncrWithTags(metric, map[string]string{
+    "message_id": messageID,  // VIOLATION - Must be flagged
+    "error_type": "nil_body",
+})
+```

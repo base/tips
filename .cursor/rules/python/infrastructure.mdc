@@ -1,0 +1,25 @@
+# .cursor/rules/python/infrastructure.mdc
+---
+description: Infrastructure and deployment standards
+globs: ["*.py", "Dockerfile", "*.yaml"]
+alwaysApply: true
+---
+# Infrastructure Standards
+
+## Containerization
+- Use multi-stage Docker builds
+- Implement proper health checks
+- Use non-root users
+- Follow container security best practices
+
+## Kubernetes
+- Use proper resource requests/limits
+- Implement proper probes
+- Use proper service mesh integration
+- Follow GitOps practices
+
+## CI/CD
+- Implement proper testing stages
+- Use proper security scanning
+- Implement proper deployment strategies
+- Use proper environment separation
