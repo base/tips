@@ -12188,10 +12188,16 @@ dependencies = [
 name = "tips-builder"
 version = "0.1.0"
 dependencies = [
+ "account-abstraction-core",
+ "alloy-primitives",
+ "alloy-rpc-types",
+ "alloy-sol-types",
+ "anyhow",
  "rblib",
  "reth-optimism-cli",
  "reth-optimism-node",
  "reth-optimism-rpc",
+ "serde",
 ]
 
 [[package]]
