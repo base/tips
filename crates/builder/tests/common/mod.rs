@@ -1,6 +1,5 @@
 use rdkafka::config::ClientConfig;
-use rdkafka::producer::{FutureProducer, FutureRecord};
-use std::time::Duration;
+use rdkafka::producer::FutureProducer;
 
 pub struct TestHarness {
     pub kafka_producer: FutureProducer,
@@ -8,7 +7,7 @@ pub struct TestHarness {
 }
 
 impl TestHarness {
-    pub async fn new() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub async fn new() -> anyhow::Result<Self> {
         let kafka_bootstrap_servers = std::env::var("KAFKA_BOOTSTRAP_SERVERS")
             .unwrap_or_else(|_| "localhost:9092".to_string());
 

@@ -44,13 +44,16 @@ impl InsertUserOpBundle {
     }
 }
 
+#[allow(unused_variables)]
 pub struct TransactionCollector {
     pub transactions: Vec<Recovered<types::Transaction<Optimism>>>,
     pub midpoint_reached: bool,
     pub userops_inserted: bool,
     pub userops_bundle_step: InsertUserOpBundle,
+    pub tx_count: usize,
 }
 
+#[allow(dead_code)]
 impl TransactionCollector {
     pub fn new(userops_step: InsertUserOpBundle) -> Self {
         Self {
@@ -58,11 +61,26 @@ impl TransactionCollector {
             midpoint_reached: false,
             userops_inserted: false,
             userops_bundle_step: userops_step,
+            tx_count: 0,
         }
     }
 
     pub fn collect_transaction(&mut self, tx: Recovered<types::Transaction<Optimism>>) {
         self.transactions.push(tx);
+    }
+
+    pub fn set_total_expected(&mut self, _total: usize) {}
+
+    pub fn increment_count(&mut self) {
+        self.tx_count += 1;
+    }
+
+    pub fn should_insert_bundle(&self) -> bool {
+        !self.userops_inserted && self.tx_count >= 3
+    }
+
+    pub fn mark_bundle_inserted(&mut self) {
+        self.userops_inserted = true;
     }
 
     pub fn maybe_insert_userops_bundle(

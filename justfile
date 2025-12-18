@@ -30,20 +30,36 @@ test-integration:
 test-e2e:
     #!/usr/bin/env bash
     set -e
-    echo "Starting END-TO-END tests..."
+    echo "========================================="
+    echo "Starting UserOp END-TO-END tests"
+    echo "========================================="
+    echo ""
 
     # Check if Kafka is running
     if ! docker ps | grep -q tips-kafka; then
-        echo "Kafka not running. Starting..."
+        echo "Kafka not running. Starting Kafka..."
         docker-compose up -d kafka kafka-setup
-        sleep 10
+        echo "Waiting for Kafka to be ready..."
+        sleep 15
+        echo "✓ Kafka started"
+    else
+        echo "✓ Kafka already running"
     fi
 
-    # Run E2E tests (these are marked with #[ignore] so we need --ignored)
+    echo ""
+    echo "Building builder..."
+    cargo build -p tips-builder
+    echo "✓ Builder built"
+
+    echo ""
     echo "Running UserOp end-to-end tests..."
+    echo "========================================="
     cargo test -p tips-builder --test userop_e2e_test -- --ignored --nocapture --test-threads=1
 
+    echo ""
+    echo "========================================="
     echo "✓ All E2E tests passed!"
+    echo "========================================="
 
 test-userop-e2e:
     #!/usr/bin/env bash

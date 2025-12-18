@@ -7,6 +7,10 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[lib]
+name = "tips_builder"
+path = "src/lib.rs"
+
 [[bin]]
 name = "tips-builder"
 path = "src/main.rs"
@@ -30,3 +34,4 @@ serde_json.workspace = true
 [dev-dependencies]
 tokio = { workspace = true, features = ["full", "test-util"] }
 hex.workspace = true
+anyhow.workspace = true

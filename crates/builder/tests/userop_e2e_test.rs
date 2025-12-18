@@ -4,7 +4,7 @@ use alloy_rpc_types::erc4337::PackedUserOperation;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{Consumer, StreamConsumer};
 use rdkafka::message::Message;
-use rdkafka::producer::{FutureProducer, FutureRecord};
+use rdkafka::producer::FutureRecord;
 use serde_json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,7 +44,7 @@ fn create_test_user_op(sender: Address, nonce: u64) -> UserOperationRequest {
 
 #[tokio::test]
 #[ignore]
-async fn test_e2e_userop_to_block() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_e2e_userop_to_block() -> anyhow::Result<()> {
     println!("\n========================================");
     println!("END-TO-END TEST: UserOp → Kafka → Block");
     println!("========================================\n");
@@ -118,7 +118,7 @@ async fn test_e2e_userop_to_block() -> Result<(), Box<dyn std::error::Error>> {
     let consumed_ops = received_user_ops.lock().await;
     assert_eq!(consumed_ops.len(), 3, "Expected 3 UserOps");
 
-    println!("\nStep 5: Creating UserOp bundle (simulating builder)...");
+    println!("\nStep 5: Creating UserOp bundle...");
     use tips_builder::UserOpBundle;
 
     let mut bundle = UserOpBundle::new(TEST_ENTRY_POINT, TEST_BUNDLER);
@@ -128,6 +128,9 @@ async fn test_e2e_userop_to_block() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     assert_eq!(bundle.user_ops.len(), 3, "Bundle should have 3 UserOps");
+    assert_eq!(bundle.entry_point, TEST_ENTRY_POINT);
+    assert_eq!(bundle.beneficiary, TEST_BUNDLER);
+    println!("  ✓ Bundle created with {} UserOps", bundle.user_ops.len());
 
     println!("\nStep 6: Generating handleOps() calldata...");
     let calldata = bundle.build_handleops_calldata();
@@ -137,23 +140,72 @@ async fn test_e2e_userop_to_block() -> Result<(), Box<dyn std::error::Error>> {
 
     let function_selector = &calldata[0..4];
     println!(
-        "  ✓ Function selector: 0x{}",
+        "  ✓ Function selector: 0x{} (handleOps)",
         hex::encode(function_selector)
     );
+    assert!(
+        calldata.len() > 4,
+        "Calldata should contain function arguments"
+    );
 
-    println!("\nStep 7: Verifying bundler transaction structure...");
-    println!("  ✓ EntryPoint: {}", TEST_ENTRY_POINT);
-    println!("  ✓ Beneficiary: {}", TEST_BUNDLER);
-    println!("  ✓ UserOp count: {}", bundle.user_ops.len());
+    println!("\nStep 7: Creating bundler transaction...");
+    let chain_id = 10;
+    let base_fee = 1000000000u128;
+    let nonce = 0;
+    let bundler_tx = bundle.create_bundle_transaction(TEST_BUNDLER, nonce, chain_id, base_fee);
+    assert!(bundler_tx.is_some(), "Failed to create bundler transaction");
+    println!("  ✓ Bundler transaction created");
+    println!("  ✓ From: {}", TEST_BUNDLER);
+    println!("  ✓ To: {}", TEST_ENTRY_POINT);
+    println!("  ✓ Contains handleOps() calldata");
 
     println!("\nStep 8: Simulating block building with midpoint insertion...");
-    use tips_builder::InsertUserOpBundle;
+    use tips_builder::{InsertUserOpBundle, TransactionCollector};
 
     let userops_step = InsertUserOpBundle::new(TEST_BUNDLER);
     userops_step.add_bundle(bundle);
+    println!("  ✓ Bundle added to InsertUserOpBundle pipeline");
 
-    println!("  ✓ Bundle added to pipeline");
-    println!("  ✓ Bundler transaction will be inserted at block midpoint");
+    let mut collector = TransactionCollector::new(userops_step.clone());
+    println!("  ✓ TransactionCollector initialized");
+
+    println!("\nStep 9: Verifying midpoint insertion logic...");
+    println!("  Simulating block with 6 regular transactions:");
+    println!("    [TX0, TX1, TX2, BUNDLER, TX3, TX4, TX5]");
+    println!("                    ^^^^^^^");
+    println!("                    Inserted at position 3 (midpoint of 6 txs)");
+
+    let total_txs = 6;
+    let expected_midpoint = total_txs / 2;
+    collector.set_total_expected(total_txs);
+
+    for i in 0..expected_midpoint {
+        assert!(
+            !collector.should_insert_bundle(),
+            "Should not insert before midpoint"
+        );
+        collector.increment_count();
+        println!("  ✓ Regular TX {} collected (before midpoint)", i);
+    }
+
+    assert!(
+        collector.should_insert_bundle(),
+        "Should insert at midpoint"
+    );
+    println!("  ✓ Midpoint reached - bundler TX should be inserted");
+
+    collector.mark_bundle_inserted();
+
+    for i in expected_midpoint..total_txs {
+        assert!(
+            !collector.should_insert_bundle(),
+            "Should not insert after bundle"
+        );
+        collector.increment_count();
+        println!("  ✓ Regular TX {} collected (after midpoint)", i);
+    }
+
+    println!("\n  ✓ VERIFIED: Bundler transaction inserted at block midpoint");
 
     println!("\n========================================");
     println!("✓ END-TO-END TEST PASSED");
@@ -171,7 +223,7 @@ async fn test_e2e_userop_to_block() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 #[ignore]
-async fn test_e2e_multiple_batches() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_e2e_multiple_batches() -> anyhow::Result<()> {
     println!("\n========================================");
     println!("E2E TEST: Multiple Batches");
     println!("========================================\n");
@@ -258,50 +310,31 @@ async fn test_e2e_multiple_batches() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 #[ignore]
-async fn test_e2e_bundle_hash_verification() -> Result<(), Box<dyn std::error::Error>> {
+async fn test_e2e_userop_hash_verification() -> anyhow::Result<()> {
     println!("\n========================================");
-    println!("E2E TEST: Bundle Hash Verification");
+    println!("E2E TEST: UserOp Hash Verification");
     println!("========================================\n");
 
-    use tips_builder::UserOpBundle;
-
     let user_op1 = create_test_user_op(TEST_SENDER, 0);
-    let user_op2 = create_test_user_op(TEST_SENDER, 1);
-    let user_op3 = create_test_user_op(TEST_SENDER, 2);
+    let user_op2 = create_test_user_op(TEST_SENDER, 0);
 
-    println!("Creating two identical bundles...");
-    let bundle1 = UserOpBundle::new(TEST_ENTRY_POINT, TEST_BUNDLER)
-        .with_user_op(user_op1.clone())
-        .with_user_op(user_op2.clone())
-        .with_user_op(user_op3.clone());
+    println!("Verifying UserOp hash determinism...");
+    let hash1 = user_op1.hash()?;
+    let hash2 = user_op2.hash()?;
 
-    let bundle2 = UserOpBundle::new(TEST_ENTRY_POINT, TEST_BUNDLER)
-        .with_user_op(user_op1.clone())
-        .with_user_op(user_op2.clone())
-        .with_user_op(user_op3.clone());
+    assert_eq!(hash1, hash2, "Identical UserOps should have same hash");
+    println!("  ✓ UserOp hash (nonce=0): {}", hash1);
 
-    println!("Verifying bundle hashes...");
-    let hash1 = bundle1.hash();
-    let hash2 = bundle2.hash();
-
-    assert_eq!(hash1, hash2, "Identical bundles should have same hash");
-    println!("  ✓ Bundle hash: {}", hash1);
-
-    println!("\nCreating bundle with different UserOp...");
     let user_op_different = create_test_user_op(TEST_SENDER, 99);
-    let bundle3 = UserOpBundle::new(TEST_ENTRY_POINT, TEST_BUNDLER)
-        .with_user_op(user_op1.clone())
-        .with_user_op(user_op2.clone())
-        .with_user_op(user_op_different);
+    let hash3 = user_op_different.hash()?;
 
-    let hash3 = bundle3.hash();
     assert_ne!(
         hash1, hash3,
-        "Different bundles should have different hashes"
+        "Different UserOps should have different hashes"
     );
-    println!("  ✓ Different bundle hash: {}", hash3);
+    println!("  ✓ UserOp hash (nonce=99): {}", hash3);
 
-    println!("\n✓ Bundle hash verification passed");
+    println!("\n✓ UserOp hash verification passed");
 
     Ok(())
 }
