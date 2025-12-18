@@ -1,4 +1,4 @@
-use super::super::types::{UserOpHash, WrappedUserOperation};
+use crate::domain::types::{UserOpHash, WrappedUserOperation};
 use alloy_primitives::Address;
 use std::cmp::Ordering;
 use std::sync::Arc;
