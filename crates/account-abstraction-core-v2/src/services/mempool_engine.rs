@@ -58,11 +58,11 @@ impl<T: Mempool> MempoolEngine<T> {
 mod tests {
     use super::*;
     use crate::domain::{
-        mempool::{PoolConfig},
+        mempool::PoolConfig,
         types::{VersionedUserOperation, WrappedUserOperation},
     };
-    use crate::services::interfaces::event_source::EventSource;
     use crate::infrastructure::in_memory::mempool::InMemoryMempool;
+    use crate::services::interfaces::event_source::EventSource;
     use alloy_primitives::{Address, FixedBytes, Uint};
     use alloy_rpc_types::erc4337;
     use async_trait::async_trait;

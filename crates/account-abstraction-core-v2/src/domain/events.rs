@@ -1,4 +1,4 @@
-use super::types::WrappedUserOperation;
+use crate::domain::types::WrappedUserOperation;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

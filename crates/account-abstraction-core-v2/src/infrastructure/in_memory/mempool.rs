@@ -3,8 +3,8 @@ use crate::domain::types::{UserOpHash, WrappedUserOperation};
 use alloy_primitives::Address;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use tracing::warn;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -91,10 +91,7 @@ pub struct InMemoryMempool {
 }
 
 impl Mempool for InMemoryMempool {
-    fn add_operation(
-        &mut self,
-        operation: &WrappedUserOperation,
-    ) -> Result<(), anyhow::Error> {
+    fn add_operation(&mut self, operation: &WrappedUserOperation) -> Result<(), anyhow::Error> {
         if operation.operation.max_fee_per_gas() < self.config.minimum_max_fee_per_gas {
             return Err(anyhow::anyhow!(
                 "Gas price is below the minimum required PVG gas"

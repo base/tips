@@ -1,6 +1,6 @@
-use crate::domain::mempool::{PoolConfig};
-use crate::infrastructure::kafka::consumer::KafkaEventSource;
+use crate::domain::mempool::PoolConfig;
 use crate::infrastructure::in_memory::mempool::InMemoryMempool;
+use crate::infrastructure::kafka::consumer::KafkaEventSource;
 use crate::services::mempool_engine::MempoolEngine;
 use rdkafka::{
     ClientConfig,
