@@ -1,5 +1,5 @@
-use super::super::types::{UserOpHash, WrappedUserOperation};
-use super::r#trait::{ByMaxFeeAndSubmissionId, ByNonce, Mempool, OrderedPoolOperation, PoolConfig};
+use crate::domain::types::{UserOpHash, WrappedUserOperation};
+use crate::domain::mempool::{ByMaxFeeAndSubmissionId, ByNonce, Mempool, OrderedPoolOperation, PoolConfig};
 use alloy_primitives::Address;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;

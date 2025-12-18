@@ -499,7 +499,8 @@ mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
     use account_abstraction_core_v2::MempoolEvent;
-    use account_abstraction_core_v2::domain::{InMemoryMempool, PoolConfig};
+    use account_abstraction_core_v2::domain::PoolConfig;
+    use account_abstraction_core_v2::infrastructure::in_memory::mempool::InMemoryMempool;
     use account_abstraction_core_v2::services::interfaces::event_source::EventSource;
     use alloy_provider::RootProvider;
     use anyhow::Result;
