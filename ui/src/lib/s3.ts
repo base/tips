@@ -59,7 +59,7 @@ async function getObjectContent(key: string): Promise<string | null> {
     const response = await s3Client.send(command);
     const body = await response.Body?.transformToString();
     return body || null;
-  } catch (error) {
+  } catch (_error) {
     return null;
   }
 }

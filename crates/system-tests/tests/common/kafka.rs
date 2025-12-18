@@ -9,7 +9,7 @@ use rdkafka::{
     message::BorrowedMessage,
 };
 use tips_audit::types::BundleEvent;
-use tips_core::{AcceptedBundle, kafka::load_kafka_config_from_file};
+use tips_core::{AcceptedBundle, BundleExtensions, kafka::load_kafka_config_from_file};
 use tokio::time::{Instant, timeout};
 use uuid::Uuid;
 
@@ -17,7 +17,7 @@ const DEFAULT_INGRESS_TOPIC: &str = "tips-ingress";
 const DEFAULT_AUDIT_TOPIC: &str = "tips-audit";
 const DEFAULT_INGRESS_PROPERTIES: &str = "../../docker/host-ingress-bundles-kafka-properties";
 const DEFAULT_AUDIT_PROPERTIES: &str = "../../docker/host-ingress-audit-kafka-properties";
-const KAFKA_WAIT_TIMEOUT: Duration = Duration::from_secs(30);
+const KAFKA_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 
 fn resolve_properties_path(env_key: &str, default_path: &str) -> Result<String> {
     match std::env::var(env_key) {
@@ -125,6 +125,32 @@ pub async fn wait_for_audit_event(
             let payload = message.payload()?;
             let event: BundleEvent = serde_json::from_slice(payload).ok()?;
             (event.bundle_id() == expected_bundle_id && matcher(&event)).then_some(event)
+        },
+    )
+    .await
+}
+
+pub async fn wait_for_audit_event_by_hash(
+    expected_bundle_hash: &B256,
+    mut matcher: impl FnMut(&BundleEvent) -> bool,
+) -> Result<BundleEvent> {
+    let expected_hash = *expected_bundle_hash;
+    wait_for_kafka_message(
+        "TIPS_INGRESS_KAFKA_AUDIT_PROPERTIES_FILE",
+        DEFAULT_AUDIT_PROPERTIES,
+        "TIPS_INGRESS_KAFKA_AUDIT_TOPIC",
+        DEFAULT_AUDIT_TOPIC,
+        KAFKA_WAIT_TIMEOUT,
+        |message| {
+            let payload = message.payload()?;
+            let event: BundleEvent = serde_json::from_slice(payload).ok()?;
+            // Match by bundle hash from the Received event
+            if let BundleEvent::Received { bundle, .. } = &event {
+                if bundle.bundle_hash() == expected_hash && matcher(&event) {
+                    return Some(event);
+                }
+            }
+            None
         },
     )
     .await

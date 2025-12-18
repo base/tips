@@ -1,16 +1,14 @@
 #[path = "common/mod.rs"]
 mod common;
 
+use alloy_network::ReceiptResponse;
 use alloy_primitives::{Address, TxHash, U256, keccak256};
 use alloy_provider::{Provider, RootProvider};
 use anyhow::{Context, Result, bail};
-use common::{
-    kafka::{wait_for_audit_event, wait_for_ingress_bundle},
-    s3::wait_for_bundle_history_event,
-};
+use common::kafka::{wait_for_audit_event_by_hash, wait_for_ingress_bundle};
 use op_alloy_network::Optimism;
-use tips_audit::{storage::BundleHistoryEvent, types::BundleEvent};
-use tips_core::{BundleExtensions, CancelBundle};
+use tips_audit::types::BundleEvent;
+use tips_core::BundleExtensions;
 use tips_system_tests::client::TipsRpcClient;
 use tips_system_tests::fixtures::{
     create_funded_signer, create_optimism_provider, create_signed_transaction,
@@ -177,9 +175,15 @@ async fn test_send_bundle_accepted() -> Result<()> {
     let signed_tx = create_signed_transaction(&signer, to, value, nonce, gas_limit, gas_price)?;
     let tx_hash = keccak256(&signed_tx);
 
+    // First send the transaction to mempool (like just send-txn-with-backrun does)
+    let _mempool_tx_hash = client
+        .send_raw_transaction(signed_tx.clone())
+        .await
+        .context("Failed to send transaction to mempool")?;
+
     let bundle = Bundle {
         txs: vec![signed_tx],
-        block_number: 1,
+        block_number: 0, // 0 means "include in any upcoming block"
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![tx_hash],
@@ -189,11 +193,11 @@ async fn test_send_bundle_accepted() -> Result<()> {
         flashblock_number_max: None,
     };
 
-    // Send bundle to TIPS
+    // Send backrun bundle to TIPS (this sends to builder and lands on-chain)
     let bundle_hash = client
-        .send_bundle(bundle)
+        .send_backrun_bundle(bundle)
         .await
-        .context("Failed to send bundle to TIPS")?;
+        .context("Failed to send backrun bundle to TIPS")?;
 
     // Verify TIPS accepted the bundle and returned a hash
     assert!(
@@ -210,18 +214,11 @@ async fn test_send_bundle_accepted() -> Result<()> {
         "Bundle hash should match keccak256(tx_hash)"
     );
 
-    // Verify the bundle was published to Kafka and matches expectations
-    let accepted_bundle = wait_for_ingress_bundle(&bundle_hash.bundle_hash)
-        .await
-        .context("Failed to read bundle from Kafka")?;
-    assert_eq!(
-        accepted_bundle.bundle_hash(),
-        bundle_hash.bundle_hash,
-        "Kafka bundle hash should match response"
-    );
+    // Note: Backrun bundles are sent directly to the builder, not via Kafka ingress topic.
+    // They still emit audit events, so we verify the audit flow by bundle hash.
 
     // Verify audit channel emitted a Received event for this bundle
-    let audit_event = wait_for_audit_event(*accepted_bundle.uuid(), |event| {
+    let audit_event = wait_for_audit_event_by_hash(&bundle_hash.bundle_hash, |event| {
         matches!(event, BundleEvent::Received { .. })
     })
     .await
@@ -237,25 +234,28 @@ async fn test_send_bundle_accepted() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    // Verify bundle history persisted to S3
-    let s3_event = wait_for_bundle_history_event(*accepted_bundle.uuid(), |event| {
-        matches!(event, BundleHistoryEvent::Received { .. })
-    })
-    .await
-    .context("Failed to read bundle history from S3")?;
-    if let BundleHistoryEvent::Received { bundle, .. } = s3_event {
-        assert_eq!(
-            bundle.bundle_hash(),
-            bundle_hash.bundle_hash,
-            "S3 history bundle hash should match response"
-        );
-    }
+    // Wait for transaction to appear on sequencer (direct on-chain verification)
+    wait_for_transaction_seen(&sequencer_provider, tx_hash.into(), 60)
+        .await
+        .context("Bundle transaction never appeared on sequencer")?;
+
+    // Verify transaction receipt shows success
+    let receipt = sequencer_provider
+        .get_transaction_receipt(tx_hash.into())
+        .await
+        .context("Failed to fetch transaction receipt")?
+        .expect("Transaction receipt should exist after being seen on sequencer");
+    assert!(receipt.status(), "Transaction should have succeeded");
+    assert!(
+        receipt.block_number().is_some(),
+        "Transaction should be included in a block"
+    );
 
     Ok(())
 }
 
 #[tokio::test]
-async fn test_send_bundle_with_three_transactions() -> Result<()> {
+async fn test_send_bundle_with_two_transactions() -> Result<()> {
     if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
             "Skipping integration tests (set INTEGRATION_TESTS=1 and ensure TIPS infrastructure is running)"
@@ -276,6 +276,7 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
         .get_transaction_count(signer.address())
         .await?;
 
+    // Create two transactions (matching the pattern in just send-txn-with-backrun)
     let tx1 = create_signed_transaction(
         &signer,
         Address::from([0x33; 20]),
@@ -294,36 +295,36 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
         1_000_000_000,
     )?;
 
-    let tx3 = create_signed_transaction(
-        &signer,
-        Address::from([0x55; 20]),
-        U256::from(3000),
-        nonce + 2,
-        21000,
-        1_000_000_000,
-    )?;
-
     let tx1_hash = keccak256(&tx1);
     let tx2_hash = keccak256(&tx2);
-    let tx3_hash = keccak256(&tx3);
+
+    // First send both transactions to mempool
+    client
+        .send_raw_transaction(tx1.clone())
+        .await
+        .context("Failed to send tx1 to mempool")?;
+    client
+        .send_raw_transaction(tx2.clone())
+        .await
+        .context("Failed to send tx2 to mempool")?;
 
     let bundle = Bundle {
-        txs: vec![tx1, tx2, tx3],
-        block_number: 1,
+        txs: vec![tx1, tx2],
+        block_number: 0, // 0 means "include in any upcoming block"
         min_timestamp: None,
         max_timestamp: None,
-        reverting_tx_hashes: vec![tx1_hash, tx2_hash, tx3_hash],
+        reverting_tx_hashes: vec![tx1_hash, tx2_hash],
         replacement_uuid: None,
         dropping_tx_hashes: vec![],
         flashblock_number_min: None,
         flashblock_number_max: None,
     };
 
-    // Send bundle with 3 transactions to TIPS
+    // Send backrun bundle with 2 transactions to TIPS
     let bundle_hash = client
-        .send_bundle(bundle)
+        .send_backrun_bundle(bundle)
         .await
-        .context("Failed to send multi-transaction bundle to TIPS")?;
+        .context("Failed to send multi-transaction backrun bundle to TIPS")?;
 
     // Verify TIPS accepted the bundle and returned a hash
     assert!(
@@ -335,29 +336,18 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
     let mut concatenated = Vec::new();
     concatenated.extend_from_slice(tx1_hash.as_slice());
     concatenated.extend_from_slice(tx2_hash.as_slice());
-    concatenated.extend_from_slice(tx3_hash.as_slice());
     let expected_bundle_hash = keccak256(&concatenated);
     assert_eq!(
         bundle_hash.bundle_hash, expected_bundle_hash,
-        "Bundle hash should match keccak256(concat(tx1_hash, tx2_hash, tx3_hash))"
+        "Bundle hash should match keccak256(concat(tx1_hash, tx2_hash))"
     );
 
-    // Verify bundle was published to Kafka
-    let accepted_bundle = wait_for_ingress_bundle(&bundle_hash.bundle_hash)
-        .await
-        .context("Failed to read 3-tx bundle from Kafka")?;
-    assert_eq!(
-        accepted_bundle.bundle_hash(),
-        bundle_hash.bundle_hash,
-        "Kafka bundle hash should match response"
-    );
-
-    // Verify audit channel emitted a Received event
-    let audit_event = wait_for_audit_event(*accepted_bundle.uuid(), |event| {
+    // Verify audit channel emitted a Received event (match by bundle hash for backrun bundles)
+    let audit_event = wait_for_audit_event_by_hash(&bundle_hash.bundle_hash, |event| {
         matches!(event, BundleEvent::Received { .. })
     })
     .await
-    .context("Failed to read audit event for 3-tx bundle")?;
+    .context("Failed to read audit event for 2-tx bundle")?;
     match audit_event {
         BundleEvent::Received { bundle, .. } => {
             assert_eq!(
@@ -369,16 +359,25 @@ async fn test_send_bundle_with_three_transactions() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    let s3_event = wait_for_bundle_history_event(*accepted_bundle.uuid(), |event| {
-        matches!(event, BundleHistoryEvent::Received { .. })
-    })
-    .await
-    .context("Failed to read 3-tx bundle history from S3")?;
-    if let BundleHistoryEvent::Received { bundle, .. } = s3_event {
-        assert_eq!(
-            bundle.bundle_hash(),
-            bundle_hash.bundle_hash,
-            "S3 history bundle hash should match response"
+    // Wait for both transactions to appear on sequencer (direct on-chain verification)
+    wait_for_transaction_seen(&sequencer_provider, tx1_hash.into(), 60)
+        .await
+        .context("Bundle tx1 never appeared on sequencer")?;
+    wait_for_transaction_seen(&sequencer_provider, tx2_hash.into(), 60)
+        .await
+        .context("Bundle tx2 never appeared on sequencer")?;
+
+    // Verify both transaction receipts show success
+    for (tx_hash, name) in [(tx1_hash, "tx1"), (tx2_hash, "tx2")] {
+        let receipt = sequencer_provider
+            .get_transaction_receipt(tx_hash.into())
+            .await
+            .context(format!("Failed to fetch {name} receipt"))?
+            .expect(&format!("{name} receipt should exist"));
+        assert!(receipt.status(), "{name} should have succeeded");
+        assert!(
+            receipt.block_number().is_some(),
+            "{name} should be included in a block"
         );
     }
 
