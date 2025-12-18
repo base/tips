@@ -1,0 +1,9 @@
+# Kafka configuration properties for ingress user operation consumer
+bootstrap.servers=host.docker.internal:9094
+message.timeout.ms=5000
+enable.partition.eof=false
+session.timeout.ms=6000
+fetch.wait.max.ms=100
+fetch.min.bytes=1
+# Note: group.id and enable.auto.commit are set programmatically
+

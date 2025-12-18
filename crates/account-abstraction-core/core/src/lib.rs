@@ -3,4 +3,6 @@ pub mod entrypoints;
 pub mod types;
 pub use account_abstraction_service::{AccountAbstractionService, AccountAbstractionServiceImpl};
 pub use types::{SendUserOperationResponse, VersionedUserOperation};
+pub mod kafka_mempool_engine;
 pub mod mempool;
+pub mod reputation_service;

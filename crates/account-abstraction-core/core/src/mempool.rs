@@ -9,6 +9,14 @@ pub struct PoolConfig {
     minimum_max_fee_per_gas: u128,
 }
 
+impl PoolConfig {
+    pub fn default() -> Self {
+        Self {
+            minimum_max_fee_per_gas: 0,
+        }
+    }
+}
+
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
     pub pool_operation: WrappedUserOperation,
@@ -54,7 +62,6 @@ impl Ord for ByMaxFeeAndSubmissionId {
             .max_priority_fee_per_gas()
             .cmp(&self.0.pool_operation.operation.max_priority_fee_per_gas())
             .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
-            .then_with(|| self.0.pool_operation.hash.cmp(&other.0.pool_operation.hash))
     }
 }
 
@@ -93,7 +100,7 @@ pub trait Mempool {
         &mut self,
         operation: &WrappedUserOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error>;
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>>;
+    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = WrappedUserOperation>;
     fn remove_operation(
         &mut self,
         operation_hash: &UserOpHash,
@@ -122,7 +129,7 @@ impl Mempool for MempoolImpl {
         Ok(ordered_operation_result)
     }
 
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
+    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = WrappedUserOperation> {
         // TODO: There is a case where we skip operations that are not the lowest nonce for an account.
         // But we still have not given the N number of operations, meaning we don't return those operations.
 
@@ -138,7 +145,7 @@ impl Mempool for MempoolImpl {
                     Some(lowest)
                         if lowest.0.pool_operation.hash == op_by_fee.0.pool_operation.hash =>
                     {
-                        Some(Arc::new(op_by_fee.0.pool_operation.clone()))
+                        Some(op_by_fee.0.pool_operation.clone())
                     }
                     Some(_) => None,
                     None => {

@@ -1,3 +1,5 @@
+use account_abstraction_core::kafka_mempool_engine::KafkaMempoolEngine;
+use account_abstraction_core::reputation_service::ReputationStatus;
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{Address, B256, Bytes, FixedBytes};
@@ -25,7 +27,10 @@ use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
 use account_abstraction_core::entrypoints::version::EntryPointVersion;
 use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
-use account_abstraction_core::{AccountAbstractionService, AccountAbstractionServiceImpl};
+use account_abstraction_core::{
+    AccountAbstractionService, AccountAbstractionServiceImpl,
+    reputation_service::{ReputationService, ReputationServiceImpl},
+};
 use std::sync::Arc;
 
 /// RPC providers for different endpoints
@@ -69,6 +74,8 @@ pub struct IngressService<Q: MessageQueue> {
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<Q>,
     user_op_queue_publisher: UserOpQueuePublisher<Q>,
+    reputation_service: Arc<ReputationServiceImpl>,
+    mempool_engine: Arc<KafkaMempoolEngine>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -86,6 +93,7 @@ impl<Q: MessageQueue> IngressService<Q> {
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
+        mempool_engine: Arc<KafkaMempoolEngine>,
         config: Config,
     ) -> Self {
         let mempool_provider = Arc::new(providers.mempool);
@@ -97,6 +105,7 @@ impl<Q: MessageQueue> IngressService<Q> {
                 config.validate_user_operation_timeout_ms,
             );
         let queue_connection = Arc::new(queue);
+
         Self {
             mempool_provider,
             simulation_provider,
@@ -111,6 +120,8 @@ impl<Q: MessageQueue> IngressService<Q> {
                 queue_connection.clone(),
                 config.ingress_topic,
             ),
+            reputation_service: Arc::new(ReputationServiceImpl::new(mempool_engine.get_mempool())),
+            mempool_engine,
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -347,6 +358,20 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             EthApiError::InvalidParams(e.to_string()).into_rpc_err()
         })?;
 
+        let reputation = self
+            .reputation_service
+            .get_reputation(&request.user_operation.sender());
+        if reputation == ReputationStatus::Banned {
+            return Err(
+                EthApiError::InvalidParams("User operation sender is banned".into()).into_rpc_err(),
+            );
+        } else if reputation == ReputationStatus::Throttled {
+            return Err(
+                EthApiError::InvalidParams("User operation sender is throttled".into())
+                    .into_rpc_err(),
+            );
+        }
+
         let _ = self
             .account_abstraction_service
             .validate_user_operation(&request.user_operation, &entry_point)
@@ -493,6 +518,7 @@ impl<Q: MessageQueue> IngressService<Q> {
 mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
+    use account_abstraction_core::kafka_mempool_engine::KafkaConsumer;
     use alloy_provider::RootProvider;
     use anyhow::Result;
     use async_trait::async_trait;
@@ -500,6 +526,7 @@ mod tests {
     use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
     use jsonrpsee::server::{ServerBuilder, ServerHandle};
     use mockall::mock;
+    use rdkafka::message::OwnedMessage;
     use serde_json::json;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
@@ -516,6 +543,15 @@ mod tests {
         }
     }
 
+    struct NoopConsumer;
+
+    #[async_trait]
+    impl KafkaConsumer for NoopConsumer {
+        async fn recv_msg(&self) -> anyhow::Result<OwnedMessage> {
+            Err(anyhow::anyhow!("no messages"))
+        }
+    }
+
     fn create_test_config(mock_server: &MockServer) -> Config {
         Config {
             address: IpAddr::from([127, 0, 0, 1]),
@@ -526,6 +562,8 @@ mod tests {
             ingress_topic: String::new(),
             audit_kafka_properties: String::new(),
             audit_topic: String::new(),
+            user_operation_consumer_properties: String::new(),
+            user_operation_consumer_group_id: "tips-user-operation".to_string(),
             log_level: String::from("info"),
             log_format: tips_core::logger::LogFormat::Pretty,
             send_transaction_default_lifetime_seconds: 300,
@@ -652,8 +690,19 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
+        let mempool_engine = Arc::new(KafkaMempoolEngine::with_kafka_consumer(
+            Arc::new(NoopConsumer),
+            None,
+        ));
+
         let service = IngressService::new(
-            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+            providers,
+            MockQueue,
+            audit_tx,
+            builder_tx,
+            backrun_tx,
+            mempool_engine,
+            config,
         );
 
         let bundle = Bundle::default();
@@ -711,8 +760,19 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
+        let mempool_engine = Arc::new(KafkaMempoolEngine::with_kafka_consumer(
+            Arc::new(NoopConsumer),
+            None,
+        ));
+
         let service = IngressService::new(
-            providers, MockQueue, audit_tx, builder_tx, backrun_tx, config,
+            providers,
+            MockQueue,
+            audit_tx,
+            builder_tx,
+            backrun_tx,
+            mempool_engine,
+            config,
         );
 
         // Valid signed transaction bytes

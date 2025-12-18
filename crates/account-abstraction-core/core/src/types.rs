@@ -138,7 +138,7 @@ pub struct AggregatorInfo {
 
 pub type UserOpHash = FixedBytes<32>;
 
-#[derive(Eq, PartialEq, Clone, Debug)]
+#[derive(Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct WrappedUserOperation {
     pub operation: VersionedUserOperation,
     pub hash: UserOpHash,
