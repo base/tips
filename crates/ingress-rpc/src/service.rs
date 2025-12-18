@@ -88,7 +88,7 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
         queue: Q,
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
-        builder_backrun_tx: broadcast::Sender<Bundle>,
+        builder_backrun_tx: broadcast::Sender<AcceptedBundle>,
         mempool_engine: Arc<MempoolEngine<M>>,
         config: Config,
     ) -> Self {

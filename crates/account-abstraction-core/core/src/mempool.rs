@@ -5,9 +5,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 
+#[derive(Default)]
 pub struct PoolConfig {
     minimum_max_fee_per_gas: u128,
 }
+
 
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
