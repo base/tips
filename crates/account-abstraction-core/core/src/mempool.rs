@@ -46,7 +46,6 @@ impl PartialOrd for ByMaxFeeAndSubmissionId {
 }
 
 impl Ord for ByMaxFeeAndSubmissionId {
-
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .0
