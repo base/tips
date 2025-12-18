@@ -12193,11 +12193,16 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-sol-types",
  "anyhow",
+ "hex",
  "rblib",
+ "rdkafka",
  "reth-optimism-cli",
  "reth-optimism-node",
  "reth-optimism-rpc",
  "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

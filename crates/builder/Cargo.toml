@@ -7,6 +7,10 @@ license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 
+[[bin]]
+name = "tips-builder"
+path = "src/main.rs"
+
 [dependencies]
 rblib.workspace = true
 reth-optimism-cli.workspace = true
@@ -18,3 +22,11 @@ alloy-sol-types.workspace = true
 alloy-rpc-types.workspace = true
 anyhow.workspace = true
 serde.workspace = true
+rdkafka.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "test-util"] }
+hex.workspace = true

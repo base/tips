@@ -1,0 +1,10 @@
+bootstrap.servers=host.docker.internal:9094
+message.timeout.ms=5000
+group.id=tips-builder
+enable.auto.commit=true
+auto.commit.interval.ms=5000
+session.timeout.ms=6000
+enable.partition.eof=false
+auto.offset.reset=earliest
+fetch.wait.max.ms=100
+fetch.min.bytes=1

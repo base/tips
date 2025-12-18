@@ -9,6 +9,56 @@ ci:
     cd ui && npm run lint
     cd ui && npm run build
 
+test-integration:
+    #!/usr/bin/env bash
+    set -e
+    echo "Starting integration tests..."
+
+    # Check if Kafka is running
+    if ! docker ps | grep -q tips-kafka; then
+        echo "Starting Kafka..."
+        docker-compose up -d kafka kafka-setup
+        sleep 5
+    fi
+
+    # Run builder integration tests (basic Kafka tests)
+    echo "Running builder integration tests..."
+    cargo test -p tips-builder --test integration_tests -- --test-threads=1
+
+    echo "✓ All integration tests passed!"
+
+test-e2e:
+    #!/usr/bin/env bash
+    set -e
+    echo "Starting END-TO-END tests..."
+
+    # Check if Kafka is running
+    if ! docker ps | grep -q tips-kafka; then
+        echo "Kafka not running. Starting..."
+        docker-compose up -d kafka kafka-setup
+        sleep 10
+    fi
+
+    # Run E2E tests (these are marked with #[ignore] so we need --ignored)
+    echo "Running UserOp end-to-end tests..."
+    cargo test -p tips-builder --test userop_e2e_test -- --ignored --nocapture --test-threads=1
+
+    echo "✓ All E2E tests passed!"
+
+test-userop-e2e:
+    #!/usr/bin/env bash
+    set -e
+    echo "Running UserOp end-to-end test..."
+
+    # Ensure services are running
+    if ! docker ps | grep -q tips-kafka; then
+        echo "Kafka not running. Start with: just start-except builder ingress-rpc"
+        exit 1
+    fi
+
+    # Run the integration test script
+    ./scripts/test-userop-integration.sh
+
 fix:
     # Rust
     cargo fmt --all
@@ -26,8 +76,10 @@ sync-env:
     cp .env.example .env
     cp .env.example ./ui/.env
     cp .env.example .env.docker
-    # Change kafka ports
+    # Change kafka ports for builder
     sed -i '' 's/localhost:9092/host.docker.internal:9094/g' ./.env.docker
+    # Change builder kafka properties file path for docker
+    sed -i '' 's|TIPS_BUILDER_KAFKA_PROPERTIES_FILE=./docker/builder-kafka-properties|TIPS_BUILDER_KAFKA_PROPERTIES_FILE=/app/docker/builder-kafka-properties|g' ./.env.docker
     # Change other dependencies
     sed -i '' 's/localhost/host.docker.internal/g' ./.env.docker
 
@@ -41,9 +93,9 @@ start-all: stop-all
 # Start every service in docker, except the one you're currently working on. e.g. just start-except ui ingress-rpc
 start-except programs: stop-all
     #!/bin/bash
-    all_services=(kafka kafka-setup minio minio-setup ingress-rpc audit ui)
+    all_services=(kafka kafka-setup minio minio-setup ingress-rpc audit ui builder)
     exclude_services=({{ programs }})
-    
+
     # Create result array with services not in exclude list
     result_services=()
     for service in "${all_services[@]}"; do
@@ -58,7 +110,7 @@ start-except programs: stop-all
             result_services+=("$service")
         fi
     done
-    
+
     export COMPOSE_FILE=docker-compose.yml:docker-compose.tips.yml && mkdir -p data/kafka data/minio && docker compose build && docker compose up -d ${result_services[@]}
 
 ### RUN SERVICES ###
@@ -79,6 +131,9 @@ maintenance:
 
 ingress-writer:
     cargo run --bin tips-ingress-writer
+
+builder:
+    cargo run --bin tips-builder
 
 ui:
     cd ui && yarn dev
@@ -111,6 +166,27 @@ send-txn:
     hash=$(curl -s {{ ingress_url }} -X POST   -H "Content-Type: application/json" --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" | jq -r ".result")
     cast receipt $hash -r {{ sequencer_url }} | grep status
     cast receipt $hash -r {{ builder_url }} | grep status
+
+send-userop:
+    #!/usr/bin/env bash
+    set -euxo pipefail
+    echo "Sending UserOperation to ingress RPC..."
+
+    USER_OP='{"sender":"0x3333333333333333333333333333333333333333","nonce":"0x0","callData":"0x","callGasLimit":"0x186a0","verificationGasLimit":"0x7a120","preVerificationGas":"0x5208","maxFeePerGas":"0x77359400","maxPriorityFeePerGas":"0x3b9aca00","signature":"0x","factory":null,"factoryData":null,"paymaster":null,"paymasterVerificationGasLimit":null,"paymasterPostOpGasLimit":null,"paymasterData":null}'
+
+    response=$(curl -s {{ ingress_url }} -X POST \
+        -H "Content-Type: application/json" \
+        --data "{\"method\":\"eth_sendUserOperation\",\"params\":[$USER_OP],\"id\":1,\"jsonrpc\":\"2.0\"}")
+
+    echo "Response: $response"
+
+    user_op_hash=$(echo "$response" | jq -r ".result.user_operation_hash")
+    if [ "$user_op_hash" != "null" ]; then
+        echo "✓ UserOperation queued: $user_op_hash"
+    else
+        echo "✗ Failed to queue UserOperation"
+        exit 1
+    fi
 
 send-txn-with-backrun:
     #!/usr/bin/env bash

@@ -40,3 +40,21 @@ services:
     env_file:
       - .env.docker
     restart: unless-stopped
+
+  builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "/app/tips-builder"
+    container_name: tips-builder
+    ports:
+      - "2222:2222"
+    env_file:
+      - .env.docker
+    volumes:
+      - ./docker/builder-kafka-properties:/app/docker/builder-kafka-properties:ro
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy

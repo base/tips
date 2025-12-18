@@ -327,7 +327,15 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
                 EthApiError::InvalidParams("Failed to queue user operation".into()).into_rpc_err(),
             );
         }
-        todo!("not yet implemented send_user_operation");
+
+        info!(
+            message = "User operation queued",
+            user_operation_hash = %user_op_hash
+        );
+
+        Ok(SendUserOperationResponse {
+            user_op_hash: user_op_hash.into(),
+        })
     }
 }
 

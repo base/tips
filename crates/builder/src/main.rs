@@ -1,8 +1,10 @@
 mod bundle;
+mod kafka_consumer;
 mod userops;
 mod userops_pipeline;
 
 pub use bundle::UserOpBundle;
+pub use kafka_consumer::UserOpKafkaConsumer;
 pub use userops::UserOperationOrder;
 pub use userops_pipeline::InsertUserOpBundle;
 
@@ -99,13 +101,43 @@ impl Step<Optimism> for InterleavedUserOpsStep {
 
 fn main() {
     let bundler_address = address!("0x1111111111111111111111111111111111111111");
-    let entry_point = address!("0x0000000071727De22E5E9d8BAf0edAc6f37da032");
-    let beneficiary = address!("0x2222222222222222222222222222222222222222");
 
     let userops_step = InsertUserOpBundle::new(bundler_address);
 
-    let example_bundle = UserOpBundle::new(entry_point, beneficiary);
-    userops_step.add_bundle(example_bundle);
+    let kafka_brokers = std::env::var("TIPS_BUILDER_KAFKA_BROKERS")
+        .unwrap_or_else(|_| "localhost:9092".to_string());
+    let kafka_properties_file = std::env::var("TIPS_BUILDER_KAFKA_PROPERTIES_FILE").ok();
+    let kafka_topic = std::env::var("TIPS_BUILDER_KAFKA_TOPIC")
+        .unwrap_or_else(|_| "tips-user-operation".to_string());
+    let kafka_group_id =
+        std::env::var("TIPS_BUILDER_KAFKA_GROUP_ID").unwrap_or_else(|_| "tips-builder".to_string());
+    let batch_size = std::env::var("TIPS_BUILDER_USEROP_BATCH_SIZE")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100);
+    let batch_timeout_ms = std::env::var("TIPS_BUILDER_USEROP_BATCH_TIMEOUT_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1000);
+
+    let kafka_consumer = Arc::new(
+        UserOpKafkaConsumer::new(
+            &kafka_brokers,
+            kafka_properties_file.as_deref(),
+            &kafka_topic,
+            &kafka_group_id,
+            userops_step.clone(),
+            batch_size,
+            batch_timeout_ms,
+        )
+        .expect("Failed to create Kafka consumer"),
+    );
+
+    tokio::spawn(async move {
+        if let Err(e) = kafka_consumer.run().await {
+            tracing::error!("Kafka consumer error: {}", e);
+        }
+    });
 
     Cli::parse_args()
         .run(|builder, _cli_args| async move {

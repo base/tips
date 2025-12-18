@@ -2,6 +2,16 @@
 
 This builder integrates ERC-4337 UserOperations with rblib, following the enshrining pattern from [base-op-rbuilder#1](https://github.com/shamit05/base-op-rbuilder/pull/1).
 
+## Overview
+
+The TIPS Builder implements a complete end-to-end system for ERC-4337 UserOperation bundling:
+
+1. **Ingress RPC** receives `eth_sendUserOperation` requests
+2. **Kafka** queues UserOperations in the `tips-user-operation` topic
+3. **Builder** consumes UserOps from Kafka and creates bundles
+4. **Block Building** inserts bundler transactions at the midpoint of blocks
+5. **EntryPoint** executes all UserOps atomically via `handleOps()`
+
 ## Running Tests
 
 ```bash
@@ -9,6 +19,152 @@ cargo test -p tips-builder
 ```
 
 All tests verify the UserOperation bundling functionality, including midpoint insertion behavior.
+
+## Configuration
+
+### Environment Variables
+
+Create a `.env` file based on `.env.builder.example`:
+
+```bash
+# Kafka Configuration
+TIPS_BUILDER_KAFKA_BROKERS=localhost:9092
+TIPS_BUILDER_KAFKA_PROPERTIES_FILE=./docker/builder-kafka-properties
+TIPS_BUILDER_KAFKA_TOPIC=tips-user-operation
+TIPS_BUILDER_KAFKA_GROUP_ID=tips-builder
+
+# UserOp Batching
+TIPS_BUILDER_USEROP_BATCH_SIZE=100
+TIPS_BUILDER_USEROP_BATCH_TIMEOUT_MS=1000
+```
+
+### Kafka Properties
+
+The builder uses `./docker/builder-kafka-properties` for Kafka configuration:
+- Bootstrap servers
+- Consumer group settings
+- Auto-commit configuration
+- Offset reset policy
+
+## Running the Builder
+
+### Local Development
+
+```bash
+# Start Kafka and dependencies
+docker-compose up -d kafka minio
+
+# Set environment variables
+source .env
+
+# Run the builder
+cargo run -p tips-builder
+```
+
+### Docker
+
+```bash
+docker-compose up builder
+```
+
+## Integration Flow
+
+### 1. Submit UserOperation via RPC
+
+```bash
+curl -X POST http://localhost:8080 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "eth_sendUserOperation",
+    "params": [{
+      "sender": "0x...",
+      "nonce": "0x0",
+      "callData": "0x...",
+      "callGasLimit": "0x186a0",
+      "verificationGasLimit": "0x7a120",
+      "preVerificationGas": "0x5208",
+      "maxFeePerGas": "0x77359400",
+      "maxPriorityFeePerGas": "0x3b9aca00",
+      "signature": "0x..."
+    }],
+    "id": 1
+  }'
+```
+
+### 2. UserOp Flow
+
+```
+┌─────────────┐      ┌────────────┐      ┌─────────┐      ┌─────────┐
+│ RPC Client  │─────▶│ Ingress-RPC│─────▶│  Kafka  │─────▶│ Builder │
+└─────────────┘      └────────────┘      └─────────┘      └─────────┘
+                            │                                    │
+                            ▼                                    ▼
+                     ┌─────────────┐                    ┌──────────────┐
+                     │ Simulation  │                    │ OrderPool    │
+                     │ (Validate)  │                    │ (Pipeline)   │
+                     └─────────────┘                    └──────────────┘
+                                                                │
+                                                                ▼
+                                                        ┌──────────────┐
+                                                        │ Block (50%   │
+                                                        │ regular txs) │
+                                                        ├──────────────┤
+                                                        │ ★ BUNDLER TX │
+                                                        │ handleOps()  │
+                                                        ├──────────────┤
+                                                        │ Block (50%   │
+                                                        │ regular txs) │
+                                                        └──────────────┘
+```
+
+### 3. Block Structure
+
+The builder creates blocks with UserOp bundles in the middle:
+
+```
+Block N:
+├─ Transaction 1 (regular)
+├─ Transaction 2 (regular)
+├─ Transaction 3 (regular)
+│
+├─ BUNDLER TRANSACTION ★
+│  └─ EntryPoint.handleOps([userOp1, userOp2, userOp3], beneficiary)
+│     ├─ Execute userOp1
+│     ├─ Execute userOp2
+│     └─ Execute userOp3
+│
+├─ Transaction 4 (regular)
+├─ Transaction 5 (regular)
+└─ Transaction 6 (regular)
+```
+
+### 4. UserOp Batching
+
+The Kafka consumer batches UserOperations before creating bundles:
+
+- **Batch Size**: Configurable via `TIPS_BUILDER_USEROP_BATCH_SIZE` (default: 100)
+- **Batch Timeout**: Configurable via `TIPS_BUILDER_USEROP_BATCH_TIMEOUT_MS` (default: 1000ms)
+- **Grouping**: UserOps are grouped by EntryPoint address
+- **Flushing**: Batches flush when size is reached OR timeout expires
+
+## Monitoring
+
+### Logs
+
+The builder emits structured logs for:
+- UserOp receipt from Kafka
+- Bundle creation
+- Bundler transaction insertion
+- Block building events
+
+### Metrics
+
+Key metrics to monitor:
+- `userop_batch_size`: Number of UserOps per bundle
+- `userop_processing_time`: Time to process UserOps
+- `bundler_tx_position`: Position of bundler tx in block (should be ~50%)
+- `kafka_consumer_lag`: Consumer lag on `tips-user-operation` topic
 
 ## Architecture
 

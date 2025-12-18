@@ -79,3 +79,4 @@ rblib = { git = "https://github.com/flashbots/rblib", tag = "v0.4.1", default-fe
 metrics = "0.24.1"
 metrics-derive = "0.1"
 metrics-exporter-prometheus = { version = "0.17.0", features = ["http-listener"]}
+hex = "0.4.3"
