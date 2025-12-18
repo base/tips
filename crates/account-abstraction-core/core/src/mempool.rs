@@ -103,7 +103,7 @@ pub trait Mempool {
         &mut self,
         operation: &WrappedUserOperation,
     ) -> Result<Option<OrderedPoolOperation>, anyhow::Error>;
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>>;
+    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = WrappedUserOperation>;
     fn remove_operation(
         &mut self,
         operation_hash: &UserOpHash,
@@ -132,7 +132,7 @@ impl Mempool for MempoolImpl {
         Ok(ordered_operation_result)
     }
 
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
+    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = WrappedUserOperation> {
         // TODO: There is a case where we skip operations that are not the lowest nonce for an account.
         // But we still have not given the N number of operations, meaning we don't return those operations.
 
@@ -148,7 +148,7 @@ impl Mempool for MempoolImpl {
                     Some(lowest)
                         if lowest.0.pool_operation.hash == op_by_fee.0.pool_operation.hash =>
                     {
-                        Some(Arc::new(op_by_fee.0.pool_operation.clone()))
+                        Some(op_by_fee.0.pool_operation.clone())
                     }
                     Some(_) => None,
                     None => {

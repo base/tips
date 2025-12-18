@@ -23,7 +23,7 @@ pub struct ReputationServiceImpl {
 }
 
 impl ReputationServiceImpl {
-    pub fn new(mempool: Arc<RwLock<mempool::MempoolImpl>>) -> Self {
+    pub async fn new(mempool: Arc<RwLock<mempool::MempoolImpl>>) -> Self {
         Self { mempool }
     }
 }
