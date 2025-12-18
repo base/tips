@@ -1,6 +1,6 @@
-use account_abstraction_core::{
-    kafka_mempool_engine::KafkaEvent,
-    types::{VersionedUserOperation, WrappedUserOperation},
+use account_abstraction_core_v2::{
+    MempoolEvent,
+    domain::types::{VersionedUserOperation, WrappedUserOperation},
 };
 use alloy_primitives::B256;
 use anyhow::Result;
@@ -91,13 +91,13 @@ impl<Q: MessageQueue> UserOpQueuePublisher<Q> {
         &self,
         user_op: &VersionedUserOperation,
         hash: &B256,
-    ) -> KafkaEvent {
+    ) -> MempoolEvent {
         let wrapped_user_op = WrappedUserOperation {
             operation: user_op.clone(),
             hash: *hash,
         };
 
-        KafkaEvent::UserOpAdded {
+        MempoolEvent::UserOpAdded {
             user_op: wrapped_user_op,
         }
     }

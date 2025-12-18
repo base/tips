@@ -7295,7 +7295,7 @@ dependencies = [
 name = "tips-ingress-rpc"
 version = "0.1.0"
 dependencies = [
- "account-abstraction-core",
+ "account-abstraction-core-v2",
  "alloy-consensus",
  "alloy-primitives",
  "alloy-provider",

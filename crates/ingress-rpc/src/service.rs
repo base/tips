@@ -1,5 +1,6 @@
-use account_abstraction_core::kafka_mempool_engine::KafkaMempoolEngine;
-use account_abstraction_core::reputation_service::ReputationStatus;
+use account_abstraction_core_v2::MempoolEngine;
+use account_abstraction_core_v2::infrastructure::base_node::validator::BaseNodeValidator;
+use account_abstraction_core_v2::services::ports::user_op_validator::UserOperationValidator;
 use alloy_consensus::transaction::Recovered;
 use alloy_consensus::{Transaction, transaction::SignerRecoverable};
 use alloy_primitives::{Address, B256, Bytes, FixedBytes};
@@ -25,12 +26,8 @@ use crate::metrics::{Metrics, record_histogram};
 use crate::queue::{BundleQueuePublisher, MessageQueue, UserOpQueuePublisher};
 use crate::validation::validate_bundle;
 use crate::{Config, TxSubmissionMethod};
-use account_abstraction_core::entrypoints::version::EntryPointVersion;
-use account_abstraction_core::types::{UserOperationRequest, VersionedUserOperation};
-use account_abstraction_core::{
-    AccountAbstractionService, AccountAbstractionServiceImpl,
-    reputation_service::{ReputationService, ReputationServiceImpl},
-};
+use account_abstraction_core_v2::domain::entrypoints::version::EntryPointVersion;
+use account_abstraction_core_v2::domain::types::{UserOperationRequest, VersionedUserOperation};
 use std::sync::Arc;
 
 /// RPC providers for different endpoints
@@ -70,12 +67,11 @@ pub struct IngressService<Q: MessageQueue> {
     mempool_provider: Arc<RootProvider<Optimism>>,
     simulation_provider: Arc<RootProvider<Optimism>>,
     raw_tx_forward_provider: Option<Arc<RootProvider<Optimism>>>,
-    account_abstraction_service: AccountAbstractionServiceImpl,
+    user_op_validator: BaseNodeValidator,
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<Q>,
     user_op_queue_publisher: UserOpQueuePublisher<Q>,
-    reputation_service: Arc<ReputationServiceImpl>,
-    mempool_engine: Arc<KafkaMempoolEngine>,
+    mempool_engine: Arc<MempoolEngine>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -93,24 +89,23 @@ impl<Q: MessageQueue> IngressService<Q> {
         audit_channel: mpsc::UnboundedSender<BundleEvent>,
         builder_tx: broadcast::Sender<MeterBundleResponse>,
         builder_backrun_tx: broadcast::Sender<Bundle>,
-        mempool_engine: Arc<KafkaMempoolEngine>,
+        mempool_engine: Arc<MempoolEngine>,
         config: Config,
     ) -> Self {
         let mempool_provider = Arc::new(providers.mempool);
         let simulation_provider = Arc::new(providers.simulation);
         let raw_tx_forward_provider = providers.raw_tx_forward.map(Arc::new);
-        let account_abstraction_service: AccountAbstractionServiceImpl =
-            AccountAbstractionServiceImpl::new(
-                simulation_provider.clone(),
-                config.validate_user_operation_timeout_ms,
-            );
+        let user_op_validator = BaseNodeValidator::new(
+            simulation_provider.clone(),
+            config.validate_user_operation_timeout_ms,
+        );
         let queue_connection = Arc::new(queue);
 
         Self {
             mempool_provider,
             simulation_provider,
             raw_tx_forward_provider,
-            account_abstraction_service,
+            user_op_validator,
             tx_submission_method: config.tx_submission_method,
             user_op_queue_publisher: UserOpQueuePublisher::new(
                 queue_connection.clone(),
@@ -120,7 +115,6 @@ impl<Q: MessageQueue> IngressService<Q> {
                 queue_connection.clone(),
                 config.ingress_topic,
             ),
-            reputation_service: Arc::new(ReputationServiceImpl::new(mempool_engine.get_mempool())),
             mempool_engine,
             audit_channel,
             send_transaction_default_lifetime_seconds: config
@@ -358,22 +352,8 @@ impl<Q: MessageQueue + 'static> IngressApiServer for IngressService<Q> {
             EthApiError::InvalidParams(e.to_string()).into_rpc_err()
         })?;
 
-        let reputation = self
-            .reputation_service
-            .get_reputation(&request.user_operation.sender());
-        if reputation == ReputationStatus::Banned {
-            return Err(
-                EthApiError::InvalidParams("User operation sender is banned".into()).into_rpc_err(),
-            );
-        } else if reputation == ReputationStatus::Throttled {
-            return Err(
-                EthApiError::InvalidParams("User operation sender is throttled".into())
-                    .into_rpc_err(),
-            );
-        }
-
         let _ = self
-            .account_abstraction_service
+            .user_op_validator
             .validate_user_operation(&request.user_operation, &entry_point)
             .await
             .map_err(|e| {
@@ -518,7 +498,8 @@ impl<Q: MessageQueue> IngressService<Q> {
 mod tests {
     use super::*;
     use crate::{Config, TxSubmissionMethod, queue::MessageQueue};
-    use account_abstraction_core::kafka_mempool_engine::KafkaConsumer;
+    use account_abstraction_core_v2::MempoolEvent;
+    use account_abstraction_core_v2::services::ports::event_source::EventSource;
     use alloy_provider::RootProvider;
     use anyhow::Result;
     use async_trait::async_trait;
@@ -526,7 +507,6 @@ mod tests {
     use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
     use jsonrpsee::server::{ServerBuilder, ServerHandle};
     use mockall::mock;
-    use rdkafka::message::OwnedMessage;
     use serde_json::json;
     use std::net::{IpAddr, SocketAddr};
     use std::str::FromStr;
@@ -543,12 +523,12 @@ mod tests {
         }
     }
 
-    struct NoopConsumer;
+    struct NoopEventSource;
 
     #[async_trait]
-    impl KafkaConsumer for NoopConsumer {
-        async fn recv_msg(&self) -> anyhow::Result<OwnedMessage> {
-            Err(anyhow::anyhow!("no messages"))
+    impl EventSource for NoopEventSource {
+        async fn receive(&self) -> anyhow::Result<MempoolEvent> {
+            Err(anyhow::anyhow!("no events"))
         }
     }
 
@@ -690,8 +670,8 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
-        let mempool_engine = Arc::new(KafkaMempoolEngine::with_kafka_consumer(
-            Arc::new(NoopConsumer),
+        let mempool_engine = Arc::new(MempoolEngine::with_event_source(
+            Arc::new(NoopEventSource),
             None,
         ));
 
@@ -760,8 +740,8 @@ mod tests {
         let (builder_tx, _builder_rx) = broadcast::channel(1);
         let (backrun_tx, _backrun_rx) = broadcast::channel(1);
 
-        let mempool_engine = Arc::new(KafkaMempoolEngine::with_kafka_consumer(
-            Arc::new(NoopConsumer),
+        let mempool_engine = Arc::new(MempoolEngine::with_event_source(
+            Arc::new(NoopEventSource),
             None,
         ));
 
@@ -813,7 +793,7 @@ mod tests {
 
         let user_op = sample_user_operation_v06();
         let entry_point =
-            account_abstraction_core::entrypoints::version::EntryPointVersion::V06_ADDRESS;
+            account_abstraction_core_v2::domain::entrypoints::version::EntryPointVersion::V06_ADDRESS;
 
         let result: Result<FixedBytes<32>, _> = client
             .request("eth_sendUserOperation", (user_op, entry_point))
