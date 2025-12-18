@@ -1,0 +1,32 @@
+# .cursor/rules/python/python-coding-rules.mdc
+---
+description: Python coding standards and best practices
+globs: ["*.py"]
+alwaysApply: true
+---
+# Python Coding Standards
+
+## Code Style
+- Follow PEP 8 style guide
+- Use type hints for all function parameters and return values
+- Maximum line length: 88 characters (Black formatter standard)
+- Use descriptive variable names that reflect their purpose
+- Use docstrings for all public modules, functions, classes, and methods
+
+## Project Structure
+- Use src-layout pattern for all Python packages
+- Separate business logic from API handlers
+- Keep modules focused and single-responsibility
+- Use absolute imports over relative imports
+
+## Error Handling
+- Use custom exceptions for domain-specific errors
+- Always include meaningful error messages
+- Handle exceptions at appropriate levels
+- Log errors with proper context
+
+## Best Practices
+- Use dataclasses or Pydantic models for data structures
+- Implement proper logging with structured data
+- Use environment variables for configuration
+- Follow the principle of least privilege
