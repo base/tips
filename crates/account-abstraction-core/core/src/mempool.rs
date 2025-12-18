@@ -9,14 +9,6 @@ pub struct PoolConfig {
     minimum_max_fee_per_gas: u128,
 }
 
-impl PoolConfig {
-    pub fn default() -> Self {
-        Self {
-            minimum_max_fee_per_gas: 0,
-        }
-    }
-}
-
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
     pub pool_operation: WrappedUserOperation,
@@ -54,8 +46,6 @@ impl PartialOrd for ByMaxFeeAndSubmissionId {
 }
 
 impl Ord for ByMaxFeeAndSubmissionId {
-    /// TODO: There can be invalid opperations, where base fee, + expected gas price
-    /// is greater that the maximum gas, in that case we don't include it in the mempool as such mempool changes.
     fn cmp(&self, other: &Self) -> Ordering {
         other
             .0
@@ -64,6 +54,7 @@ impl Ord for ByMaxFeeAndSubmissionId {
             .max_priority_fee_per_gas()
             .cmp(&self.0.pool_operation.operation.max_priority_fee_per_gas())
             .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
+            .then_with(|| self.0.pool_operation.hash.cmp(&other.0.pool_operation.hash))
     }
 }
 
@@ -94,7 +85,6 @@ impl Ord for ByNonce {
             .nonce()
             .cmp(&other.0.pool_operation.operation.nonce())
             .then_with(|| self.0.submission_id.cmp(&other.0.submission_id))
-            .then_with(|| self.0.pool_operation.hash.cmp(&other.0.pool_operation.hash))
     }
 }
 
@@ -300,7 +290,7 @@ mod tests {
 
     // Tests adding multiple operations with different hashes
     #[test]
-    fn test_add_multiple_operations_with_different_hashes() {
+    fn test_add_multiple_operations() {
         let mut mempool = create_test_mempool(1000);
 
         let hash1 = FixedBytes::from([1u8; 32]);
