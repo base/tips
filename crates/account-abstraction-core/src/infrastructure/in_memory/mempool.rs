@@ -82,6 +82,7 @@ impl Ord for ByNonce {
     }
 }
 
+#[derive(Debug)]
 pub struct InMemoryMempool {
     config: PoolConfig,
     best: BTreeSet<ByMaxFeeAndSubmissionId>,
