@@ -1,6 +1,6 @@
 # S3 Storage Format
 
-This document describes the S3 storage format used by the audit system for archiving bundle and UserOp lifecycle events.
+This document describes the S3 storage format used by the audit system for archiving bundle and UserOp lifecycle events and transaction lookups.
 
 ## Storage Structure
 
