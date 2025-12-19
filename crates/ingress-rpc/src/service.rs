@@ -353,7 +353,7 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
         };
 
         // DO Nothing with reputation at the moment as this is scafolding
-        let ___ = self
+        let _ = self
             .reputation_service
             .get_reputation(&request.user_operation.sender())
             .await;
