@@ -1,6 +1,6 @@
 use crate::domain::types::{UserOpHash, WrappedUserOperation};
-use std::sync::Arc;
 use std::fmt::Debug;
+use std::sync::Arc;
 #[derive(Default, Debug)]
 pub struct PoolConfig {
     pub minimum_max_fee_per_gas: u128,
