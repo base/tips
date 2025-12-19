@@ -1,6 +1,6 @@
 # S3 Storage Format
 
-This document describes the S3 storage format used by the audit system for archiving bundle lifecycle events and transaction lookups.
+This document describes the S3 storage format used by the audit system for archiving bundle and UserOp lifecycle events and transaction lookups.
 
 ## Storage Structure
 
@@ -65,3 +65,57 @@ Transaction hash to bundle mapping for efficient lookups:
     ]
 }
 ```
+
+### UserOp History: `/userops/<hash>`
+
+Each UserOperation (ERC-4337) is stored as a JSON object containing its complete lifecycle history. Events are written after validation passes.
+
+```json
+{
+    "history": [
+        {
+            "event": "AddedToMempool",
+            "data": {
+                "key": "<user_op_hash>-<uuid>",
+                "timestamp": 1234567890,
+                "sender": "0x1234567890abcdef1234567890abcdef12345678",
+                "entry_point": "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789",
+                "nonce": "0x1"
+            }
+        },
+        {
+            "event": "Included",
+            "data": {
+                "key": "<user_op_hash>-<tx_hash>",
+                "timestamp": 1234567895,
+                "block_number": 12345678,
+                "tx_hash": "0xabcdef..."
+            }
+        },
+        {
+            "event": "Dropped",
+            "data": {
+                "key": "<user_op_hash>-<uuid>",
+                "timestamp": 1234567896,
+                "reason": {
+                    "Invalid": "AA21 didn't pay prefund"
+                }
+            }
+        }
+    ]
+}
+```
+
+#### UserOp Event Types
+
+| Event | When | Key Fields |
+|-------|------|------------|
+| `AddedToMempool` | UserOp passes validation and enters the mempool | sender, entry_point, nonce |
+| `Dropped` | UserOp removed from mempool | reason (Invalid, Expired, ReplacedByHigherFee) |
+| `Included` | UserOp included in a block | block_number, tx_hash |
+
+#### Drop Reasons
+
+- `Invalid(String)` - Validation failed with error message (e.g., revert reason)
+- `Expired` - TTL exceeded
+- `ReplacedByHigherFee` - Replaced by another UserOp with higher fee

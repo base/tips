@@ -7,13 +7,14 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/system-tests"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/account-abstraction-core-v2", "crates/system-tests"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
+account-abstraction-core-v2 = { path = "crates/account-abstraction-core-v2" }
 tips-system-tests = { path = "crates/system-tests" }
 
 # Reth
