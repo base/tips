@@ -175,3 +175,20 @@ send-txn-with-backrun:
 
     echo "=== Backrun transaction (from backrunner) ==="
     cast receipt $backrun_hash_computed -r {{ sequencer_url }} | grep -E "(status|blockNumber|transactionIndex)" || echo "Backrun tx not found yet"
+
+e2e:
+    #!/bin/bash
+    if ! INTEGRATION_TESTS=1 cargo test --package tips-system-tests --test integration_tests; then
+        echo ""
+        echo "═══════════════════════════════════════════════════════════════════"
+        echo "  ⚠️  Integration tests failed!"
+        echo "  Make sure the infrastructure is running locally (see SETUP.md for full instructions): "
+        echo "      just start-all"
+        echo "      start builder-playground"
+        echo "      start op-rbuilder"
+        echo "═══════════════════════════════════════════════════════════════════"
+        exit 1
+    fi
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "  ✅ Integration tests passed!"
+    echo "═══════════════════════════════════════════════════════════════════"
