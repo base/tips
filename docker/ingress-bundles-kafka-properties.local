@@ -1,0 +1,3 @@
+# Kafka configuration properties for ingress service
+bootstrap.servers=localhost:9092
+message.timeout.ms=5000

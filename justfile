@@ -75,6 +75,31 @@ test-userop-e2e:
     # Run the integration test script
     ./scripts/test-userop-integration.sh
 
+verify-builder-playground:
+    #!/usr/bin/env bash
+    chmod +x ./scripts/verify-builder-playground-integration.sh
+    ./scripts/verify-builder-playground-integration.sh
+
+run-with-builder-playground:
+    #!/usr/bin/env bash
+    chmod +x ./scripts/run-with-builder-playground.sh
+    ./scripts/run-with-builder-playground.sh
+
+setup-for-builder-playground:
+    #!/usr/bin/env bash
+    chmod +x ./scripts/complete-setup.sh
+    ./scripts/complete-setup.sh
+
+builder-with-playground:
+    #!/usr/bin/env bash
+    chmod +x ./run-builder.sh
+    ./run-builder.sh
+
+ingress-with-playground:
+    #!/usr/bin/env bash
+    chmod +x ./run-ingress.sh
+    ./run-ingress.sh
+
 fix:
     # Rust
     cargo fmt --all
@@ -142,6 +167,16 @@ audit:
 ingress-rpc:
     cargo run --bin tips-ingress-rpc
 
+ingress-rpc-local:
+    #!/usr/bin/env bash
+    set -a
+    source .env
+    set +a
+    export TIPS_INGRESS_KAFKA_USEROP_PROPERTIES_FILE=./docker/ingress-userop-kafka-properties.local
+    export TIPS_INGRESS_KAFKA_INGRESS_PROPERTIES_FILE=./docker/ingress-bundles-kafka-properties.local
+    export TIPS_INGRESS_KAFKA_AUDIT_PROPERTIES_FILE=./docker/ingress-audit-kafka-properties.local
+    cargo run --bin tips-ingress-rpc
+
 maintenance:
     cargo run --bin tips-maintenance
 
@@ -164,8 +199,8 @@ get-blocks:
     cast bn -r {{ sequencer_url }}
     echo "Validator"
     cast bn -r {{ validator_url }}
-    echo "Builder"
-    cast bn -r {{ builder_url }}
+    echo "Builder (via ingress)"
+    cast bn -r {{ ingress_url }}
 
 sender := "0x70997970C51812dc3A010C7d01b50e0d17dc79C8"
 sender_key := "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d"
@@ -176,12 +211,27 @@ backrunner_key := "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cda
 send-txn:
     #!/usr/bin/env bash
     set -euxo pipefail
-    echo "sending txn"
-    nonce=$(cast nonce {{ sender }} -r {{ builder_url }})
-    txn=$(cast mktx --private-key {{ sender_key }} 0x0000000000000000000000000000000000000000 --value 0.01ether --nonce $nonce --chain-id 13 -r {{ builder_url }})
-    hash=$(curl -s {{ ingress_url }} -X POST   -H "Content-Type: application/json" --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" | jq -r ".result")
-    cast receipt $hash -r {{ sequencer_url }} | grep status
-    cast receipt $hash -r {{ builder_url }} | grep status
+    echo "Sending transaction..."
+    nonce=$(cast nonce {{ sender }} -r {{ sequencer_url }})
+    txn=$(cast mktx --private-key {{ sender_key }} 0x0000000000000000000000000000000000000000 --value 0.01ether --nonce $nonce --chain-id 13 -r {{ sequencer_url }})
+
+    # Send directly to sequencer (blocks are produced there)
+    hash=$(curl -s {{ sequencer_url }} -X POST -H "Content-Type: application/json" --data "{\"method\":\"eth_sendRawTransaction\",\"params\":[\"$txn\"],\"id\":1,\"jsonrpc\":\"2.0\"}" | jq -r ".result")
+
+    echo "✓ Transaction sent to sequencer!"
+    echo "  Hash: $hash"
+    echo ""
+    echo "Waiting for block..."
+    sleep 3
+
+    if cast receipt $hash -r {{ sequencer_url }} 2>/dev/null | grep -q "status"; then
+        echo "✓ Transaction mined!"
+        cast receipt $hash -r {{ sequencer_url }} | grep -E "status|blockNumber|gasUsed"
+        echo ""
+        echo "View in UI: http://localhost:3000"
+    else
+        echo "Transaction pending. Check: cast receipt $hash -r {{ sequencer_url }}"
+    fi
 
 send-userop:
     #!/usr/bin/env bash

@@ -120,27 +120,28 @@ fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(1000);
 
-    let kafka_consumer = Arc::new(
-        UserOpKafkaConsumer::new(
-            &kafka_brokers,
-            kafka_properties_file.as_deref(),
-            &kafka_topic,
-            &kafka_group_id,
-            userops_step.clone(),
-            batch_size,
-            batch_timeout_ms,
-        )
-        .expect("Failed to create Kafka consumer"),
-    );
-
-    tokio::spawn(async move {
-        if let Err(e) = kafka_consumer.run().await {
-            tracing::error!("Kafka consumer error: {}", e);
-        }
-    });
+    let userops_step_for_kafka = userops_step.clone();
 
     Cli::parse_args()
-        .run(|builder, _cli_args| async move {
+        .run(move |builder, _cli_args| async move {
+            let kafka_consumer = Arc::new(
+                UserOpKafkaConsumer::new(
+                    &kafka_brokers,
+                    kafka_properties_file.as_deref(),
+                    &kafka_topic,
+                    &kafka_group_id,
+                    userops_step_for_kafka.clone(),
+                    batch_size,
+                    batch_timeout_ms,
+                )
+                .expect("Failed to create Kafka consumer"),
+            );
+
+            tokio::spawn(async move {
+                if let Err(e) = kafka_consumer.run().await {
+                    tracing::error!("Kafka consumer error: {}", e);
+                }
+            });
             let pool = OrderPool::<Optimism>::default();
             let pipeline = build_userops_pipeline(&pool, userops_step);
             let op_node = OpNode::default();
