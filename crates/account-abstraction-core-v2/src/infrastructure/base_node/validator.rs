@@ -45,7 +45,7 @@ impl UserOperationValidator for BaseNodeValidator {
                 return Err(anyhow::anyhow!("Timeout on requesting validation"));
             }
             Ok(Err(e)) => {
-                return Err(anyhow::anyhow!("RPC error: {}", e));
+                return Err(anyhow::anyhow!("RPC error: {e}"));
             }
             Ok(Ok(v)) => v,
         };
