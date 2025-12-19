@@ -126,12 +126,7 @@ pub struct UserOpHistory {
     pub history: Vec<UserOpHistoryEvent>,
 }
 
-#[derive(Debug, Clone)]
-pub struct UserOpEventWrapper {
-    pub key: String,
-    pub event: UserOpEvent,
-    pub timestamp: i64,
-}
+pub use crate::reader::UserOpEventWrapper;
 
 fn update_bundle_history_transform(
     bundle_history: BundleHistory,
