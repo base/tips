@@ -82,6 +82,7 @@ impl Ord for ByNonce {
     }
 }
 
+#[derive(Debug)]
 pub struct InMemoryMempool {
     config: PoolConfig,
     best: BTreeSet<ByMaxFeeAndSubmissionId>,
@@ -101,7 +102,7 @@ impl Mempool for InMemoryMempool {
         Ok(())
     }
 
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>> {
+    fn get_top_operations(&self, n: usize) -> Vec<Arc<WrappedUserOperation>> {
         self.best
             .iter()
             .filter_map(|op_by_fee| {
@@ -127,6 +128,7 @@ impl Mempool for InMemoryMempool {
                 }
             })
             .take(n)
+            .collect()
     }
 
     fn remove_operation(
@@ -310,7 +312,7 @@ mod tests {
 
         mempool.add_operation(&operation).unwrap();
 
-        let best_before: Vec<_> = mempool.get_top_operations(10).collect();
+        let best_before: Vec<_> = mempool.get_top_operations(10);
         assert_eq!(best_before.len(), 1);
         assert_eq!(best_before[0].hash, hash);
 
@@ -318,7 +320,7 @@ mod tests {
         assert!(result.is_ok());
         assert!(result.unwrap().is_some());
 
-        let best_after: Vec<_> = mempool.get_top_operations(10).collect();
+        let best_after: Vec<_> = mempool.get_top_operations(10);
         assert_eq!(best_after.len(), 0);
     }
 
@@ -338,7 +340,7 @@ mod tests {
         let operation3 = create_wrapped_operation(1500, hash3);
         mempool.add_operation(&operation3).unwrap();
 
-        let best: Vec<_> = mempool.get_top_operations(10).collect();
+        let best: Vec<_> = mempool.get_top_operations(10);
         assert_eq!(best.len(), 3);
         assert_eq!(best[0].operation.max_fee_per_gas(), Uint::from(3000));
         assert_eq!(best[1].operation.max_fee_per_gas(), Uint::from(2000));
@@ -361,7 +363,7 @@ mod tests {
         let operation3 = create_wrapped_operation(1500, hash3);
         mempool.add_operation(&operation3).unwrap();
 
-        let best: Vec<_> = mempool.get_top_operations(2).collect();
+        let best: Vec<_> = mempool.get_top_operations(2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[0].operation.max_fee_per_gas(), Uint::from(3000));
         assert_eq!(best[1].operation.max_fee_per_gas(), Uint::from(2000));
@@ -379,7 +381,7 @@ mod tests {
         let operation2 = create_wrapped_operation(2000, hash2);
         mempool.add_operation(&operation2).unwrap();
 
-        let best: Vec<_> = mempool.get_top_operations(2).collect();
+        let best: Vec<_> = mempool.get_top_operations(2);
         assert_eq!(best.len(), 2);
         assert_eq!(best[0].hash, hash1);
         assert_eq!(best[1].hash, hash2);
@@ -417,7 +419,7 @@ mod tests {
         };
         mempool.add_operation(&operation2).unwrap();
 
-        let best: Vec<_> = mempool.get_top_operations(2).collect();
+        let best: Vec<_> = mempool.get_top_operations(2);
         assert_eq!(best.len(), 1);
         assert_eq!(best[0].operation.nonce(), Uint::from(0));
     }
