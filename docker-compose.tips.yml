@@ -16,9 +16,6 @@ services:
       - ./docker/ingress-bundles-kafka-properties:/app/docker/ingress-bundles-kafka-properties:ro
       - ./docker/ingress-audit-kafka-properties:/app/docker/ingress-audit-kafka-properties:ro
       - ./docker/ingress-user-operation-consumer-kafka-properties:/app/docker/ingress-user-operation-consumer-kafka-properties:ro
-    depends_on:
-      kafka-setup:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   audit:
@@ -32,9 +29,6 @@ services:
       - .env.docker
     volumes:
       - ./docker/audit-kafka-properties:/app/docker/audit-kafka-properties:ro
-    depends_on:
-      kafka-setup:
-        condition: service_completed_successfully
     restart: unless-stopped
 
   ui:
