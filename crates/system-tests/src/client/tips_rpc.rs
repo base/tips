@@ -33,8 +33,6 @@ impl<N: Network> TipsRpcClient<N> {
             .map_err(Into::into)
     }
 
-    /// Send a backrun bundle - this actually sends the bundle to the builder
-    /// and lands on-chain (unlike send_bundle which only publishes to Kafka)
     pub async fn send_backrun_bundle(&self, bundle: Bundle) -> Result<BundleHash> {
         self.provider
             .raw_request("eth_sendBackrunBundle".into(), [bundle])

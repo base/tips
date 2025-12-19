@@ -5,7 +5,7 @@ use alloy_network::ReceiptResponse;
 use alloy_primitives::{Address, TxHash, U256, keccak256};
 use alloy_provider::{Provider, RootProvider};
 use anyhow::{Context, Result, bail};
-use common::kafka::{wait_for_audit_event_by_hash, wait_for_ingress_bundle};
+use common::kafka::wait_for_audit_event_by_hash;
 use op_alloy_network::Optimism;
 use tips_audit::types::BundleEvent;
 use tips_core::BundleExtensions;
@@ -13,6 +13,7 @@ use tips_system_tests::client::TipsRpcClient;
 use tips_system_tests::fixtures::{
     create_funded_signer, create_optimism_provider, create_signed_transaction,
 };
+use serial_test::serial;
 use tokio::time::{Duration, Instant, sleep};
 
 /// Get the URL for integration tests against the TIPS ingress service
@@ -23,28 +24,6 @@ fn get_integration_test_url() -> String {
 /// Get the URL for the sequencer (for fetching nonces)
 fn get_sequencer_url() -> String {
     std::env::var("SEQUENCER_URL").unwrap_or_else(|_| "http://localhost:8547".to_string())
-}
-
-fn configured_tx_submission_modes() -> Vec<String> {
-    std::env::var("TIPS_TEST_TX_SUBMISSION_METHOD")
-        .or_else(|_| std::env::var("TIPS_INGRESS_TX_SUBMISSION_METHOD"))
-        .unwrap_or_else(|_| "mempool".to_string())
-        .split(',')
-        .map(|mode| mode.trim().to_ascii_lowercase())
-        .filter(|mode| !mode.is_empty())
-        .collect()
-}
-
-fn tx_submission_includes_kafka() -> bool {
-    configured_tx_submission_modes()
-        .iter()
-        .any(|mode| mode == "kafka")
-}
-
-fn tx_submission_includes_mempool() -> bool {
-    configured_tx_submission_modes()
-        .iter()
-        .any(|mode| mode == "mempool")
 }
 
 async fn wait_for_transaction_seen(
@@ -89,6 +68,7 @@ async fn test_client_can_connect_to_tips() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_send_raw_transaction_accepted() -> Result<()> {
     if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
@@ -124,28 +104,24 @@ async fn test_send_raw_transaction_accepted() -> Result<()> {
     // Verify TIPS accepted the transaction and returned a hash
     assert!(!tx_hash.is_zero(), "Transaction hash should not be zero");
 
-    // If Kafka submission is enabled, ensure the transaction bundle is enqueued
-    if tx_submission_includes_kafka() {
-        let mut concatenated = Vec::new();
-        concatenated.extend_from_slice(tx_hash.as_slice());
-        let expected_bundle_hash = keccak256(&concatenated);
+    // Verify transaction lands on-chain
+    wait_for_transaction_seen(&sequencer_provider, tx_hash, 30)
+        .await
+        .context("Transaction never appeared on sequencer")?;
 
-        wait_for_ingress_bundle(&expected_bundle_hash)
-            .await
-            .context("Failed to observe raw transaction bundle on Kafka")?;
-    }
-
-    // If mempool submission is enabled, ensure the sequencer sees the transaction
-    if tx_submission_includes_mempool() {
-        wait_for_transaction_seen(&sequencer_provider, tx_hash, 30)
-            .await
-            .context("Transaction never appeared on sequencer")?;
-    }
+    // Verify transaction receipt shows success
+    let receipt = sequencer_provider
+        .get_transaction_receipt(tx_hash)
+        .await
+        .context("Failed to fetch transaction receipt")?
+        .expect("Transaction receipt should exist after being seen on sequencer");
+    assert!(receipt.status(), "Transaction should have succeeded");
 
     Ok(())
 }
 
 #[tokio::test]
+#[serial]
 async fn test_send_bundle_accepted() -> Result<()> {
     if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
@@ -175,7 +151,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
     let signed_tx = create_signed_transaction(&signer, to, value, nonce, gas_limit, gas_price)?;
     let tx_hash = keccak256(&signed_tx);
 
-    // First send the transaction to mempool (like just send-txn-with-backrun does)
+    // First send the transaction to mempool 
     let _mempool_tx_hash = client
         .send_raw_transaction(signed_tx.clone())
         .await
@@ -183,7 +159,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
 
     let bundle = Bundle {
         txs: vec![signed_tx],
-        block_number: 0, // 0 means "include in any upcoming block"
+        block_number: 0, 
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![tx_hash],
@@ -193,7 +169,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
         flashblock_number_max: None,
     };
 
-    // Send backrun bundle to TIPS (this sends to builder and lands on-chain)
+    // Send backrun bundle to TIPS 
     let bundle_hash = client
         .send_backrun_bundle(bundle)
         .await
@@ -214,9 +190,6 @@ async fn test_send_bundle_accepted() -> Result<()> {
         "Bundle hash should match keccak256(tx_hash)"
     );
 
-    // Note: Backrun bundles are sent directly to the builder, not via Kafka ingress topic.
-    // They still emit audit events, so we verify the audit flow by bundle hash.
-
     // Verify audit channel emitted a Received event for this bundle
     let audit_event = wait_for_audit_event_by_hash(&bundle_hash.bundle_hash, |event| {
         matches!(event, BundleEvent::Received { .. })
@@ -234,7 +207,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    // Wait for transaction to appear on sequencer (direct on-chain verification)
+    // Wait for transaction to appear on sequencer 
     wait_for_transaction_seen(&sequencer_provider, tx_hash.into(), 60)
         .await
         .context("Bundle transaction never appeared on sequencer")?;
@@ -255,6 +228,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
 }
 
 #[tokio::test]
+#[serial]
 async fn test_send_bundle_with_two_transactions() -> Result<()> {
     if std::env::var("INTEGRATION_TESTS").is_err() {
         eprintln!(
@@ -276,7 +250,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         .get_transaction_count(signer.address())
         .await?;
 
-    // Create two transactions (matching the pattern in just send-txn-with-backrun)
+    // Create two transactions 
     let tx1 = create_signed_transaction(
         &signer,
         Address::from([0x33; 20]),
@@ -310,7 +284,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
 
     let bundle = Bundle {
         txs: vec![tx1, tx2],
-        block_number: 0, // 0 means "include in any upcoming block"
+        block_number: 0, 
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![tx1_hash, tx2_hash],
@@ -342,7 +316,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         "Bundle hash should match keccak256(concat(tx1_hash, tx2_hash))"
     );
 
-    // Verify audit channel emitted a Received event (match by bundle hash for backrun bundles)
+    // Verify audit channel emitted a Received event 
     let audit_event = wait_for_audit_event_by_hash(&bundle_hash.bundle_hash, |event| {
         matches!(event, BundleEvent::Received { .. })
     })
@@ -359,7 +333,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    // Wait for both transactions to appear on sequencer (direct on-chain verification)
+    // Wait for both transactions to appear on sequencer 
     wait_for_transaction_seen(&sequencer_provider, tx1_hash.into(), 60)
         .await
         .context("Bundle tx1 never appeared on sequencer")?;
