@@ -21,3 +21,4 @@ pub use services::{
 };
 
 pub use factories::kafka_engine::create_mempool_engine;
+pub use factories::kafka_engine::create_mempool_engine_with_url;
