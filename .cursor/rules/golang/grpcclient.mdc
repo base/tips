@@ -1,0 +1,17 @@
+---
+description: Creating a new grpc connection should use csf's grpcclient, not golang/grpc
+globs: *.go
+alwaysApply: false
+---
+Pull in the package from github.cbhq.net/engineering/csf/grpcclient
+
+Here is an example of how you should implement it
+```
+    manager := csf.New()
+    ctx := manager.ServiceContext()
+        conn, err := grpcclient.Dial(
+                ctx,
+                endpoint,
+                grpcclient.WithDialOpt(grpc.WithBlock()),
+        )
+```

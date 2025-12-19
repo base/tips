@@ -1,0 +1,72 @@
+---
+description: Describes how to handle a request to fix a bugsnag issue
+globs: 
+alwaysApply: false
+---
+# Bugsnag Ticket Workflow
+
+When a user provides a Bugsnag error URL or asks to fix a Bugsnag issue, follow this systematic approach:
+
+## 1. **Root Cause Analysis**
+
+### Error Investigation
+- Use `mcp_bugsnag-mcp_list-error-events` to get recent events for the error
+- Use `mcp_bugsnag-mcp_get-stacktrace` with `include_code: true` and `show_all_frames: true` to get the complete stacktrace
+- Analyze the stacktrace to identify:
+  - The exact line and file where the error occurs
+  - The call stack that leads to the error
+  - The error message and context
+
+### Codebase Investigation
+- Read the relevant files identified in the stacktrace
+- Search for related code patterns or similar implementations
+- Identify the data flow that leads to the problematic state
+- Look for edge cases or missing null/undefined checks
+
+## 2. **Suggest Fixes (No Code Changes)**
+
+### Analysis Summary
+- Provide a clear explanation of what's causing the error
+- Identify the specific conditions that trigger the issue
+- Explain the impact and severity of the error
+- If you can't figure out what is going on, just say so and ask the user for more context
+
+### Proposed Solutions
+- Present 1-3 potential fix approaches with pros/cons
+- Suggest relevant tests to prevent regression
+- Try to be tactical with your suggestions, avoid large refactors when possible
+
+### Implementation Recommendations
+- Specify which files need to be modified
+- Outline the exact changes needed (but don't make them yet)
+- Mention any dependencies or related changes required
+- Highlight potential breaking changes or compatibility concerns
+
+## 3. **User Confirmation & Implementation**
+
+### Get Approval
+- Wait for user confirmation on the proposed approach
+- Allow for discussion and refinement of the solution
+- Clarify any ambiguous requirements or edge cases
+
+### Implementation & PR Creation
+Once the user confirms the approach:
+- Follow the below process:
+  - Making code changes
+  - Adding tests if needed
+
+---
+
+**Example Workflow:**
+
+- User: "Fix this Bugsnag issue: https://app.bugsnag.com/<ticket>"
+- Assistant:
+  1. Fetches error events and stacktrace from Bugsnag
+  2. Analyzes the code to identify root cause
+  3. Proposes specific fix approach with explanation
+  4. Waits for user confirmation
+  5. Making code changes and tests if needed
+
+---
+
+**Note:** This workflow ensures thorough analysis before making changes, reducing the risk of incomplete fixes or introducing new issues while maintaining the systematic approach for PR creation.

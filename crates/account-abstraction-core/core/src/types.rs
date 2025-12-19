@@ -1,5 +1,5 @@
 use crate::entrypoints::{v06, v07, version::EntryPointVersion};
-use alloy_primitives::{Address, B256, ChainId, U256};
+use alloy_primitives::{Address, B256, ChainId, FixedBytes, U256};
 use alloy_rpc_types::erc4337;
 pub use alloy_rpc_types::erc4337::SendUserOperationResponse;
 use anyhow::Result;
@@ -10,6 +10,35 @@ use serde::{Deserialize, Serialize};
 pub enum VersionedUserOperation {
     UserOperation(erc4337::UserOperation),
     PackedUserOperation(erc4337::PackedUserOperation),
+}
+
+impl VersionedUserOperation {
+    pub fn max_fee_per_gas(&self) -> U256 {
+        match self {
+            VersionedUserOperation::UserOperation(op) => op.max_fee_per_gas,
+            VersionedUserOperation::PackedUserOperation(op) => op.max_fee_per_gas,
+        }
+    }
+
+    pub fn max_priority_fee_per_gas(&self) -> U256 {
+        match self {
+            VersionedUserOperation::UserOperation(op) => op.max_priority_fee_per_gas,
+            VersionedUserOperation::PackedUserOperation(op) => op.max_priority_fee_per_gas,
+        }
+    }
+    pub fn nonce(&self) -> U256 {
+        match self {
+            VersionedUserOperation::UserOperation(op) => op.nonce,
+            VersionedUserOperation::PackedUserOperation(op) => op.nonce,
+        }
+    }
+
+    pub fn sender(&self) -> Address {
+        match self {
+            VersionedUserOperation::UserOperation(op) => op.sender,
+            VersionedUserOperation::PackedUserOperation(op) => op.sender,
+        }
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UserOperationRequest {
@@ -105,6 +134,20 @@ pub struct AggregatorInfo {
     pub aggregator: Address,
     /// Stake info
     pub stake_info: EntityStakeInfo,
+}
+
+pub type UserOpHash = FixedBytes<32>;
+
+#[derive(Eq, PartialEq, Clone, Debug)]
+pub struct WrappedUserOperation {
+    pub operation: VersionedUserOperation,
+    pub hash: UserOpHash,
+}
+
+impl WrappedUserOperation {
+    pub fn has_higher_max_fee(&self, other: &WrappedUserOperation) -> bool {
+        self.operation.max_fee_per_gas() > other.operation.max_fee_per_gas()
+    }
 }
 
 // Tests

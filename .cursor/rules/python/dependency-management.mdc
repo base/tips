@@ -1,0 +1,21 @@
+# .cursor/rules/python/dependency-management.mdc
+---
+description: Package and dependency management guidelines
+globs: ["pyproject.toml", "requirements.txt", "setup.py"]
+alwaysApply: true
+---
+# Dependency Management
+
+## Package Management
+- Use Poetry for dependency management
+- Pin all dependencies with exact versions
+- Use separate dependency groups for dev and prod
+- Regular security audits with safety
+- Keep dependencies up to date
+
+## Virtual Environments
+- Use virtual environments for all projects
+- Document Python version requirements
+- Use .env files for environment variables
+- Keep production dependencies minimal
+- Document all third-party integrations

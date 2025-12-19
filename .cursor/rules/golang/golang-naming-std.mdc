@@ -1,0 +1,69 @@
+---
+description: Avoid package prefix redundancy when naming
+globs: *.go
+alwaysApply: false
+---
+# Go Standard: Naming Conventions - Avoid Package Prefix Redundancy
+
+This rule outlines the standard Go practice for naming exported identifiers to avoid redundancy with the package name.
+
+**The Standard:**
+
+When naming exported identifiers (types, functions, variables, constants), **avoid repeating the package name** if the context provided by the package itself makes the identifier clear.
+
+**Rationale:**
+
+*   **Readability:** Code that imports the package becomes cleaner and less verbose. For example, `store.New()` is more idiomatic and readable than `store.NewStore()`.
+*   **Conciseness:** Reduces unnecessary stuttering in code (e.g., `store.StoreType` vs. `store.Type`).
+*   **Idiomatic Go:** Follows the common practice seen in the Go standard library and many popular Go projects.
+
+**Examples:**
+
+```go
+// --- Package: store ---
+
+// BAD: Repeats "store"
+package store
+
+type StoreConfig struct { ... }
+func NewStore(cfg StoreConfig) (*Store, error) { ... }
+var DefaultStoreOptions StoreOptions
+
+// GOOD: Avoids repeating "store"
+package store
+
+type Config struct { ... } // Type name is clear within package 'store'
+func New(cfg Config) (*Store, error) { ... } // Function name 'New' is clear
+var DefaultOptions Options // Variable name is clear
+
+type Store struct { ... } // OK: Identifier itself IS the package name conceptually
+```
+
+When importing and using the "good" example:
+
+```go
+import "path/to/store"
+
+// ...
+cfg := store.Config{ ... }
+activityStore, err := store.New(cfg)
+opts := store.DefaultOptions
+var s store.Store
+```
+
+This reads much better than:
+
+```go
+import "path/to/store"
+
+// ...
+cfg := store.StoreConfig{ ... }
+activityStore, err := store.NewStore(cfg)
+opts := store.DefaultStoreOptions
+var s store.Store
+```
+
+**Exceptions:**
+
+*   It is acceptable if the identifier itself essentially *is* the package name (e.g., `package http; type Client`, `package store; type Store`).
+*   Sometimes repeating a part of the package name is necessary for clarity if the package has many distinct concepts.
