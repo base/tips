@@ -128,7 +128,7 @@ mod tests {
         let engine = MempoolEngine::new(mempool.clone(), mock_source);
 
         engine.process_next().await.unwrap();
-        let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
+        let items: Vec<_> = mempool.read().await.get_top_operations(10);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].hash, FixedBytes::from(op_hash));
     }
@@ -149,11 +149,11 @@ mod tests {
 
         let engine = MempoolEngine::new(mempool.clone(), mock_source);
         engine.process_next().await.unwrap();
-        let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
+        let items: Vec<_> = mempool.read().await.get_top_operations(10);
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].hash, FixedBytes::from(op_hash));
         engine.process_next().await.unwrap();
-        let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
+        let items: Vec<_> = mempool.read().await.get_top_operations(10);
         assert_eq!(items.len(), 0);
     }
 }

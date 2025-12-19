@@ -9,7 +9,7 @@ pub struct PoolConfig {
 pub trait Mempool: Send + Sync {
     fn add_operation(&mut self, operation: &WrappedUserOperation) -> Result<(), anyhow::Error>;
 
-    fn get_top_operations(&self, n: usize) -> impl Iterator<Item = Arc<WrappedUserOperation>>;
+    fn get_top_operations(&self, n: usize) -> Vec<Arc<WrappedUserOperation>>;
 
     fn remove_operation(
         &mut self,
