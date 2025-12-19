@@ -1,5 +1,5 @@
 [package]
-name = "account-abstraction-core-v2"
+name = "account-abstraction-core"
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true

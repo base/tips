@@ -1,4 +1,4 @@
-# account-abstraction-core-v2
+# account-abstraction-core
 
 Clean architecture implementation for ERC-4337 account abstraction mempool and validation.
 

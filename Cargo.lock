@@ -26,29 +26,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "account-abstraction-core-v2"
-version = "0.1.0"
-dependencies = [
- "alloy-primitives",
- "alloy-provider",
- "alloy-rpc-types",
- "alloy-serde",
- "alloy-sol-types",
- "anyhow",
- "async-trait",
- "jsonrpsee",
- "op-alloy-network",
- "rdkafka",
- "reth-rpc-eth-types",
- "serde",
- "serde_json",
- "tips-core",
- "tokio",
- "tracing",
- "wiremock",
-]
-
-[[package]]
 name = "adler2"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7298,7 +7275,7 @@ dependencies = [
 name = "tips-ingress-rpc"
 version = "0.1.0"
 dependencies = [
- "account-abstraction-core-v2",
+ "account-abstraction-core",
  "alloy-consensus",
  "alloy-primitives",
  "alloy-provider",
