@@ -1,17 +1,17 @@
+pub mod health;
 pub mod metrics;
 pub mod queue;
 pub mod service;
 pub mod validation;
-
 use alloy_primitives::TxHash;
 use alloy_provider::{Provider, ProviderBuilder, RootProvider};
 use clap::Parser;
 use op_alloy_network::Optimism;
 use std::net::{IpAddr, SocketAddr};
 use std::str::FromStr;
-use tips_core::MeterBundleResponse;
+use tips_core::{AcceptedBundle, MeterBundleResponse};
 use tokio::sync::broadcast;
-use tracing::error;
+use tracing::{error, warn};
 use url::Url;
 
 #[derive(Debug, Clone, Copy)]
@@ -19,6 +19,7 @@ pub enum TxSubmissionMethod {
     Mempool,
     Kafka,
     MempoolAndKafka,
+    None,
 }
 
 impl FromStr for TxSubmissionMethod {
@@ -29,8 +30,9 @@ impl FromStr for TxSubmissionMethod {
             "mempool" => Ok(TxSubmissionMethod::Mempool),
             "kafka" => Ok(TxSubmissionMethod::Kafka),
             "mempool,kafka" | "kafka,mempool" => Ok(TxSubmissionMethod::MempoolAndKafka),
+            "none" => Ok(TxSubmissionMethod::None),
             _ => Err(format!(
-                "Invalid submission method: '{s}'. Valid options: mempool, kafka, mempool,kafka, kafka,mempool"
+                "Invalid submission method: '{s}'. Valid options: mempool, kafka, mempool,kafka, kafka,mempool, none"
             )),
         }
     }
@@ -83,6 +85,14 @@ pub struct Config {
     )]
     pub audit_topic: String,
 
+    /// User operation topic for pushing valid user operations
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_USER_OPERATION_TOPIC",
+        default_value = "tips-user-operation"
+    )]
+    pub user_operation_topic: String,
+
     #[arg(long, env = "TIPS_INGRESS_LOG_LEVEL", default_value = "info")]
     pub log_level: String,
 
@@ -125,6 +135,13 @@ pub struct Config {
     )]
     pub meter_bundle_timeout_ms: u64,
 
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_VALIDATE_USER_OPERATION_TIMEOUT_MS",
+        default_value = "2000"
+    )]
+    pub validate_user_operation_timeout_ms: u64,
+
     /// URLs of the builder RPC service for setting metering information
     #[arg(long, env = "TIPS_INGRESS_BUILDER_RPCS", value_delimiter = ',')]
     pub builder_rpcs: Vec<Url>,
@@ -136,23 +153,57 @@ pub struct Config {
         default_value = "100"
     )]
     pub max_buffered_meter_bundle_responses: usize,
+
+    /// Maximum number of backrun bundles to buffer in memory
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_MAX_BUFFERED_BACKRUN_BUNDLES",
+        default_value = "100"
+    )]
+    pub max_buffered_backrun_bundles: usize,
+
+    /// Address to bind the health check server to
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_HEALTH_CHECK_ADDR",
+        default_value = "0.0.0.0:8081"
+    )]
+    pub health_check_addr: SocketAddr,
+
+    /// chain id
+    #[arg(long, env = "TIPS_INGRESS_CHAIN_ID", default_value = "11")]
+    pub chain_id: u64,
+
+    /// Enable backrun bundle submission to op-rbuilder
+    #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
+    pub backrun_enabled: bool,
+
+    /// URL of third-party RPC endpoint to forward raw transactions to (enables forwarding if set)
+    #[arg(long, env = "TIPS_INGRESS_RAW_TX_FORWARD_RPC")]
+    pub raw_tx_forward_rpc: Option<Url>,
 }
 
 pub fn connect_ingress_to_builder(
-    event_rx: broadcast::Receiver<MeterBundleResponse>,
+    metering_rx: broadcast::Receiver<MeterBundleResponse>,
+    backrun_rx: broadcast::Receiver<AcceptedBundle>,
     builder_rpc: Url,
 ) {
-    tokio::spawn(async move {
-        let builder: RootProvider<Optimism> = ProviderBuilder::new()
-            .disable_recommended_fillers()
-            .network::<Optimism>()
-            .connect_http(builder_rpc);
+    let builder: RootProvider<Optimism> = ProviderBuilder::new()
+        .disable_recommended_fillers()
+        .network::<Optimism>()
+        .connect_http(builder_rpc);
 
-        let mut event_rx = event_rx;
+    let metering_builder = builder.clone();
+    tokio::spawn(async move {
+        let mut event_rx = metering_rx;
         while let Ok(event) = event_rx.recv().await {
-            // we only support one transaction per bundle for now
+            if event.results.is_empty() {
+                warn!(message = "received metering information with no transactions", hash=%event.bundle_hash);
+                continue;
+            }
+
             let tx_hash = event.results[0].tx_hash;
-            if let Err(e) = builder
+            if let Err(e) = metering_builder
                 .client()
                 .request::<(TxHash, MeterBundleResponse), ()>(
                     "base_setMeteringInformation",
@@ -161,6 +212,19 @@ pub fn connect_ingress_to_builder(
                 .await
             {
                 error!(error = %e, "Failed to set metering information for tx hash: {tx_hash}");
+            }
+        }
+    });
+
+    tokio::spawn(async move {
+        let mut event_rx = backrun_rx;
+        while let Ok(accepted_bundle) = event_rx.recv().await {
+            if let Err(e) = builder
+                .client()
+                .request::<(AcceptedBundle,), ()>("base_sendBackrunBundle", (accepted_bundle,))
+                .await
+            {
+                error!(error = ?e, "Failed to send backrun bundle to builder");
             }
         }
     });

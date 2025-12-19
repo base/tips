@@ -1,0 +1,49 @@
+---
+description: Make sure to always add clear comments within the codebase
+globs: *.go
+alwaysApply: true
+---
+# Standard: Language, Comments, and Documentation
+
+This rule defines the standards for language use and commenting within the codebase, prioritizing clarity and developer experience for engineers familiar with the project.
+
+**1. Language:**
+
+*   **All** code artifacts, including variable names, function names, comments, documentation, commit messages, and generated rules, **must** be written in **simple, clear, friendly and idiomatic English**.
+
+**2. Comments:**
+
+*   **Target Audience:** Assume the reader is an experienced developer familiar with Go and the general project context.
+*   **Prioritize Readability:** Code should be self-documenting whenever possible through clear naming and structure.
+*   **Avoid Redundant Comments:** Do **not** add comments that merely restate what the code clearly does. For example:
+    ```go
+    // Bad: Comment explains the obvious
+    // Increment count
+    count++
+
+    // Good: Comment starts with the function name
+    // GetUserByID finds a user by their ID
+    func GetUserByID(id string) (*User, error) { ... }
+    ```
+*   **Focus on the "Why", Not Just the "What":** Prioritize comments that explain *why* a particular approach was taken, especially if it's non-obvious, involves trade-offs, or relates to external factors or historical context.
+    *   Explain complex logic or algorithms briefly.
+    *   Clarify the purpose of seemingly arbitrary values or constants.
+    *   Document known limitations, potential issues, or future work (`TODO`, `FIXME`).
+    *   Add comments when fixing subtle bugs to explain the reasoning.
+    ```go
+    // Good: Explains the rationale for a non-obvious choice
+    // Use FNV-1a hash for Redis hash tags to optimize for speed and key length,
+    // as cryptographic security is not required for slot assignment.
+    func hashUserIDForTag(userID string) string { ... }
+
+    // Good: Explains a workaround or limitation
+    // TODO(GH-123): Refactor this when the upstream API supports batch requests.
+    for _, item := range items { ... }
+    ```
+*   **Placement:** Place comments on the line *before* the code they refer to, or sometimes at the end of a line for very short clarifications.
+
+**3. Documentation (e.g., READMEs, Design Docs):**
+
+*   Maintain clarity and conciseness.
+*   Keep documentation up-to-date with significant code changes.
+*   Use diagrams or examples where appropriate to illustrate complex concepts.

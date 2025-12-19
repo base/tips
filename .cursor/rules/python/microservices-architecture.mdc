@@ -1,0 +1,36 @@
+# .cursor/rules/python/microservices-architecture.mdc
+---
+description: Guidelines for Python microservice architecture
+globs: ["*.py"]
+alwaysApply: true
+---
+# Microservice Architecture Guidelines
+
+## Service Design
+- Keep services small and focused on a single business capability
+- Use FastAPI for HTTP APIs
+- Use gRPC for internal service communication
+- Implement health check endpoints
+- Use OpenAPI/Swagger for API documentation
+- Use proper service discovery
+- Implement proper circuit breaking
+- Use proper message queuing
+- Implement proper retry policies
+
+## Configuration
+- Use environment variables for service configuration
+- Store secrets in a secure vault (e.g., HashiCorp Vault)
+- Use configuration management for different environments
+- Implement feature flags for gradual rollouts
+
+## Observability
+- Implement structured logging using `structlog`
+- Use OpenTelemetry for distributed tracing
+- Implement metrics using Prometheus
+- Set up proper monitoring dashboards
+
+## Resilience
+- Implement circuit breakers for external calls
+- Use retries with exponential backoff
+- Implement rate limiting
+- Handle partial failures gracefully

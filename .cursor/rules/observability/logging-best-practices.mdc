@@ -1,0 +1,255 @@
+---
+description: Rules to follow when logging
+globs: ["*.go", "*.py"]
+---
+## Rule
+Ensure all logging statements are correct, useful, performant, and secure. Logs must accurately reflect the code's logic, provide sufficient context for debugging, avoid performance degradation, and never expose sensitive information.  Use appropriate log levels and avoid logging sensitive data, large objects, or high-frequency debug information.
+
+Refer to [logging best practices](https://docs.cbhq.net/infra/observability/logging) for more details.
+
+## Scope
+This rule ONLY APPLIES when ALL the following conditions are met:
+1. Code contains logging statements (logger.debug, log.info, console.log, etc.)
+2. The logging exhibits one or more of these problematic patterns (tagged with Defect Patterns and scenarios):
+   - **(SS-1) Logging Sensitive Data:** Exposing credentials, tokens, PII, or financial data (passwords, API keys, email addresses).
+   - **(SS-2) Logging Unsanitized Objects:** Logging entire request/response bodies or complex objects without removing sensitive fields.
+   - **(PF-1) Logging in High-Frequency Loops:** Placing log statements inside tight loops or on other hot paths like function entry/exit logging for every function, causing excessive volume.
+   - **(LV-1) Improper Log Level:** Using `DEBUG` or `TRACE` in non-development environments. Using `WARN` or `ERROR` for informational messages. 
+   - **(SM-1) Unit/Metric Mismatch:** The unit in the log message (e.g., "ms") does not match the variable's actual unit (e.g., nanoseconds).
+   - **(SM-2) Message Contradicts Logic:** The log message misrepresents the code's state (e.g., logging "Success" in an `if err!= nil` block).
+   - **(IS-1) Insufficient Context:** An error log is not actionable because it omits the `error` variable or critical identifiers (e.g., `transaction_id`).
+   - **(VR-2) Placeholder-Argument Mismatch:** The number of placeholders in a format string (e.g., `%s`) does not match the number of provided variables.
+   - **(RD-3) Vague or Ambiguous Message:** The log message is too generic to be useful (e.g., "Done", "Error").
+
+| Defect Patterns | Scenario Name |
+| --- | --- |
+| **RD:** Readability Issues | RD-1: Complicated domain-specific terminology<br>RD-2: Non-standard language used<br>RD-3: Poorly formatted or unclear messages |
+| **VR:** Variable Issues | VR-1: Incorrect variable value logging<br>VR-2: Placeholder–value mismatch |
+| **LV:** Logging Level Issues | LV-1: Improper verbosity level |
+| **SM:** Semantics Inconsistent | SM-1: Wrong unit or metric label<br>SM-2: Message text does not match the code<br>SM-3: Misused variables in the message |
+| **SS:** Sensitive Information | SS-1: Credentials logged in plain text<br>SS-2: Dumping whole objects without scrubbing |
+| **IS:** Insufficient Information | IS-1: Insufficient information |
+| **PF:** Performance Issues | PF-1: Logging on hot path<br>PF-2: Costly string operations |
+
+## Out of Scope
+This rule does NOT apply to:
+- ERROR and WARN level logs for genuine issues
+- INFO level logs for significant business events
+- Structured logging that includes only relevant, non-sensitive fields.
+- Logs that are properly sampled or rate-limited
+- Test files or development-only code
+- Logs that are conditionally enabled for debugging
+
+## Good Examples
+
+1. Appropriate log levels with structured data:
+```go
+logger.Info("User login successful", 
+  "user_id", userID,
+  "login_method", "oauth",
+  "ip_address", clientIP,
+)
+```
+
+2. ERROR logs with context but no sensitive data:
+```go
+logger.Error("Payment processing failed",
+  "error_code", "INSUFFICIENT_FUNDS",
+  "transaction_id", txnID,
+  "user_id", userID,
+  "retry_count", retryCount,
+)
+```
+```go
+user, err := db.FindUser(userID)
+if err!= nil {
+    logger.Error("Failed to find user", 
+      "error", err,
+      "user_id", userID,
+      "trace_id", traceID,
+    )
+    return
+}
+```
+
+
+3. Conditional debug logging:
+```go
+if config.DebugEnabled {
+    logger.Debug("Processing order for user", "user_id", userID)
+}
+```
+
+4. Sampling high-frequency events:
+```go
+// Only log 1% of successful requests
+if rand.Float32() < 0.01 {
+    logger.Info("Request processed successfully",
+        "endpoint", endpoint,
+        "duration_ms", duration.Milliseconds(),
+    )
+}
+```
+
+5. Structured logging with relevant fields:
+```go
+logger.Info("Order processed",
+  "order_id", order.ID,
+  "user_tier", user.Tier,
+  "payment_method", "card",
+  "processing_time_ms", processingTime,
+)
+```
+
+6. Summarizing after a loop instead of logging within it:
+```go
+processedCount := 0
+for _, item := range items {
+    if err := process(item); err == nil {
+        processedCount++
+    }
+}
+logger.Info("Batch processing complete",
+    "total_items", len(items),
+    "processed_count", processedCount,
+)
+```
+
+7. Logging specific, safe fields instead of a whole object:
+```go
+logger.Info("User profile updated",
+  "user_id", user.ID,
+  "user_tier", user.Tier,
+  "updated_fields", updatedFields,
+)
+```
+
+8. Ensuring unit consistency in logs
+```go 
+//... operation...
+duration := time.Since(startTime)
+logger.Info("Request processed", 
+    "duration_ms", duration.Milliseconds(),
+)
+```
+
+## Bad Examples
+
+1. (LV-1) DEBUG logging in production code:
+```go
+// DEBUG logs create excessive volume
+logger.Debug("Entering function processPayment")
+logger.Debug("Validating payment request")
+logger.Debug("Connecting to payment gateway")
+logger.Debug("Exiting function processPayment")
+```
+
+2. (PF-1) Logging inside loops:
+```go
+// Creates massive log volume
+for _, item := range items {
+  logger.Info("Processing item", "item_id", item.ID)
+  // ... process item
+}
+```
+
+3. (SS-2) Logging entire objects or request bodies:
+```go
+// Logs potentially sensitive data and large objects
+logger.Info("Received request", "request_body", fmt.Sprintf("%+v", requestBody))
+logger.Info("User object", "user", fmt.Sprintf("%+v", user))
+```
+```go
+// BAD: Logs the entire user object, potentially exposing PII.
+logger.Info("User object details", "user", fmt.Sprintf("%+v", user))
+```
+
+4. (SS-1) Logging sensitive information:
+```go
+// Exposes sensitive data in logs
+logger.Info("Authentication attempt",
+  "email", user.Email,
+  "password", password,
+  "api_key", apiKey,
+  "token", authToken,
+  "auth_token", authToken,
+  "bearer_token", bearerToken,
+  "credit_card", creditCard,
+)
+```
+
+5. (PF-1) Function entry/exit logging everywhere:
+```go
+// Excessive noise for every function
+func calculateTotal(items []Item) float64 {
+  logger.Debug("Entering calculateTotal")
+  total := 0.0
+  for _, item := range items {
+    total += item.Price
+  }
+  logger.Debug("Exiting calculateTotal", "total", total)
+  return total
+}
+```
+
+6. (SS-1) Logging URLs with sensitive information:
+```go
+// Exposes sensitive token in URL parameter  
+logger.Info("API request", "url", fmt.Sprintf("/api/users/%s/payments/%s?token=%s", userID, paymentID, token))
+```
+
+7. (SM-2) Message contradicts code logic:
+```go
+// BAD: A success message is logged in the error-handling block.
+err := processPayment(paymentDetails)
+if err!= nil {
+    logger.Info("Payment processed successfully", "transaction_id", paymentDetails.ID)
+    //... handle error...
+}
+```
+
+8. (IS-1) Insufficient context in an error log:
+```go
+// BAD: The log is not actionable because it omits the actual 'err' variable.
+err := db.Save(user)
+if err!= nil {
+    logger.Error("Failed to save user to database", "user_id", user.ID)
+}
+```
+
+9. (SM-1) Unit mismatch in the log message:
+```go
+// BAD: The log text claims "ms" but the variable is in nanoseconds.
+startTime := time.Now()
+//... operation...
+durationNanos := time.Since(startTime).Nanoseconds()
+logger.Info(fmt.Sprintf("Task completed in %d ms", durationNanos))
+```
+
+10. (VR-2) Placeholder-argument mismatch:
+```go
+// BAD: Two placeholders but only one argument provided.
+logger.Error(fmt.Sprintf("Login for user %s from %s failed", userID))
+```
+
+
+## Evaluation Process
+1. Identify all logging statements in the code
+2. Check log levels - flag DEBUG logs that aren't conditionally enabled
+3. Analyze control flow - for each logging statement, analyze its surrounding code to understand the logical context (e.g., is it inside an error-handling block like if err!= nil, a success path, or a loop?). Look for logging patterns inside loops or high-frequency operations
+4. Extract semantic intent - use natural language understanding to determine the meaning of the static log message text (e.g., does it imply success, failure, or a status update?).
+5. Correlate Logic and Intent - Compare the code's logical context with the message's semantic intent. Flag contradictions (e.g., a "success" message in a failure block - SM-2).
+6. Analyze Log Content and Variables:
+   - Flag the logging of entire un-sanitized objects, request bodies, or other large data structures (SS-2).
+   - Scan for sensitive data patterns (passwords, keys, PII) in variable names, message text, and URL parameters (SS-1).
+   - URLs with parameters that might contain sensitive data
+   - For metric variables (e.g., duration), verify consistency between the variable's actual unit and the unit stated in the log message (SM-1).
+   - In error-handling blocks, verify that the `error` variable itself is being logged to prevent IS-1.
+   - Check for function entry/exit logging patterns
+7. For each problematic pattern, suggest alternatives:
+   - Use appropriate log levels (ERROR, WARN, INFO)
+   - Sample high-frequency logs
+   - Log only relevant fields instead of entire objects
+   - Use structured logging with sanitized data
+   - Move detailed debugging to distributed tracing
+   - Rate-limit repetitive logs

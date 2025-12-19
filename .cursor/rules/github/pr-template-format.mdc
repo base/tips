@@ -1,0 +1,59 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+---
+description: Follow PR template format from .github/pull_request_template.md when creating pull request descriptions
+globs: "**/*"
+alwaysApply: false
+---
+
+# GitHub Pull Request Template Format
+
+When creating pull request descriptions, you **must** follow the format specified in `.github/pull_request_template.md` if it exists in the repository.
+
+## Rule Requirements
+
+1. **Check for Template**: Always check if `.github/pull_request_template.md` exists in the repository root before creating PR descriptions.
+
+2. **Use Template Structure**: If the template exists:
+   - Follow the exact section structure defined in the template
+   - Include all required sections from the template
+   - Maintain the same heading levels and formatting style
+   - Preserve any placeholder text guidelines or instructions
+   - Fill in the template sections with relevant information for the specific PR
+
+3. **Template Sections**: Common sections that should be preserved if present in the template include:
+   - **Summary/Description**: Brief overview of the changes
+   - **Changes Made**: Detailed list of modifications
+   - **Testing**: How the changes were tested
+   - **Type of Change**: Bug fix, feature, documentation, etc.
+   - **Checklist**: Action items or verification steps
+   - **Breaking Changes**: Any backward compatibility concerns
+   - **Related Issues**: Links to related issues or tickets
+
+4. **Fallback Behavior**: If no template exists, create a well-structured PR description with:
+   - Clear summary of changes
+   - Bullet points for key modifications
+   - Testing information if applicable
+   - Any relevant context or notes
+
+## Implementation Guidelines
+
+- **Read Template First**: Use tools to read the `.github/pull_request_template.md` file content before generating PR descriptions
+- **Preserve Formatting**: Maintain markdown formatting, comments, and structure from the template
+- **Fill Appropriately**: Replace template placeholders with actual, relevant information
+- **Be Comprehensive**: Ensure all template sections are addressed, even if briefly
+- **Stay Consistent**: Use the same tone and style as indicated by the template
+
+## Example Usage
+
+When creating a PR:
+1. Check for `.github/pull_request_template.md`
+2. If found, read the template content
+3. Generate PR description following the template structure
+4. Fill in each section with relevant information
+5. Ensure all required sections are included
+
+This rule ensures consistency across all pull requests in repositories that have established PR templates, while providing a sensible fallback for repositories without templates.

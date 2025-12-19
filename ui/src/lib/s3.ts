@@ -1,6 +1,6 @@
 import {
   GetObjectCommand,
-  ListObjectsV2Command,
+  PutObjectCommand,
   S3Client,
   type S3ClientConfig,
 } from "@aws-sdk/client-s3";
@@ -60,7 +60,6 @@ async function getObjectContent(key: string): Promise<string | null> {
     const body = await response.Body?.transformToString();
     return body || null;
   } catch (error) {
-    console.error(`Failed to get S3 object ${key}:`, error);
     return null;
   }
 }
@@ -86,15 +85,73 @@ export async function getTransactionMetadataByHash(
   }
 }
 
+export interface BundleTransaction {
+  signer: string;
+  type: string;
+  chainId: string;
+  nonce: string;
+  gas: string;
+  maxFeePerGas: string;
+  maxPriorityFeePerGas: string;
+  to: string;
+  value: string;
+  accessList: unknown[];
+  input: string;
+  r: string;
+  s: string;
+  yParity: string;
+  v: string;
+  hash: string;
+}
+
+export interface MeterBundleResult {
+  coinbaseDiff: string;
+  ethSentToCoinbase: string;
+  fromAddress: string;
+  gasFees: string;
+  gasPrice: string;
+  gasUsed: number;
+  toAddress: string;
+  txHash: string;
+  value: string;
+  executionTimeUs: number;
+}
+
+export interface MeterBundleResponse {
+  bundleGasPrice: string;
+  bundleHash: string;
+  coinbaseDiff: string;
+  ethSentToCoinbase: string;
+  gasFees: string;
+  results: MeterBundleResult[];
+  stateBlockNumber: number;
+  totalGasUsed: number;
+  totalExecutionTimeUs: number;
+}
+
+export interface BundleData {
+  uuid: string;
+  txs: BundleTransaction[];
+  block_number: string;
+  max_timestamp: number;
+  reverting_tx_hashes: string[];
+  meter_bundle_response: MeterBundleResponse;
+}
+
+export interface BundleEventData {
+  key: string;
+  timestamp: number;
+  bundle?: BundleData;
+  block_number?: number;
+  block_hash?: string;
+  builder?: string;
+  flashblock_index?: number;
+  reason?: string;
+}
+
 export interface BundleEvent {
   event: string;
-  data: {
-    key: string;
-    timestamp: number;
-    bundle?: {
-      revertingTxHashes: Array<string>;
-    };
-  };
+  data: BundleEventData;
 }
 
 export interface BundleHistory {
@@ -122,30 +179,72 @@ export async function getBundleHistory(
   }
 }
 
-export async function listAllBundleKeys(): Promise<string[]> {
+export interface BlockTransaction {
+  hash: string;
+  from: string;
+  to: string | null;
+  gasUsed: bigint;
+  executionTimeUs: number | null;
+  bundleId: string | null;
+  index: number;
+}
+
+export interface BlockData {
+  hash: string;
+  number: bigint;
+  timestamp: bigint;
+  transactions: BlockTransaction[];
+  gasUsed: bigint;
+  gasLimit: bigint;
+  cachedAt: number;
+}
+
+export async function getBlockFromCache(
+  blockHash: string,
+): Promise<BlockData | null> {
+  const key = `blocks/${blockHash}`;
+  const content = await getObjectContent(key);
+
+  if (!content) {
+    return null;
+  }
+
   try {
-    const command = new ListObjectsV2Command({
+    const parsed = JSON.parse(content);
+    return {
+      ...parsed,
+      number: BigInt(parsed.number),
+      timestamp: BigInt(parsed.timestamp),
+      gasUsed: BigInt(parsed.gasUsed),
+      gasLimit: BigInt(parsed.gasLimit),
+      transactions: parsed.transactions.map(
+        (tx: BlockTransaction & { gasUsed: string }) => ({
+          ...tx,
+          gasUsed: BigInt(tx.gasUsed),
+        }),
+      ),
+    } as BlockData;
+  } catch (error) {
+    console.error(`Failed to parse block data for hash ${blockHash}:`, error);
+    return null;
+  }
+}
+
+export async function cacheBlockData(blockData: BlockData): Promise<void> {
+  const key = `blocks/${blockData.hash}`;
+
+  try {
+    const command = new PutObjectCommand({
       Bucket: BUCKET_NAME,
-      Prefix: "bundles/",
+      Key: key,
+      Body: JSON.stringify(blockData, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value,
+      ),
+      ContentType: "application/json",
     });
 
-    const response = await s3Client.send(command);
-    const bundleKeys: string[] = [];
-
-    if (response.Contents) {
-      for (const object of response.Contents) {
-        if (object.Key?.startsWith("bundles/")) {
-          const bundleId = object.Key.replace("bundles/", "");
-          if (bundleId) {
-            bundleKeys.push(bundleId);
-          }
-        }
-      }
-    }
-
-    return bundleKeys;
+    await s3Client.send(command);
   } catch (error) {
-    console.error("Failed to list S3 bundle keys:", error);
-    return [];
+    console.error(`Failed to cache block data for ${blockData.hash}:`, error);
   }
 }

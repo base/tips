@@ -1,0 +1,25 @@
+# .cursor/rules/python/distributed-computing.mdc
+---
+description: Guidelines for distributed computing with Ray
+globs: ["*.py"]
+alwaysApply: true
+---
+# Distributed Computing Standards
+
+## Ray Framework Usage
+- Use Ray for distributed task processing
+- Implement proper actor patterns
+- Use Ray's object store effectively
+- Handle distributed errors properly
+
+## Scaling Patterns
+- Implement proper auto-scaling
+- Use resource management effectively
+- Handle node failures gracefully
+- Implement proper checkpointing
+
+## Performance
+- Use Ray's performance monitoring
+- Implement proper batching
+- Use Ray's memory management
+- Profile distributed operations

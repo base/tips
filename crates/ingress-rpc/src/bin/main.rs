@@ -1,18 +1,19 @@
-use alloy_provider::{ProviderBuilder, RootProvider};
+use alloy_provider::ProviderBuilder;
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
 use tips_audit::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
-use tips_core::MeterBundleResponse;
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
+use tips_core::metrics::init_prometheus_exporter;
+use tips_core::{AcceptedBundle, MeterBundleResponse};
 use tips_ingress_rpc::Config;
 use tips_ingress_rpc::connect_ingress_to_builder;
-use tips_ingress_rpc::metrics::init_prometheus_exporter;
-use tips_ingress_rpc::queue::KafkaQueuePublisher;
-use tips_ingress_rpc::service::{IngressApiServer, IngressService};
+use tips_ingress_rpc::health::bind_health_server;
+use tips_ingress_rpc::queue::KafkaMessageQueue;
+use tips_ingress_rpc::service::{IngressApiServer, IngressService, Providers};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
@@ -35,17 +36,25 @@ async fn main() -> anyhow::Result<()> {
         mempool_url = %config.mempool_url,
         simulation_rpc = %config.simulation_rpc,
         metrics_address = %config.metrics_addr,
+        health_check_address = %config.health_check_addr,
     );
 
-    let provider: RootProvider<Optimism> = ProviderBuilder::new()
-        .disable_recommended_fillers()
-        .network::<Optimism>()
-        .connect_http(config.mempool_url);
-
-    let simulation_provider: RootProvider<Optimism> = ProviderBuilder::new()
-        .disable_recommended_fillers()
-        .network::<Optimism>()
-        .connect_http(config.simulation_rpc);
+    let providers = Providers {
+        mempool: ProviderBuilder::new()
+            .disable_recommended_fillers()
+            .network::<Optimism>()
+            .connect_http(config.mempool_url),
+        simulation: ProviderBuilder::new()
+            .disable_recommended_fillers()
+            .network::<Optimism>()
+            .connect_http(config.simulation_rpc),
+        raw_tx_forward: config.raw_tx_forward_rpc.clone().map(|url| {
+            ProviderBuilder::new()
+                .disable_recommended_fillers()
+                .network::<Optimism>()
+                .connect_http(url)
+        }),
+    };
 
     let ingress_client_config = ClientConfig::from_iter(load_kafka_config_from_file(
         &config.ingress_kafka_properties,
@@ -53,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
 
     let queue_producer: FutureProducer = ingress_client_config.create()?;
 
-    let queue = KafkaQueuePublisher::new(queue_producer, config.ingress_topic);
+    let queue = KafkaMessageQueue::new(queue_producer);
 
     let audit_client_config =
         ClientConfig::from_iter(load_kafka_config_from_file(&config.audit_kafka_properties)?);
@@ -66,17 +75,27 @@ async fn main() -> anyhow::Result<()> {
 
     let (builder_tx, _) =
         broadcast::channel::<MeterBundleResponse>(config.max_buffered_meter_bundle_responses);
+    let (builder_backrun_tx, _) =
+        broadcast::channel::<AcceptedBundle>(config.max_buffered_backrun_bundles);
     config.builder_rpcs.iter().for_each(|builder_rpc| {
-        let builder_rx = builder_tx.subscribe();
-        connect_ingress_to_builder(builder_rx, builder_rpc.clone());
+        let metering_rx = builder_tx.subscribe();
+        let backrun_rx = builder_backrun_tx.subscribe();
+        connect_ingress_to_builder(metering_rx, backrun_rx, builder_rpc.clone());
     });
 
+    let health_check_addr = config.health_check_addr;
+    let (bound_health_addr, health_handle) = bind_health_server(health_check_addr).await?;
+    info!(
+        message = "Health check server started",
+        address = %bound_health_addr
+    );
+
     let service = IngressService::new(
-        provider,
-        simulation_provider,
+        providers,
         queue,
         audit_tx,
         builder_tx,
+        builder_backrun_tx,
         cfg,
     );
     let bind_addr = format!("{}:{}", config.address, config.port);
@@ -91,5 +110,7 @@ async fn main() -> anyhow::Result<()> {
     );
 
     handle.stopped().await;
+    health_handle.abort();
+
     Ok(())
 }
