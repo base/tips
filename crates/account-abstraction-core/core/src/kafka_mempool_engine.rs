@@ -61,7 +61,7 @@ impl KafkaMempoolEngine {
         kafka_consumer: Arc<dyn KafkaConsumer>,
         pool_config: Option<PoolConfig>,
     ) -> Self {
-        let pool_config = pool_config.unwrap_or(PoolConfig::default());
+        let pool_config = pool_config.unwrap_or_default();
         let mempool = Arc::new(RwLock::new(mempool::MempoolImpl::new(pool_config)));
         Self {
             mempool,

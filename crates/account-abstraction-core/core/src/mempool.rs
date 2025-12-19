@@ -10,7 +10,6 @@ pub struct PoolConfig {
     minimum_max_fee_per_gas: u128,
 }
 
-
 #[derive(Eq, PartialEq, Clone, Debug)]
 pub struct OrderedPoolOperation {
     pub pool_operation: WrappedUserOperation,
