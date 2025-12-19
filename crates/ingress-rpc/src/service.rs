@@ -1,4 +1,6 @@
+use account_abstraction_core_v2::domain::ReputationService;
 use account_abstraction_core_v2::infrastructure::base_node::validator::BaseNodeValidator;
+use account_abstraction_core_v2::services::ReputationServiceImpl;
 use account_abstraction_core_v2::services::interfaces::user_op_validator::UserOperationValidator;
 use account_abstraction_core_v2::{Mempool, MempoolEngine};
 use alloy_consensus::transaction::Recovered;
@@ -71,7 +73,7 @@ pub struct IngressService<Q: MessageQueue, M: Mempool> {
     tx_submission_method: TxSubmissionMethod,
     bundle_queue_publisher: BundleQueuePublisher<Q>,
     user_op_queue_publisher: UserOpQueuePublisher<Q>,
-    mempool_engine: Arc<MempoolEngine<M>>,
+    reputation_service: Arc<ReputationServiceImpl<M>>,
     audit_channel: mpsc::UnboundedSender<BundleEvent>,
     send_transaction_default_lifetime_seconds: u64,
     metrics: Metrics,
@@ -100,7 +102,7 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
             config.validate_user_operation_timeout_ms,
         );
         let queue_connection = Arc::new(queue);
-
+        let reputation_service = ReputationServiceImpl::new(mempool_engine.get_mempool());
         Self {
             mempool_provider,
             simulation_provider,
@@ -115,7 +117,7 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
                 queue_connection.clone(),
                 config.ingress_topic,
             ),
-            mempool_engine,
+            reputation_service: Arc::new(reputation_service),
             audit_channel,
             send_transaction_default_lifetime_seconds: config
                 .send_transaction_default_lifetime_seconds,
@@ -349,6 +351,12 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
             entry_point,
             chain_id: 1,
         };
+
+        // DO Nothing with reputation at the moment as this is scafolding
+        let ___ = self
+            .reputation_service
+            .get_reputation(&request.user_operation.sender())
+            .await;
 
         let user_op_hash = request.hash().map_err(|e| {
             warn!(message = "Failed to hash user operation", error = %e);
