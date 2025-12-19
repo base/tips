@@ -7,13 +7,13 @@ use alloy_provider::{Provider, RootProvider};
 use anyhow::{Context, Result, bail};
 use common::kafka::wait_for_audit_event_by_hash;
 use op_alloy_network::Optimism;
+use serial_test::serial;
 use tips_audit::types::BundleEvent;
 use tips_core::BundleExtensions;
 use tips_system_tests::client::TipsRpcClient;
 use tips_system_tests::fixtures::{
     create_funded_signer, create_optimism_provider, create_signed_transaction,
 };
-use serial_test::serial;
 use tokio::time::{Duration, Instant, sleep};
 
 /// Get the URL for integration tests against the TIPS ingress service
@@ -151,7 +151,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
     let signed_tx = create_signed_transaction(&signer, to, value, nonce, gas_limit, gas_price)?;
     let tx_hash = keccak256(&signed_tx);
 
-    // First send the transaction to mempool 
+    // First send the transaction to mempool
     let _mempool_tx_hash = client
         .send_raw_transaction(signed_tx.clone())
         .await
@@ -159,7 +159,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
 
     let bundle = Bundle {
         txs: vec![signed_tx],
-        block_number: 0, 
+        block_number: 0,
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![tx_hash],
@@ -169,7 +169,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
         flashblock_number_max: None,
     };
 
-    // Send backrun bundle to TIPS 
+    // Send backrun bundle to TIPS
     let bundle_hash = client
         .send_backrun_bundle(bundle)
         .await
@@ -207,7 +207,7 @@ async fn test_send_bundle_accepted() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    // Wait for transaction to appear on sequencer 
+    // Wait for transaction to appear on sequencer
     wait_for_transaction_seen(&sequencer_provider, tx_hash.into(), 60)
         .await
         .context("Bundle transaction never appeared on sequencer")?;
@@ -250,7 +250,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         .get_transaction_count(signer.address())
         .await?;
 
-    // Create two transactions 
+    // Create two transactions
     let tx1 = create_signed_transaction(
         &signer,
         Address::from([0x33; 20]),
@@ -284,7 +284,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
 
     let bundle = Bundle {
         txs: vec![tx1, tx2],
-        block_number: 0, 
+        block_number: 0,
         min_timestamp: None,
         max_timestamp: None,
         reverting_tx_hashes: vec![tx1_hash, tx2_hash],
@@ -316,7 +316,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         "Bundle hash should match keccak256(concat(tx1_hash, tx2_hash))"
     );
 
-    // Verify audit channel emitted a Received event 
+    // Verify audit channel emitted a Received event
     let audit_event = wait_for_audit_event_by_hash(&bundle_hash.bundle_hash, |event| {
         matches!(event, BundleEvent::Received { .. })
     })
@@ -333,7 +333,7 @@ async fn test_send_bundle_with_two_transactions() -> Result<()> {
         other => panic!("Expected Received audit event, got {:?}", other),
     }
 
-    // Wait for both transactions to appear on sequencer 
+    // Wait for both transactions to appear on sequencer
     wait_for_transaction_seen(&sequencer_provider, tx1_hash.into(), 60)
         .await
         .context("Bundle tx1 never appeared on sequencer")?;
