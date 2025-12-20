@@ -1,0 +1,4 @@
+# Kafka configuration properties for host-based integration tests
+bootstrap.servers=localhost:9092
+message.timeout.ms=5000
+
