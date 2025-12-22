@@ -1,42 +1,19 @@
-use crate::types::{ValidationResult, VersionedUserOperation};
+use crate::domain::types::{ValidationResult, VersionedUserOperation};
+use crate::services::interfaces::user_op_validator::UserOperationValidator;
 use alloy_primitives::Address;
 use alloy_provider::{Provider, RootProvider};
 use async_trait::async_trait;
-use jsonrpsee::core::RpcResult;
 use op_alloy_network::Optimism;
-use reth_rpc_eth_types::EthApiError;
 use std::sync::Arc;
 use tokio::time::{Duration, timeout};
-#[async_trait]
-pub trait AccountAbstractionService: Send + Sync {
-    async fn validate_user_operation(
-        &self,
-        user_operation: &VersionedUserOperation,
-        entry_point: &Address,
-    ) -> RpcResult<ValidationResult>;
-}
 
 #[derive(Debug, Clone)]
-pub struct AccountAbstractionServiceImpl {
+pub struct BaseNodeValidator {
     simulation_provider: Arc<RootProvider<Optimism>>,
     validate_user_operation_timeout: u64,
 }
 
-#[async_trait]
-impl AccountAbstractionService for AccountAbstractionServiceImpl {
-    async fn validate_user_operation(
-        &self,
-        user_operation: &VersionedUserOperation,
-        entry_point: &Address,
-    ) -> RpcResult<ValidationResult> {
-        // Steps: Reputation Service Validate
-        // Steps: Base Node Validate User Operation
-        self.base_node_validate_user_operation(user_operation, entry_point)
-            .await
-    }
-}
-
-impl AccountAbstractionServiceImpl {
+impl BaseNodeValidator {
     pub fn new(
         simulation_provider: Arc<RootProvider<Optimism>>,
         validate_user_operation_timeout: u64,
@@ -46,12 +23,15 @@ impl AccountAbstractionServiceImpl {
             validate_user_operation_timeout,
         }
     }
+}
 
-    pub async fn base_node_validate_user_operation(
+#[async_trait]
+impl UserOperationValidator for BaseNodeValidator {
+    async fn validate_user_operation(
         &self,
         user_operation: &VersionedUserOperation,
         entry_point: &Address,
-    ) -> RpcResult<ValidationResult> {
+    ) -> anyhow::Result<ValidationResult> {
         let result = timeout(
             Duration::from_secs(self.validate_user_operation_timeout),
             self.simulation_provider
@@ -62,13 +42,10 @@ impl AccountAbstractionServiceImpl {
 
         let validation_result: ValidationResult = match result {
             Err(_) => {
-                return Err(
-                    EthApiError::InvalidParams("Timeout on requesting validation".into())
-                        .into_rpc_err(),
-                );
+                return Err(anyhow::anyhow!("Timeout on requesting validation"));
             }
             Ok(Err(e)) => {
-                return Err(EthApiError::InvalidParams(e.to_string()).into_rpc_err()); // likewise, map RPC error to your error type
+                return Err(anyhow::anyhow!("RPC error: {e}"));
             }
             Ok(Ok(v)) => v,
         };
@@ -109,11 +86,11 @@ mod tests {
         })
     }
 
-    fn new_service(mock_server: &MockServer) -> AccountAbstractionServiceImpl {
+    fn new_validator(mock_server: &MockServer) -> BaseNodeValidator {
         let provider: RootProvider<Optimism> =
             RootProvider::new_http(mock_server.uri().parse().unwrap());
         let simulation_provider = Arc::new(provider);
-        AccountAbstractionServiceImpl::new(simulation_provider, VALIDATION_TIMEOUT_SECS)
+        BaseNodeValidator::new(simulation_provider, VALIDATION_TIMEOUT_SECS)
     }
 
     #[tokio::test]
@@ -127,11 +104,11 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let service = new_service(&mock_server);
+        let validator = new_validator(&mock_server);
         let user_operation = new_test_user_operation_v06();
 
-        let result = service
-            .base_node_validate_user_operation(&user_operation, &Address::ZERO)
+        let result = validator
+            .validate_user_operation(&user_operation, &Address::ZERO)
             .await;
 
         assert!(result.is_err());
@@ -154,15 +131,16 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let service = new_service(&mock_server);
+        let validator = new_validator(&mock_server);
         let user_operation = new_test_user_operation_v06();
 
-        let result = service
-            .base_node_validate_user_operation(&user_operation, &Address::ZERO)
+        let result = validator
+            .validate_user_operation(&user_operation, &Address::ZERO)
             .await;
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Internal error"));
     }
+
     #[tokio::test]
     async fn base_node_validate_user_operation_succeeds() {
         let mock_server = setup_mock_server().await;
@@ -182,11 +160,11 @@ mod tests {
             .mount(&mock_server)
             .await;
 
-        let service = new_service(&mock_server);
+        let validator = new_validator(&mock_server);
         let user_operation = new_test_user_operation_v06();
 
-        let result = service
-            .base_node_validate_user_operation(&user_operation, &Address::ZERO)
+        let result = validator
+            .validate_user_operation(&user_operation, &Address::ZERO)
             .await
             .unwrap();
 

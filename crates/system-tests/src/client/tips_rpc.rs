@@ -33,6 +33,13 @@ impl<N: Network> TipsRpcClient<N> {
             .map_err(Into::into)
     }
 
+    pub async fn send_backrun_bundle(&self, bundle: Bundle) -> Result<BundleHash> {
+        self.provider
+            .raw_request("eth_sendBackrunBundle".into(), [bundle])
+            .await
+            .map_err(Into::into)
+    }
+
     pub async fn cancel_bundle(&self, request: CancelBundle) -> Result<bool> {
         self.provider
             .raw_request("eth_cancelBundle".into(), [request])
