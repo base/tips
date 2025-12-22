@@ -148,14 +148,12 @@ fn validate_backrun_bundle_limits(
     }
     if txs_count > max_backrun_txs {
         return Err(format!(
-            "Backrun bundle exceeds max transaction count: {} > {}",
-            txs_count, max_backrun_txs
+            "Backrun bundle exceeds max transaction count: {txs_count} > {max_backrun_txs}",
         ));
     }
     if total_gas_limit > max_backrun_gas_limit {
         return Err(format!(
-            "Backrun bundle exceeds max gas limit: {} > {}",
-            total_gas_limit, max_backrun_gas_limit
+            "Backrun bundle exceeds max gas limit: {total_gas_limit} > {max_backrun_gas_limit}",
         ));
     }
     Ok(())
