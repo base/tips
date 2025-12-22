@@ -19,7 +19,8 @@ function formatBigInt(value: bigint, decimals: number, scale: bigint): string {
   return `${whole}.${frac.toString().padStart(decimals, "0")}`;
 }
 
-function formatHexValue(hex: string): string {
+function formatHexValue(hex: string | undefined): string {
+  if (!hex) return "—";
   const value = BigInt(hex);
   if (value >= WEI_PER_ETH / 10000n) {
     return `${formatBigInt(value, 6, WEI_PER_ETH)} ETH`;
@@ -30,7 +31,8 @@ function formatHexValue(hex: string): string {
   return `${value.toString()} Wei`;
 }
 
-function formatGasPrice(hex: string): string {
+function formatGasPrice(hex: string | undefined): string {
+  if (!hex) return "—";
   const value = BigInt(hex);
   return `${formatBigInt(value, 2, WEI_PER_GWEI)} Gwei`;
 }
