@@ -135,6 +135,32 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
     }
 }
 
+fn validate_backrun_bundle_limits(
+    txs_count: usize,
+    total_gas_limit: u64,
+    max_backrun_txs: usize,
+    max_backrun_gas_limit: u64,
+) -> Result<(), String> {
+    if txs_count < 2 {
+        return Err(
+            "Backrun bundle must have at least 2 transactions (target + backrun)".to_string(),
+        );
+    }
+    if txs_count > max_backrun_txs {
+        return Err(format!(
+            "Backrun bundle exceeds max transaction count: {} > {}",
+            txs_count, max_backrun_txs
+        ));
+    }
+    if total_gas_limit > max_backrun_gas_limit {
+        return Err(format!(
+            "Backrun bundle exceeds max gas limit: {} > {}",
+            total_gas_limit, max_backrun_gas_limit
+        ));
+    }
+    Ok(())
+}
+
 #[async_trait]
 impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for IngressService<Q, M> {
     async fn send_backrun_bundle(&self, bundle: Bundle) -> RpcResult<BundleHash> {
@@ -149,30 +175,14 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
         let (accepted_bundle, bundle_hash) =
             self.validate_parse_and_meter_bundle(&bundle, false).await?;
 
-        if accepted_bundle.txs.len() < 2 {
-            return Err(EthApiError::InvalidParams(
-                "Backrun bundle must have at least 2 transactions (target + backrun)".into(),
-            )
-            .into_rpc_err());
-        }
-
-        if accepted_bundle.txs.len() > self.max_backrun_txs {
-            return Err(EthApiError::InvalidParams(format!(
-                "Backrun bundle exceeds max transaction count: {} > {}",
-                accepted_bundle.txs.len(),
-                self.max_backrun_txs
-            ))
-            .into_rpc_err());
-        }
-
         let total_gas_limit: u64 = accepted_bundle.txs.iter().map(|tx| tx.gas_limit()).sum();
-        if total_gas_limit > self.max_backrun_gas_limit {
-            return Err(EthApiError::InvalidParams(format!(
-                "Backrun bundle exceeds max gas limit: {} > {}",
-                total_gas_limit, self.max_backrun_gas_limit
-            ))
-            .into_rpc_err());
-        }
+        validate_backrun_bundle_limits(
+            accepted_bundle.txs.len(),
+            total_gas_limit,
+            self.max_backrun_txs,
+            self.max_backrun_gas_limit,
+        )
+        .map_err(|e| EthApiError::InvalidParams(e).into_rpc_err())?;
 
         self.metrics.backrun_bundles_received_total.increment(1);
 
@@ -879,5 +889,27 @@ mod tests {
             .await;
 
         assert!(wrong_user_op_result.is_err());
+    }
+
+    #[test]
+    fn test_validate_backrun_bundle_rejects_invalid() {
+        // Too few transactions (need at least 2: target + backrun)
+        let result = validate_backrun_bundle_limits(1, 21000, 5, 5000000);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("at least 2 transactions"));
+
+        // Exceeds max tx count
+        let result = validate_backrun_bundle_limits(6, 21000, 5, 5000000);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .contains("exceeds max transaction count")
+        );
+
+        // Exceeds max gas limit
+        let result = validate_backrun_bundle_limits(2, 6000000, 5, 5000000);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds max gas limit"));
     }
 }
