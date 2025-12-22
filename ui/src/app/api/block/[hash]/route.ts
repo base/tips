@@ -47,6 +47,13 @@ async function fetchBlockFromRpc(
   }
 }
 
+// On OP Stack, the first transaction (index 0) is the L1 attributes deposit transaction.
+// This is not a perfect check (ideally we'd check tx.type === 'deposit' or type 0x7e),
+// but sufficient for filtering out system transactions that don't need simulation data.
+function isSystemTransaction(tx: BlockTransaction): boolean {
+  return tx.index === 0;
+}
+
 async function enrichTransactionWithBundleData(
   txHash: string,
 ): Promise<{ bundleId: string | null; executionTimeUs: number | null }> {
@@ -78,6 +85,49 @@ async function enrichTransactionWithBundleData(
   };
 }
 
+async function refetchMissingTransactionSimulations(
+  block: BlockData,
+): Promise<{ updatedBlock: BlockData; hasUpdates: boolean }> {
+  const transactionsToRefetch = block.transactions.filter(
+    (tx) => tx.bundleId === null && !isSystemTransaction(tx),
+  );
+
+  if (transactionsToRefetch.length === 0) {
+    return { updatedBlock: block, hasUpdates: false };
+  }
+
+  const refetchResults = await Promise.all(
+    transactionsToRefetch.map(async (tx) => {
+      const { bundleId, executionTimeUs } =
+        await enrichTransactionWithBundleData(tx.hash);
+      return { hash: tx.hash, bundleId, executionTimeUs };
+    }),
+  );
+
+  let hasUpdates = false;
+  const updatedTransactions = block.transactions.map((tx) => {
+    const refetchResult = refetchResults.find((r) => r.hash === tx.hash);
+    if (refetchResult && refetchResult.bundleId !== null) {
+      hasUpdates = true;
+      return {
+        ...tx,
+        bundleId: refetchResult.bundleId,
+        executionTimeUs: refetchResult.executionTimeUs,
+      };
+    }
+    return tx;
+  });
+
+  return {
+    updatedBlock: {
+      ...block,
+      transactions: updatedTransactions,
+      cachedAt: hasUpdates ? Date.now() : block.cachedAt,
+    },
+    hasUpdates,
+  };
+}
+
 export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ hash: string }> },
@@ -87,7 +137,14 @@ export async function GET(
 
     const cachedBlock = await getBlockFromCache(hash);
     if (cachedBlock) {
-      return NextResponse.json(serializeBlockData(cachedBlock));
+      const { updatedBlock, hasUpdates } =
+        await refetchMissingTransactionSimulations(cachedBlock);
+
+      if (hasUpdates) {
+        await cacheBlockData(updatedBlock);
+      }
+
+      return NextResponse.json(serializeBlockData(updatedBlock));
     }
 
     const rpcBlock = await fetchBlockFromRpc(hash);
