@@ -39,6 +39,13 @@ pub fn print_results(results: &TestResults) {
         results.results.total_included,
         (results.results.total_included as f64 / results.results.total_sent as f64) * 100.0
     );
+    if results.results.total_reverted > 0 {
+        println!(
+            "  Reverted:            {} ({:.1}%)",
+            results.results.total_reverted,
+            (results.results.total_reverted as f64 / results.results.total_sent as f64) * 100.0
+        );
+    }
     println!(
         "  Timed Out:           {} ({:.1}%)",
         results.results.total_timed_out,

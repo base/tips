@@ -13,8 +13,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
-const MAX_PENDING_TXS_PER_WALLET: u64 = 4;
-const NONCE_POLL_INTERVAL_MS: u64 = 200;
 const MAX_RETRIES: u32 = 3;
 const INITIAL_BACKOFF_MS: u64 = 100;
 
@@ -65,8 +63,6 @@ impl<N: Network> SenderTask<N> {
         while Instant::now() < deadline {
             ticker.tick().await;
 
-            self.wait_for_nonce_slot(nonce).await?;
-
             let recipient = self.random_address();
             let tx_bytes = self.create_transaction(recipient, nonce)?;
             let tx_hash = keccak256(&tx_bytes);
@@ -114,21 +110,5 @@ impl<N: Network> SenderTask<N> {
         let mut bytes = [0u8; 20];
         self.rng.fill(&mut bytes);
         Address::from(bytes)
-    }
-
-    async fn wait_for_nonce_slot(&self, next_nonce: u64) -> Result<()> {
-        loop {
-            let chain_nonce = self
-                .sequencer
-                .get_transaction_count(self.wallet.address)
-                .await
-                .context("Failed to refresh wallet nonce")?;
-
-            if next_nonce.saturating_sub(chain_nonce) < MAX_PENDING_TXS_PER_WALLET {
-                return Ok(());
-            }
-
-            sleep(Duration::from_millis(NONCE_POLL_INTERVAL_MS)).await;
-        }
     }
 }

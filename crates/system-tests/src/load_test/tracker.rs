@@ -8,8 +8,11 @@ pub struct TransactionTracker {
     // Pending transactions (tx_hash -> send_time)
     pending: DashMap<B256, Instant>,
 
-    // Included transactions
+    // Included transactions (succeeded)
     included: DashMap<B256, ()>,
+
+    // Reverted transactions (included but status == false)
+    reverted: DashMap<B256, ()>,
 
     // Timed out transactions
     timed_out: DashMap<B256, ()>,
@@ -27,6 +30,7 @@ impl TransactionTracker {
         Arc::new(Self {
             pending: DashMap::new(),
             included: DashMap::new(),
+            reverted: DashMap::new(),
             timed_out: DashMap::new(),
             send_errors: AtomicU64::new(0),
             test_start: Instant::now(),
@@ -42,9 +46,16 @@ impl TransactionTracker {
         self.send_errors.fetch_add(1, Ordering::Relaxed);
     }
 
+    /// Record a transaction that was included and succeeded (status == true)
     pub fn record_included(&self, tx_hash: B256) {
         self.pending.remove(&tx_hash);
         self.included.insert(tx_hash, ());
+    }
+
+    /// Record a transaction that was included but reverted (status == false)
+    pub fn record_reverted(&self, tx_hash: B256) {
+        self.pending.remove(&tx_hash);
+        self.reverted.insert(tx_hash, ());
     }
 
     pub fn record_timeout(&self, tx_hash: B256) {
@@ -78,11 +89,16 @@ impl TransactionTracker {
 
     // Metrics getters
     pub fn total_sent(&self) -> u64 {
-        (self.pending.len() + self.included.len() + self.timed_out.len()) as u64
+        (self.pending.len() + self.included.len() + self.reverted.len() + self.timed_out.len())
+            as u64
     }
 
     pub fn total_included(&self) -> u64 {
         self.included.len() as u64
+    }
+
+    pub fn total_reverted(&self) -> u64 {
+        self.reverted.len() as u64
     }
 
     pub fn total_pending(&self) -> u64 {

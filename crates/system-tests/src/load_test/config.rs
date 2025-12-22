@@ -28,7 +28,7 @@ pub struct SetupArgs {
     pub sequencer: String,
 
     /// Number of wallets to create and fund
-    #[arg(long, default_value = "100")]
+    #[arg(long, default_value = "10")]
     pub num_wallets: usize,
 
     /// Amount of ETH to fund each wallet
@@ -59,7 +59,7 @@ pub struct LoadArgs {
     pub rate: u64,
 
     /// Test duration in seconds
-    #[arg(long, default_value = "300")]
+    #[arg(long, default_value = "60")]
     pub duration: u64,
 
     /// Timeout for transaction inclusion (seconds)

@@ -1,4 +1,5 @@
 use super::tracker::TransactionTracker;
+use alloy_network::ReceiptResponse;
 use alloy_provider::{Provider, RootProvider};
 use anyhow::Result;
 use op_alloy_network::Optimism;
@@ -43,9 +44,17 @@ impl ReceiptPoller {
                 }
 
                 match self.sequencer.get_transaction_receipt(tx_hash).await {
-                    Ok(Some(_receipt)) => {
-                        self.tracker.record_included(tx_hash);
-                        debug!("Transaction included: {:?}", tx_hash);
+                    Ok(Some(receipt)) => {
+                        // Verify transaction succeeded (status == true) and is in a block
+                        if receipt.status() && receipt.block_number().is_some() {
+                            self.tracker.record_included(tx_hash);
+                            debug!("Transaction included and succeeded: {:?}", tx_hash);
+                        } else if receipt.block_number().is_some() {
+                            // Transaction was included but reverted
+                            self.tracker.record_reverted(tx_hash);
+                            debug!("Transaction included but reverted: {:?}", tx_hash);
+                        }
+                        // If no block_number yet, keep polling
                     }
                     Ok(None) => {
                         // Transaction not yet included, continue polling

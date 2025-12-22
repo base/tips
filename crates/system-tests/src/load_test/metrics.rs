@@ -26,6 +26,7 @@ pub struct ThroughputResults {
     pub included_rate: f64,
     pub total_sent: u64,
     pub total_included: u64,
+    pub total_reverted: u64,
     pub total_pending: u64,
     pub total_timed_out: u64,
     pub success_rate: f64,
@@ -35,6 +36,7 @@ pub struct ThroughputResults {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ErrorResults {
     pub send_errors: u64,
+    pub reverted: u64,
     pub timed_out: u64,
 }
 
@@ -42,6 +44,7 @@ pub fn calculate_results(tracker: &Arc<TransactionTracker>, config: TestConfig) 
     let actual_duration = tracker.elapsed();
     let total_sent = tracker.total_sent();
     let total_included = tracker.total_included();
+    let total_reverted = tracker.total_reverted();
     let total_timed_out = tracker.total_timed_out();
     let send_errors = tracker.total_send_errors();
 
@@ -60,6 +63,7 @@ pub fn calculate_results(tracker: &Arc<TransactionTracker>, config: TestConfig) 
             included_rate,
             total_sent,
             total_included,
+            total_reverted,
             total_pending: tracker.total_pending(),
             total_timed_out,
             success_rate,
@@ -67,6 +71,7 @@ pub fn calculate_results(tracker: &Arc<TransactionTracker>, config: TestConfig) 
         },
         errors: ErrorResults {
             send_errors,
+            reverted: total_reverted,
             timed_out: total_timed_out,
         },
     }
