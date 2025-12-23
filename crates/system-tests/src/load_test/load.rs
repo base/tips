@@ -78,7 +78,7 @@ pub async fn run(args: LoadArgs) -> Result<()> {
             let elapsed = pb_tracker.elapsed().as_secs();
             let sent = pb_tracker.total_sent();
             pb.set_position(elapsed);
-            pb.set_message(format!("{}", sent));
+            pb.set_message(format!("{sent}"));
 
             if pb_tracker.is_test_completed() {
                 break;
@@ -101,10 +101,10 @@ pub async fn run(args: LoadArgs) -> Result<()> {
             println!("✅ All transactions resolved");
         }
         Ok(Ok(Err(e))) => {
-            println!("⚠️  Poller error: {}", e);
+            println!("⚠️  Poller error: {e}");
         }
         Ok(Err(e)) => {
-            println!("⚠️  Poller panicked: {}", e);
+            println!("⚠️  Poller panicked: {e}");
         }
         Err(_) => {
             println!("⏱️  Grace period expired, some transactions may still be pending");

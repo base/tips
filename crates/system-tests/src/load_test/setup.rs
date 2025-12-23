@@ -73,7 +73,7 @@ pub async fn run(args: SetupArgs) -> Result<()> {
         let pending = provider
             .send_raw_transaction(buf.as_ref())
             .await
-            .with_context(|| format!("Failed to send funding tx for wallet {}", i))?;
+            .with_context(|| format!("Failed to send funding tx for wallet {i}"))?;
 
         pending_txs.push(pending);
         nonce += 1;

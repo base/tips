@@ -84,8 +84,7 @@ impl<N: Network> SenderTask<N> {
                         retries += 1;
                         if retries > MAX_RETRIES {
                             println!(
-                                "Error sending raw transaction after {} retries: {:?}",
-                                MAX_RETRIES, e
+                                "Error sending raw transaction after {MAX_RETRIES} retries: {e}"
                             );
                             self.tracker.record_send_error();
                             nonce += 1; // Move on to next nonce after max retries

@@ -27,7 +27,7 @@ Create and fund test wallets from a master wallet. Test wallets are saved to all
 
 **Usage:**
 ```bash
-load-test setup --master-key <KEY> --output <FILE> [OPTIONS]
+./target/release/load-test setup --master-key <KEY> --output <FILE> [OPTIONS]
 ```
 
 **Options:**
@@ -50,7 +50,7 @@ Run load test with funded wallets. Use the `--seed` flag to set the RNG seed for
 
 **Usage:**
 ```bash
-load-test load --wallets <FILE> [OPTIONS]
+./target/release/load-test load --wallets <FILE> [OPTIONS]
 ```
 
 **Options:**

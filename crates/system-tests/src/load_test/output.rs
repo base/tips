@@ -16,7 +16,7 @@ pub fn print_results(results: &TestResults) {
     println!("  Duration:            {}s", results.config.duration_secs);
     println!("  TX Timeout:          {}s", results.config.tx_timeout_secs);
     if let Some(seed) = results.config.seed {
-        println!("  Seed:                {}", seed);
+        println!("  Seed:                {seed}");
     }
 
     println!("\nThroughput:");
