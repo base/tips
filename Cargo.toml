@@ -7,12 +7,13 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core"]
+members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/system-tests"]
 resolver = "2"
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
+tips-system-tests = { path = "crates/system-tests" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
 
 # Reth
@@ -27,8 +28,10 @@ alloy-primitives = { version = "1.4.1", default-features = false, features = [
 ] }
 alloy-consensus = { version = "1.0.41" }
 alloy-provider = { version = "1.0.41" }
-alloy-serde = "1.0.41"
 alloy-rpc-types = "1.1.2"
+alloy-signer = { version = "1.0.41" }
+alloy-network = { version = "1.0.41" }
+alloy-serde = "1.0.41"
 alloy-sol-types = { version = "1.4.1", default-features = false }
 
 # op-alloy
