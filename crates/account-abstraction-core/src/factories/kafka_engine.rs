@@ -31,3 +31,22 @@ pub fn create_mempool_engine(
 
     Ok(Arc::new(engine))
 }
+
+pub fn create_mempool_engine_with_url(
+    kafka_url: &str,
+    topic: &str,
+    consumer_group_id: &str,
+    pool_config: Option<PoolConfig>,
+) -> anyhow::Result<Arc<MempoolEngine<InMemoryMempool>>> {
+    let mut client_config = ClientConfig::new();
+    client_config.set("bootstrap.servers", kafka_url);
+    client_config.set("group.id", consumer_group_id);
+    client_config.set("enable.auto.commit", "true");
+
+    let consumer: StreamConsumer = client_config.create()?;
+    consumer.subscribe(&[topic])?;
+
+    let event_source = Arc::new(KafkaEventSource::new(Arc::new(consumer)));
+    let mempool = Arc::new(RwLock::new(InMemoryMempool::new(pool_config.unwrap_or_default())));
+    Ok(Arc::new(MempoolEngine::<InMemoryMempool>::new(mempool, event_source)))
+}
