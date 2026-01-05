@@ -1,11 +1,18 @@
 use crate::metrics::Metrics;
-use crate::reader::EventReader;
+use crate::reader::{Event, EventReader};
 use crate::storage::EventWriter;
 use anyhow::Result;
 use std::fmt;
+use std::marker::PhantomData;
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use tokio::sync::{Mutex, mpsc};
 use tokio::time::sleep;
 use tracing::{error, info};
+
+// TODO: make this configurable
+const WORKER_POOL_SIZE: usize = 80;
+const CHANNEL_BUFFER_SIZE: usize = 500;
 
 /// Archives audit events from Kafka to S3 storage.
 pub struct KafkaAuditArchiver<R, W>
@@ -14,8 +21,9 @@ where
     W: EventWriter + Clone + Send + 'static,
 {
     reader: R,
-    writer: W,
+    event_tx: mpsc::Sender<Event>,
     metrics: Metrics,
+    _phantom: PhantomData<W>,
 }
 
 impl<R, W> fmt::Debug for KafkaAuditArchiver<R, W>
@@ -35,17 +43,59 @@ where
 {
     /// Creates a new archiver with the given reader and writer.
     pub fn new(reader: R, writer: W) -> Self {
+        let (event_tx, event_rx) = mpsc::channel(CHANNEL_BUFFER_SIZE);
+        let metrics = Metrics::default();
+
+        Self::spawn_workers(writer, event_rx, metrics.clone());
+
         Self {
             reader,
-            writer,
-            metrics: Metrics::default(),
+            event_tx,
+            metrics,
+            _phantom: PhantomData,
+        }
+    }
+
+    fn spawn_workers(writer: W, event_rx: mpsc::Receiver<Event>, metrics: Metrics) {
+        let event_rx = Arc::new(Mutex::new(event_rx));
+
+        for worker_id in 0..WORKER_POOL_SIZE {
+            let writer = writer.clone();
+            let metrics = metrics.clone();
+            let event_rx = event_rx.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    let event = {
+                        let mut rx = event_rx.lock().await;
+                        rx.recv().await
+                    };
+
+                    match event {
+                        Some(event) => {
+                            let archive_start = Instant::now();
+                            if let Err(e) = writer.archive_event(event).await {
+                                error!(worker_id, error = %e, "Failed to write event");
+                            } else {
+                                metrics
+                                    .archive_event_duration
+                                    .record(archive_start.elapsed().as_secs_f64());
+                                metrics.events_processed.increment(1);
+                            }
+                            metrics.in_flight_archive_tasks.decrement(1.0);
+                        }
+                        None => {
+                            info!(worker_id, "Worker stopped - channel closed");
+                            break;
+                        }
+                    }
+                }
+            });
         }
     }
 
     /// Runs the archiver loop, reading events and writing them to storage.
     pub async fn run(&mut self) -> Result<()> {
-        info!("Starting Kafka bundle archiver");
-
         loop {
             let read_start = Instant::now();
             match self.reader.read_event().await {
@@ -61,22 +111,11 @@ where
                     let event_age_ms = now_ms.saturating_sub(event.timestamp);
                     self.metrics.event_age.record(event_age_ms as f64);
 
-                    // TODO: the integration test breaks because Minio doesn't support etag
-                    let writer = self.writer.clone();
-                    let metrics = self.metrics.clone();
                     self.metrics.in_flight_archive_tasks.increment(1.0);
-                    tokio::spawn(async move {
-                        let archive_start = Instant::now();
-                        if let Err(e) = writer.archive_event(event).await {
-                            error!(error = %e, "Failed to write event");
-                        } else {
-                            metrics
-                                .archive_event_duration
-                                .record(archive_start.elapsed().as_secs_f64());
-                            metrics.events_processed.increment(1);
-                        }
-                        metrics.in_flight_archive_tasks.decrement(1.0);
-                    });
+                    if let Err(e) = self.event_tx.send(event).await {
+                        error!(error = %e, "Failed to send event to worker pool");
+                        self.metrics.in_flight_archive_tasks.decrement(1.0);
+                    }
 
                     let commit_start = Instant::now();
                     if let Err(e) = self.reader.commit().await {
