@@ -533,7 +533,8 @@ impl EventWriter for S3EventReaderWriter {
         let transaction_ids = event.event.transaction_ids();
 
         let bundle_writer = self.clone();
-        let bundle_task = tokio::spawn(async move {
+        // TODO: handle errors
+        tokio::spawn(async move {
             let start = Instant::now();
             let result = bundle_writer.update_bundle_history(event).await;
             bundle_writer
@@ -543,27 +544,20 @@ impl EventWriter for S3EventReaderWriter {
             result
         });
 
-        let start = Instant::now();
-        let tasks: Vec<_> = transaction_ids
-            .into_iter()
-            .map(|tx_id| {
-                let tx_writer = self.clone();
-                tokio::spawn(async move {
-                    tx_writer
-                        .update_transaction_by_hash_index(&tx_id, bundle_id)
-                        .await
-                })
-            })
-            .collect();
-        for task in tasks {
-            task.await??;
+        for tx_id in transaction_ids {
+            let start = Instant::now();
+            let tx_writer = self.clone();
+            tokio::spawn(async move {
+                let _ = tx_writer
+                    .update_transaction_by_hash_index(&tx_id, bundle_id)
+                    .await;
+                tx_writer
+                    .metrics
+                    .update_tx_indexes_duration
+                    .record(start.elapsed().as_secs_f64());
+            });
         }
 
-        self.metrics
-            .update_tx_indexes_duration
-            .record(start.elapsed().as_secs_f64());
-
-        bundle_task.await??;
         Ok(())
     }
 }
