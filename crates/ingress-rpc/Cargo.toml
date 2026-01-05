@@ -9,7 +9,7 @@ edition.workspace = true
 
 [dependencies]
 tips-core.workspace = true
-tips-audit.workspace = true
+tips-audit-lib.workspace = true
 account-abstraction-core.workspace = true
 jsonrpsee.workspace = true
 alloy-primitives.workspace = true

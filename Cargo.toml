@@ -12,7 +12,8 @@ members = ["crates/*", "bin/*"]
 default-members = ["bin/tips-ingress-rpc"]
 
 [workspace.dependencies]
-tips-audit = { path = "crates/audit" }
+tips-audit = { path = "bin/tips-audit" }
+tips-audit-lib = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
 tips-ingress-rpc-lib = { path = "crates/ingress-rpc" }
 tips-system-tests = { path = "crates/system-tests" }

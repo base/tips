@@ -9,7 +9,7 @@ license.workspace = true
 path = "src/lib.rs"
 
 [dependencies]
-tips-audit = { workspace = true }
+tips-audit-lib = { workspace = true }
 tips-core = { workspace = true }
 tips-ingress-rpc-lib.workspace = true
 

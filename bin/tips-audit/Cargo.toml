@@ -1,5 +1,5 @@
 [package]
-name = "tips-ingress-rpc"
+name = "tips-audit"
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -8,16 +8,14 @@ repository.workspace = true
 edition.workspace = true
 
 [dependencies]
-tips-ingress-rpc-lib.workspace = true
-tips-core.workspace = true
 tips-audit-lib.workspace = true
-account-abstraction-core.workspace = true
-jsonrpsee.workspace = true
-alloy-provider.workspace = true
-op-alloy-network.workspace = true
+tips-core.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 anyhow.workspace = true
 clap.workspace = true
 dotenvy.workspace = true
 rdkafka.workspace = true
+aws-config.workspace = true
+aws-sdk-s3.workspace = true
+aws-credential-types.workspace = true
