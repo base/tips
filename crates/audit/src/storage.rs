@@ -15,7 +15,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::time::Instant;
 use tips_core::AcceptedBundle;
-use tracing::info;
+use tracing::{error, info};
 
 /// S3 key types for storing different event types.
 #[derive(Debug)]
@@ -533,28 +533,33 @@ impl EventWriter for S3EventReaderWriter {
         let transaction_ids = event.event.transaction_ids();
 
         let bundle_writer = self.clone();
-        // TODO: handle errors
         tokio::spawn(async move {
             let start = Instant::now();
-            let result = bundle_writer.update_bundle_history(event).await;
-            bundle_writer
-                .metrics
-                .update_bundle_history_duration
-                .record(start.elapsed().as_secs_f64());
-            result
+            if let Err(e) = bundle_writer.update_bundle_history(event).await {
+                error!(error = %e, "Failed to update bundle history");
+            } else {
+                bundle_writer
+                    .metrics
+                    .update_bundle_history_duration
+                    .record(start.elapsed().as_secs_f64());
+            }
         });
 
         for tx_id in transaction_ids {
             let start = Instant::now();
             let tx_writer = self.clone();
             tokio::spawn(async move {
-                let _ = tx_writer
+                if let Err(e) = tx_writer
                     .update_transaction_by_hash_index(&tx_id, bundle_id)
-                    .await;
-                tx_writer
-                    .metrics
-                    .update_tx_indexes_duration
-                    .record(start.elapsed().as_secs_f64());
+                    .await
+                {
+                    error!(error = %e, "Failed to update transaction by hash index");
+                } else {
+                    tx_writer
+                        .metrics
+                        .update_tx_indexes_duration
+                        .record(start.elapsed().as_secs_f64());
+                }
             });
         }
 
