@@ -15,7 +15,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::time::Instant;
 use tips_core::AcceptedBundle;
-use tracing::{error, info};
+use tracing::info;
 
 /// S3 key types for storing different event types.
 #[derive(Debug)]
@@ -532,36 +532,35 @@ impl EventWriter for S3EventReaderWriter {
         let bundle_id = event.event.bundle_id();
         let transaction_ids = event.event.transaction_ids();
 
-        let bundle_writer = self.clone();
-        tokio::spawn(async move {
-            let start = Instant::now();
-            if let Err(e) = bundle_writer.update_bundle_history(event).await {
-                error!(error = %e, "Failed to update bundle history");
-            } else {
-                bundle_writer
-                    .metrics
-                    .update_bundle_history_duration
-                    .record(start.elapsed().as_secs_f64());
+        let bundle_start = Instant::now();
+        let bundle_future = self.update_bundle_history(event);
+
+        let tx_start = Instant::now();
+        let tx_futures: Vec<_> = transaction_ids
+            .into_iter()
+            .map(|tx_id| async move {
+                self.update_transaction_by_hash_index(&tx_id, bundle_id)
+                    .await
+            })
+            .collect();
+
+        let (bundle_result, tx_results) = tokio::join!(bundle_future, async {
+            let mut results = Vec::new();
+            for fut in tx_futures {
+                results.push(fut.await);
             }
+            results.into_iter().collect::<Result<Vec<_>>>()
         });
 
-        for tx_id in transaction_ids {
-            let start = Instant::now();
-            let tx_writer = self.clone();
-            tokio::spawn(async move {
-                if let Err(e) = tx_writer
-                    .update_transaction_by_hash_index(&tx_id, bundle_id)
-                    .await
-                {
-                    error!(error = %e, "Failed to update transaction by hash index");
-                } else {
-                    tx_writer
-                        .metrics
-                        .update_tx_indexes_duration
-                        .record(start.elapsed().as_secs_f64());
-                }
-            });
-        }
+        bundle_result?;
+        tx_results?;
+
+        self.metrics
+            .update_bundle_history_duration
+            .record(bundle_start.elapsed().as_secs_f64());
+        self.metrics
+            .update_tx_indexes_duration
+            .record(tx_start.elapsed().as_secs_f64());
 
         Ok(())
     }
