@@ -11,7 +11,7 @@ path = "src/lib.rs"
 [dependencies]
 tips-audit = { workspace = true }
 tips-core = { workspace = true }
-tips-ingress-rpc = { path = "../ingress-rpc" }
+tips-ingress-rpc-lib.workspace = true
 
 alloy-primitives = { workspace = true }
 alloy-provider = { workspace = true }

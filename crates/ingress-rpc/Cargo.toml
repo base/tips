@@ -1,15 +1,11 @@
 [package]
-name = "tips-ingress-rpc"
+name = "tips-ingress-rpc-lib"
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true
 homepage.workspace = true
 repository.workspace = true
 edition.workspace = true
-
-[[bin]]
-name = "tips-ingress-rpc"
-path = "src/bin/main.rs"
 
 [dependencies]
 tips-core.workspace = true

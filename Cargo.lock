@@ -7376,6 +7376,25 @@ name = "tips-ingress-rpc"
 version = "0.1.0"
 dependencies = [
  "account-abstraction-core",
+ "alloy-provider",
+ "anyhow",
+ "clap",
+ "dotenvy",
+ "jsonrpsee",
+ "op-alloy-network",
+ "rdkafka",
+ "tips-audit",
+ "tips-core",
+ "tips-ingress-rpc-lib",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "tips-ingress-rpc-lib"
+version = "0.1.0"
+dependencies = [
+ "account-abstraction-core",
  "alloy-consensus",
  "alloy-primitives",
  "alloy-provider",
@@ -7439,7 +7458,7 @@ dependencies = [
  "testcontainers-modules",
  "tips-audit",
  "tips-core",
- "tips-ingress-rpc",
+ "tips-ingress-rpc-lib",
  "tokio",
  "tracing",
  "tracing-subscriber 0.3.22",

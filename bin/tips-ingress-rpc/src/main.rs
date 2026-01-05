@@ -10,11 +10,11 @@ use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
 use tips_core::metrics::init_prometheus_exporter;
 use tips_core::{AcceptedBundle, MeterBundleResponse};
-use tips_ingress_rpc::Config;
-use tips_ingress_rpc::connect_ingress_to_builder;
-use tips_ingress_rpc::health::bind_health_server;
-use tips_ingress_rpc::queue::KafkaMessageQueue;
-use tips_ingress_rpc::service::{IngressApiServer, IngressService, Providers};
+use tips_ingress_rpc_lib::Config;
+use tips_ingress_rpc_lib::connect_ingress_to_builder;
+use tips_ingress_rpc_lib::health::bind_health_server;
+use tips_ingress_rpc_lib::queue::KafkaMessageQueue;
+use tips_ingress_rpc_lib::service::{IngressApiServer, IngressService, Providers};
 use tokio::sync::{broadcast, mpsc};
 use tracing::info;
 
@@ -23,7 +23,6 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     let config = Config::parse();
-    // clone once instead of cloning each field before passing to `IngressService::new`
     let cfg = config.clone();
 
     init_logger_with_format(&config.log_level, config.log_format);

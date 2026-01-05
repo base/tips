@@ -7,12 +7,14 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/system-tests"]
 resolver = "2"
+members = ["crates/*", "bin/*"]
+default-members = ["bin/tips-ingress-rpc"]
 
 [workspace.dependencies]
 tips-audit = { path = "crates/audit" }
 tips-core = { path = "crates/core" }
+tips-ingress-rpc-lib = { path = "crates/ingress-rpc" }
 tips-system-tests = { path = "crates/system-tests" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
 
@@ -35,10 +37,10 @@ alloy-serde = "1.0.41"
 alloy-sol-types = { version = "1.4.1", default-features = false }
 
 # op-alloy
+op-alloy-flz = { version = "0.13.1", default-features = false }
 op-alloy-network = { version = "0.22.0", default-features = false }
+op-alloy-rpc-types = { version = "0.22.0", default-features = false }
 op-alloy-consensus = { version = "0.22.0", features = ["k256", "serde"] }
-op-alloy-rpc-types = { version = "0.22.0", default-features = true}
-op-alloy-flz = {  version = "0.13.1" }
 
 tokio = { version = "1.47.1", features = ["full"] }
 tracing = "0.1.41"
