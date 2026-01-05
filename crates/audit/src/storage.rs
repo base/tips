@@ -544,15 +544,21 @@ impl EventWriter for S3EventReaderWriter {
         });
 
         let start = Instant::now();
-        let mut join_set = tokio::task::JoinSet::new();
-        for tx_id in transaction_ids {
-            let tx_writer = self.clone();
-            join_set.spawn(async move {
-                tx_writer
-                    .update_transaction_by_hash_index(&tx_id, bundle_id)
-                    .await
-            });
+        let tasks: Vec<_> = transaction_ids
+            .into_iter()
+            .map(|tx_id| {
+                let tx_writer = self.clone();
+                tokio::spawn(async move {
+                    tx_writer
+                        .update_transaction_by_hash_index(&tx_id, bundle_id)
+                        .await
+                })
+            })
+            .collect();
+        for task in tasks {
+            task.await??;
         }
+
         self.metrics
             .update_tx_indexes_duration
             .record(start.elapsed().as_secs_f64());
