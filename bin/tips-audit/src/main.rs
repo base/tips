@@ -53,6 +53,12 @@ struct Args {
 
     #[arg(long, env = "TIPS_AUDIT_METRICS_ADDR", default_value = "0.0.0.0:9002")]
     metrics_addr: SocketAddr,
+
+    #[arg(long, env = "TIPS_AUDIT_WORKER_POOL_SIZE", default_value = "80")]
+    worker_pool_size: usize,
+
+    #[arg(long, env = "TIPS_AUDIT_CHANNEL_BUFFER_SIZE", default_value = "500")]
+    channel_buffer_size: usize,
 }
 
 #[tokio::main]
@@ -82,7 +88,12 @@ async fn main() -> Result<()> {
     let s3_bucket = args.s3_bucket.clone();
     let writer = S3EventReaderWriter::new(s3_client, s3_bucket);
 
-    let mut archiver = KafkaAuditArchiver::new(reader, writer);
+    let mut archiver = KafkaAuditArchiver::new(
+        reader,
+        writer,
+        args.worker_pool_size,
+        args.channel_buffer_size,
+    );
 
     info!("Audit archiver initialized, starting main loop");
 

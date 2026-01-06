@@ -10,10 +10,6 @@ use tokio::sync::{Mutex, mpsc};
 use tokio::time::sleep;
 use tracing::{error, info};
 
-// TODO: make this configurable
-const WORKER_POOL_SIZE: usize = 80;
-const CHANNEL_BUFFER_SIZE: usize = 500;
-
 /// Archives audit events from Kafka to S3 storage.
 pub struct KafkaAuditArchiver<R, W>
 where
@@ -42,11 +38,11 @@ where
     W: EventWriter + Clone + Send + 'static,
 {
     /// Creates a new archiver with the given reader and writer.
-    pub fn new(reader: R, writer: W) -> Self {
-        let (event_tx, event_rx) = mpsc::channel(CHANNEL_BUFFER_SIZE);
+    pub fn new(reader: R, writer: W, worker_pool_size: usize, channel_buffer_size: usize) -> Self {
+        let (event_tx, event_rx) = mpsc::channel(channel_buffer_size);
         let metrics = Metrics::default();
 
-        Self::spawn_workers(writer, event_rx, metrics.clone());
+        Self::spawn_workers(writer, event_rx, metrics.clone(), worker_pool_size);
 
         Self {
             reader,
@@ -56,10 +52,15 @@ where
         }
     }
 
-    fn spawn_workers(writer: W, event_rx: mpsc::Receiver<Event>, metrics: Metrics) {
+    fn spawn_workers(
+        writer: W,
+        event_rx: mpsc::Receiver<Event>,
+        metrics: Metrics,
+        worker_pool_size: usize,
+    ) {
         let event_rx = Arc::new(Mutex::new(event_rx));
 
-        for worker_id in 0..WORKER_POOL_SIZE {
+        for worker_id in 0..worker_pool_size {
             let writer = writer.clone();
             let metrics = metrics.clone();
             let event_rx = event_rx.clone();
