@@ -544,16 +544,12 @@ impl EventWriter for S3EventReaderWriter {
             })
             .collect();
 
-        let (bundle_result, tx_results) = tokio::join!(bundle_future, async {
-            let mut results = Vec::new();
+        tokio::try_join!(bundle_future, async {
             for fut in tx_futures {
-                results.push(fut.await);
+                fut.await?;
             }
-            results.into_iter().collect::<Result<Vec<_>>>()
-        });
-
-        bundle_result?;
-        tx_results?;
+            Ok(())
+        })?;
 
         self.metrics
             .update_bundle_history_duration
