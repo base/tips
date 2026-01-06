@@ -16,7 +16,6 @@ dependencies = [
  "jsonrpsee",
  "op-alloy-network",
  "rdkafka",
- "reth-rpc-eth-types",
  "serde",
  "serde_json",
  "tips-core",
@@ -1601,6 +1600,15 @@ checksum = "cffb0e931875b666fc4fcb20fee52e9bbd1ef836fd9e9e04ec21555f9f85f7ef"
 dependencies = [
  "fastrand",
  "tokio",
+]
+
+[[package]]
+name = "base-reth-rpc-types"
+version = "0.2.1"
+source = "git+https://github.com/base/node-reth?branch=main#6eb0b53eb7ed6aa087058f898e8f965f423b9521"
+dependencies = [
+ "reth-optimism-evm",
+ "reth-rpc-eth-types",
 ]
 
 [[package]]
@@ -7078,6 +7086,7 @@ dependencies = [
  "async-trait",
  "axum",
  "backon",
+ "base-reth-rpc-types",
  "clap",
  "dotenvy",
  "jsonrpsee",
@@ -7088,8 +7097,6 @@ dependencies = [
  "op-alloy-network",
  "op-revm",
  "rdkafka",
- "reth-optimism-evm",
- "reth-rpc-eth-types",
  "serde_json",
  "tips-audit-lib",
  "tips-core",

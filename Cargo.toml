@@ -38,10 +38,8 @@ tips-ingress-rpc-lib = { path = "crates/ingress-rpc" }
 tips-system-tests = { path = "crates/system-tests" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
 
-# reth
-reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
-reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+# base-reth
+base-reth-rpc-types = { git = "https://github.com/base/node-reth", branch = "main" }
 
 # revm
 op-revm = { version = "12.0.0", default-features = false }
