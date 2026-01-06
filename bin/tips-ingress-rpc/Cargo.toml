@@ -8,16 +8,16 @@ repository.workspace = true
 edition.workspace = true
 
 [dependencies]
-tips-ingress-rpc-lib.workspace = true
 tips-core.workspace = true
 tips-audit-lib.workspace = true
+tips-ingress-rpc-lib.workspace = true
 account-abstraction-core.workspace = true
-jsonrpsee.workspace = true
-alloy-provider.workspace = true
-op-alloy-network.workspace = true
-tokio.workspace = true
-tracing.workspace = true
-anyhow.workspace = true
 clap.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
 dotenvy.workspace = true
 rdkafka.workspace = true
+jsonrpsee.workspace = true
+op-alloy-network.workspace = true
+alloy-provider.workspace = true
