@@ -11,70 +11,91 @@ resolver = "2"
 members = ["crates/*", "bin/*"]
 default-members = ["bin/tips-ingress-rpc"]
 
+[workspace.lints.rust]
+missing-debug-implementations = "warn"
+missing-docs = "warn"
+unreachable-pub = "warn"
+unused-must-use = "deny"
+rust-2018-idioms = "deny"
+unnameable-types = "warn"
+
+[workspace.lints.rustdoc]
+all = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+missing-const-for-fn = "warn"
+use-self = "warn"
+option-if-let-else = "warn"
+redundant-clone = "warn"
+
 [workspace.dependencies]
+# local
+tips-core = { path = "crates/core" }
 tips-audit = { path = "bin/tips-audit" }
 tips-audit-lib = { path = "crates/audit" }
-tips-core = { path = "crates/core" }
 tips-ingress-rpc-lib = { path = "crates/ingress-rpc" }
 tips-system-tests = { path = "crates/system-tests" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
 
-# Reth
+# reth
 reth = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
-reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
 reth-optimism-evm = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+reth-rpc-eth-types = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.3" }
+
+# revm
+op-revm = { version = "12.0.0", default-features = false }
+revm-context-interface = { version = "12.0.0", default-features = false }
 
 # alloy
-alloy-primitives = { version = "1.4.1", default-features = false, features = [
-    "map-foldhash",
-    "serde",
-] }
-alloy-consensus = { version = "1.0.41" }
-alloy-provider = { version = "1.0.41" }
-alloy-rpc-types = "1.1.2"
-alloy-signer = { version = "1.0.41" }
-alloy-network = { version = "1.0.41" }
-alloy-serde = "1.0.41"
+alloy-serde = { version = "1.0.41", default-features = false }
+alloy-signer = { version = "1.0.41", default-features = false }
+alloy-network = { version = "1.0.41", default-features = false }
+alloy-provider = { version = "1.0.41", default-features = false }
+alloy-consensus = { version = "1.0.41", default-features = false }
 alloy-sol-types = { version = "1.4.1", default-features = false }
+alloy-rpc-types = { version = "1.1.2", default-features = false }
+alloy-primitives = { version = "1.4.1", default-features = false }
+alloy-signer-local = { version = "1.0.41", default-features = false }
 
 # op-alloy
 op-alloy-flz = { version = "0.13.1", default-features = false }
 op-alloy-network = { version = "0.22.0", default-features = false }
 op-alloy-rpc-types = { version = "0.22.0", default-features = false }
-op-alloy-consensus = { version = "0.22.0", features = ["k256", "serde"] }
+op-alloy-consensus = { version = "0.22.0", default-features = false }
 
-tokio = { version = "1.47.1", features = ["full"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["env-filter", "json"] }
-anyhow = "1.0.99"
-clap = { version = "4.5.47", features = ["derive", "env"] }
-url = "2.5.7"
-uuid = { version = "1.18.1", features = ["v4", "serde"] }
-serde = { version = "1.0.219", features = ["derive"] }
+# tokio
+tokio = { version = "1.47.1", default-features = false }
+
+# async
 async-trait = "0.1.89"
-serde_json = "1.0.143"
-dotenvy = "0.15.7"
-testcontainers = { version = "0.23.1", features = ["blocking"] }
-testcontainers-modules = { version = "0.11.2", features = ["postgres", "kafka", "minio"] }
-jsonrpsee = { version = "0.26.0", features = ["server", "macros"] }
-chrono = { version = "0.4.42", features = ["serde"] }
-wiremock = "0.6.2"
-axum = "0.8.3"
 
-# Kafka and S3 dependencies
-rdkafka = { version = "0.37.0", features = ["zstd", "ssl-vendored"] }
-aws-config = "1.1.7"
-aws-sdk-s3 = "1.106.0"
-aws-credential-types = "1.1.7"
-bytes = { version = "1.8.0", features = ["serde"] }
+# rpc
+jsonrpsee = { version = "0.26.0", default-features = false }
 
-# tips-ingress
-backon = "1.5.2"
-op-revm = { version = "12.0.0", default-features = false }
-revm-context-interface = "12.0.0"
-alloy-signer-local = "1.0.41"
+# kafka and s3
+bytes = { version = "1.8.0", default-features = false }
+rdkafka = { version = "0.37.0", default-features = false }
+aws-config = { version = "1.1.7", default-features = false }
+aws-sdk-s3 = { version = "1.106.0", default-features = false }
+aws-credential-types = { version = "1.1.7", default-features = false }
 
-# Misc
-metrics = "0.24.1"
-metrics-derive = "0.1"
-metrics-exporter-prometheus = { version = "0.17.0", features = ["http-listener"]}
+# misc
+url = { version = "2.5.7", default-features = false }
+axum = { version = "0.8.3", default-features = false }
+serde = { version = "1.0.219", default-features = false }
+uuid = { version = "1.18.1", default-features = false }
+clap = { version = "4.5.47", default-features = false }
+backon = { version = "1.5.2", default-features = false }
+chrono = { version = "0.4.42", default-features = false }
+anyhow = { version = "1.0.99", default-features = false }
+tracing = { version = "0.1.41", default-features = false }
+wiremock = { version = "0.6.2", default-features = false }
+dotenvy = { version = "0.15.7", default-features = false }
+metrics = { version = "0.24.1", default-features = false }
+metrics-derive = { version = "0.1", default-features = false }
+serde_json = { version = "1.0.143", default-features = false }
+testcontainers = { version = "0.23.1", default-features = false }
+tracing-subscriber = { version = "0.3.20", default-features = false }
+testcontainers-modules = { version = "0.11.2", default-features = false }
+metrics-exporter-prometheus = { version = "0.17.0", default-features = false }
