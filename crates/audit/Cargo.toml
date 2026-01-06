@@ -26,6 +26,7 @@ rdkafka = { workspace = true, features = ["tokio", "libz", "zstd", "ssl-vendored
 alloy-consensus = { workspace = true, features = ["std"] }
 alloy-primitives = { workspace = true, features = ["map-foldhash", "serde"] }
 aws-sdk-s3 = { workspace = true, features = ["rustls", "default-https-client", "rt-tokio"] }
+futures = { workspace = true }
 
 [dev-dependencies]
 testcontainers = { workspace = true, features = ["blocking"] }

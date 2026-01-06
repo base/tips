@@ -10,6 +10,7 @@ use aws_sdk_s3::Client as S3Client;
 use aws_sdk_s3::error::SdkError;
 use aws_sdk_s3::operation::get_object::GetObjectError;
 use aws_sdk_s3::primitives::ByteStream;
+use futures::future;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Debug;
@@ -544,12 +545,8 @@ impl EventWriter for S3EventReaderWriter {
             })
             .collect();
 
-        tokio::try_join!(bundle_future, async {
-            for fut in tx_futures {
-                fut.await?;
-            }
-            Ok(())
-        })?;
+        // Run the bundle and transaction futures concurrently and wait for them to complete
+        tokio::try_join!(bundle_future, future::try_join_all(tx_futures))?;
 
         self.metrics
             .update_bundle_history_duration

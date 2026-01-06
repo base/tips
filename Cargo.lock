@@ -7096,6 +7096,7 @@ dependencies = [
  "async-trait",
  "aws-sdk-s3",
  "bytes",
+ "futures",
  "metrics",
  "metrics-derive",
  "rdkafka",
