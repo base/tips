@@ -25,6 +25,6 @@ The main entry point that provides a JSON-RPC API for receiving transactions and
 ### 🖥️ UI (`ui`)
 A debug UI for viewing the state of the bundle store and S3.
 
-## Running TIPS locally
+## Local Development
 
-See the [setup instructions](./SETUP.md) for how to run the TIPS system locally.
+See the [setup instructions](./docs/SETUP.md) for how to run TIPS locally.
