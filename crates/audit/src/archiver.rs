@@ -1,4 +1,7 @@
-use crate::metrics::Metrics;
+use crate::metrics::{
+    EventType, increment_events_processed, record_archive_event_duration, record_event_age,
+    record_kafka_commit_duration, record_kafka_read_duration,
+};
 use crate::reader::{EventReader, UserOpEventReader};
 use crate::storage::{EventWriter, UserOpEventWriter};
 use anyhow::Result;
@@ -13,7 +16,6 @@ where
 {
     reader: R,
     writer: W,
-    metrics: Metrics,
 }
 
 impl<R, W> KafkaAuditArchiver<R, W>
@@ -22,11 +24,7 @@ where
     W: EventWriter + Clone + Send + 'static,
 {
     pub fn new(reader: R, writer: W) -> Self {
-        Self {
-            reader,
-            writer,
-            metrics: Metrics::default(),
-        }
+        Self { reader, writer }
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -36,29 +34,24 @@ where
             let read_start = Instant::now();
             match self.reader.read_event().await {
                 Ok(event) => {
-                    self.metrics
-                        .kafka_read_duration
-                        .record(read_start.elapsed().as_secs_f64());
+                    record_kafka_read_duration(read_start.elapsed(), EventType::Bundle);
 
                     let now_ms = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as i64;
                     let event_age_ms = now_ms.saturating_sub(event.timestamp);
-                    self.metrics.event_age.record(event_age_ms as f64);
+                    record_event_age(event_age_ms as f64, EventType::Bundle);
 
                     // TODO: the integration test breaks because Minio doesn't support etag
                     let writer = self.writer.clone();
-                    let metrics = self.metrics.clone();
                     tokio::spawn(async move {
                         let archive_start = Instant::now();
                         if let Err(e) = writer.archive_event(event).await {
                             error!(error = %e, "Failed to write event");
                         } else {
-                            metrics
-                                .archive_event_duration
-                                .record(archive_start.elapsed().as_secs_f64());
-                            metrics.events_processed.increment(1);
+                            record_archive_event_duration(archive_start.elapsed(), EventType::Bundle);
+                            increment_events_processed(EventType::Bundle);
                         }
                     });
 
@@ -66,9 +59,7 @@ where
                     if let Err(e) = self.reader.commit().await {
                         error!(error = %e, "Failed to commit message");
                     }
-                    self.metrics
-                        .kafka_commit_duration
-                        .record(commit_start.elapsed().as_secs_f64());
+                    record_kafka_commit_duration(commit_start.elapsed(), EventType::Bundle);
                 }
                 Err(e) => {
                     error!(error = %e, "Error reading events");
@@ -86,7 +77,6 @@ where
 {
     reader: R,
     writer: W,
-    metrics: Metrics,
 }
 
 impl<R, W> KafkaUserOpAuditArchiver<R, W>
@@ -95,11 +85,7 @@ where
     W: UserOpEventWriter + Clone + Send + 'static,
 {
     pub fn new(reader: R, writer: W) -> Self {
-        Self {
-            reader,
-            writer,
-            metrics: Metrics::default(),
-        }
+        Self { reader, writer }
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -109,28 +95,23 @@ where
             let read_start = Instant::now();
             match self.reader.read_event().await {
                 Ok(event) => {
-                    self.metrics
-                        .kafka_read_duration
-                        .record(read_start.elapsed().as_secs_f64());
+                    record_kafka_read_duration(read_start.elapsed(), EventType::UserOp);
 
                     let now_ms = SystemTime::now()
                         .duration_since(UNIX_EPOCH)
                         .unwrap_or_default()
                         .as_millis() as i64;
                     let event_age_ms = now_ms.saturating_sub(event.timestamp);
-                    self.metrics.event_age.record(event_age_ms as f64);
+                    record_event_age(event_age_ms as f64, EventType::UserOp);
 
                     let writer = self.writer.clone();
-                    let metrics = self.metrics.clone();
                     tokio::spawn(async move {
                         let archive_start = Instant::now();
                         if let Err(e) = writer.archive_userop_event(event).await {
                             error!(error = %e, "Failed to write UserOp event");
                         } else {
-                            metrics
-                                .archive_event_duration
-                                .record(archive_start.elapsed().as_secs_f64());
-                            metrics.events_processed.increment(1);
+                            record_archive_event_duration(archive_start.elapsed(), EventType::UserOp);
+                            increment_events_processed(EventType::UserOp);
                         }
                     });
 
@@ -138,9 +119,7 @@ where
                     if let Err(e) = self.reader.commit().await {
                         error!(error = %e, "Failed to commit message");
                     }
-                    self.metrics
-                        .kafka_commit_duration
-                        .record(commit_start.elapsed().as_secs_f64());
+                    record_kafka_commit_duration(commit_start.elapsed(), EventType::UserOp);
                 }
                 Err(e) => {
                     error!(error = %e, "Error reading UserOp events");
