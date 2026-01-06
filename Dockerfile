@@ -21,7 +21,7 @@ COPY . .
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/app/target \
-    cargo build && \
+    cargo build -p tips-ingress-rpc -p tips-audit && \
     cp target/debug/tips-ingress-rpc /tmp/tips-ingress-rpc && \
     cp target/debug/tips-audit /tmp/tips-audit
 

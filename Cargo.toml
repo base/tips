@@ -7,8 +7,9 @@ homepage = "https://github.com/base/tips"
 repository = "https://github.com/base/tips"
 
 [workspace]
-members = ["crates/audit", "crates/ingress-rpc", "crates/core", "crates/account-abstraction-core", "crates/system-tests"]
 resolver = "2"
+members = ["crates/*", "bin/*"]
+default-members = ["bin/tips-ingress-rpc"]
 
 [workspace.lints.rust]
 missing-debug-implementations = "warn"
@@ -31,7 +32,9 @@ redundant-clone = "warn"
 [workspace.dependencies]
 # local
 tips-core = { path = "crates/core" }
-tips-audit = { path = "crates/audit" }
+tips-audit = { path = "bin/tips-audit" }
+tips-audit-lib = { path = "crates/audit" }
+tips-ingress-rpc-lib = { path = "crates/ingress-rpc" }
 tips-system-tests = { path = "crates/system-tests" }
 account-abstraction-core = { path = "crates/account-abstraction-core" }
 
