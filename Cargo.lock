@@ -7008,18 +7008,12 @@ version = "0.1.0"
 dependencies = [
  "alloy-consensus",
  "alloy-primitives",
- "alloy-provider",
  "anyhow",
  "async-trait",
- "aws-config",
- "aws-credential-types",
  "aws-sdk-s3",
  "bytes",
- "clap",
- "dotenvy",
  "metrics",
  "metrics-derive",
- "op-alloy-consensus",
  "rdkafka",
  "serde",
  "serde_json",
@@ -7028,7 +7022,6 @@ dependencies = [
  "tips-core",
  "tokio",
  "tracing",
- "tracing-subscriber 0.3.22",
  "uuid",
 ]
 
