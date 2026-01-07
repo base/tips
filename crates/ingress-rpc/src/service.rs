@@ -362,14 +362,14 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
                 }
             }
 
+            info!(
+                message = "processed transaction",
+                bundle_hash = %bundle_hash,
+                transaction_hash = %transaction.tx_hash(),
+            );
+
             self.send_audit_event(&accepted_bundle, accepted_bundle.bundle_hash());
         }
-
-        info!(
-            message = "processed transaction",
-            bundle_hash = %bundle_hash,
-            transaction_hash = %transaction.tx_hash(),
-        );
 
         self.metrics
             .send_raw_transaction_duration
