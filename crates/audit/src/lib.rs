@@ -22,7 +22,7 @@ pub use publisher::{
 mod reader;
 pub use reader::{
     Event, EventReader, KafkaAuditLogReader, KafkaUserOpAuditLogReader, UserOpEventReader,
-    UserOpEventWrapper, assign_topic_partition, create_kafka_consumer,
+    UserOpEventWrapper, assign_topic_partition, create_kafka_consumer, load_kafka_config_from_file,
 };
 
 mod storage;

@@ -1,13 +1,13 @@
 use crate::domain::mempool::PoolConfig;
 use crate::infrastructure::in_memory::mempool::InMemoryMempool;
 use crate::infrastructure::kafka::consumer::KafkaEventSource;
+use crate::kafka::load_kafka_config_from_file;
 use crate::services::mempool_engine::MempoolEngine;
 use rdkafka::{
     ClientConfig,
     consumer::{Consumer, StreamConsumer},
 };
 use std::sync::Arc;
-use tips_core::kafka::load_kafka_config_from_file;
 use tokio::sync::RwLock;
 
 pub fn create_mempool_engine(
