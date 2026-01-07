@@ -743,10 +743,12 @@ mod tests {
 
     #[test]
     fn test_update_transaction_metadata_transform_adds_to_existing_bundles() {
-        let bundle = create_bundle_from_txn_data();
-        let existing_bundle_id =
-            Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
-        let new_bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
+        // Some different, dummy bundle IDs since create_bundle_from_txn_data() returns the same bundle ID
+        // Even if the same txn is contained across multiple bundles, the bundle ID will be different since the
+        // UUID is based on the bundle hash.
+        let existing_bundle_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let new_bundle_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+
         let metadata = TransactionMetadata {
             bundle_ids: vec![existing_bundle_id],
         };
