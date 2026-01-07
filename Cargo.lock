@@ -7079,11 +7079,13 @@ dependencies = [
  "aws-sdk-s3",
  "clap",
  "dotenvy",
+ "metrics-exporter-prometheus",
  "rdkafka",
  "tips-audit-lib",
  "tips-core",
  "tokio",
  "tracing",
+ "tracing-subscriber 0.3.22",
 ]
 
 [[package]]
@@ -7119,14 +7121,11 @@ dependencies = [
  "alloy-rpc-types",
  "alloy-serde",
  "alloy-signer-local",
- "metrics-exporter-prometheus",
  "op-alloy-consensus",
  "op-alloy-flz",
  "op-alloy-rpc-types",
  "serde",
  "serde_json",
- "tracing",
- "tracing-subscriber 0.3.22",
  "uuid",
 ]
 
@@ -7168,6 +7167,7 @@ dependencies = [
  "jsonrpsee",
  "metrics",
  "metrics-derive",
+ "metrics-exporter-prometheus",
  "mockall",
  "op-alloy-consensus",
  "op-alloy-network",
@@ -7178,6 +7178,7 @@ dependencies = [
  "tips-core",
  "tokio",
  "tracing",
+ "tracing-subscriber 0.3.22",
  "url",
  "wiremock",
 ]

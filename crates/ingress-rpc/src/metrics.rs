@@ -1,6 +1,16 @@
+use std::net::SocketAddr;
+
 use metrics::{Counter, Histogram};
 use metrics_derive::Metrics;
+use metrics_exporter_prometheus::PrometheusBuilder;
 use tokio::time::Duration;
+
+pub fn init_prometheus_exporter(addr: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
+    PrometheusBuilder::new()
+        .with_http_listener(addr)
+        .install()
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+}
 
 pub fn record_histogram(rpc_latency: Duration, rpc: String) {
     metrics::histogram!("tips_ingress_rpc_rpc_latency", "rpc" => rpc)
