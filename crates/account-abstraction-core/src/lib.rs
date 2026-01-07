@@ -4,6 +4,7 @@
 pub mod domain;
 pub mod factories;
 pub mod infrastructure;
+mod kafka;
 pub mod services;
 
 // Convenient re-exports for common imports

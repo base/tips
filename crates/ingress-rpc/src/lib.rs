@@ -1,4 +1,5 @@
 pub mod health;
+pub mod logger;
 pub mod metrics;
 pub mod queue;
 pub mod service;
@@ -112,7 +113,7 @@ pub struct Config {
     pub log_level: String,
 
     #[arg(long, env = "TIPS_INGRESS_LOG_FORMAT", default_value = "pretty")]
-    pub log_format: tips_core::logger::LogFormat,
+    pub log_format: crate::logger::LogFormat,
 
     /// Default lifetime for sent transactions in seconds (default: 3 hours)
     #[arg(
