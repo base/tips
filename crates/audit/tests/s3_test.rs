@@ -28,7 +28,7 @@ async fn test_event_write_and_read() -> Result<(), Box<dyn std::error::Error + S
     let harness = TestHarness::new().await?;
     let writer = S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
-    let bundle_id = Uuid::new_v4();
+    let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle = create_bundle_from_txn_data();
     let event = create_test_event(
         "test-key-1",
@@ -55,7 +55,7 @@ async fn test_event_write_and_read() -> Result<(), Box<dyn std::error::Error + S
         assert!(metadata.bundle_ids.contains(&bundle_id));
     }
 
-    let bundle_id_two = Uuid::new_v4();
+    let bundle_id_two = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle = create_bundle_from_txn_data();
     let event = create_test_event(
         "test-key-2",
@@ -84,7 +84,7 @@ async fn test_events_appended() -> Result<(), Box<dyn std::error::Error + Send +
     let harness = TestHarness::new().await?;
     let writer = S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
-    let bundle_id = Uuid::new_v4();
+    let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle = create_bundle_from_txn_data();
 
     let events = [
@@ -135,7 +135,7 @@ async fn test_event_deduplication() -> Result<(), Box<dyn std::error::Error + Se
     let harness = TestHarness::new().await?;
     let writer = S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
-    let bundle_id = Uuid::new_v4();
+    let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle = create_bundle_from_txn_data();
     let event = create_test_event(
         "duplicate-key",
@@ -164,7 +164,7 @@ async fn test_nonexistent_data() -> Result<(), Box<dyn std::error::Error + Send 
     let harness = TestHarness::new().await?;
     let writer = S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
-    let nonexistent_bundle_id = Uuid::new_v4();
+    let nonexistent_bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle_history = writer.get_bundle_history(nonexistent_bundle_id).await?;
     assert!(bundle_history.is_none());
 
@@ -185,7 +185,7 @@ async fn test_concurrent_writes_for_bundle() -> Result<(), Box<dyn std::error::E
         harness.bucket_name.clone(),
     ));
 
-    let bundle_id = Uuid::new_v4();
+    let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let bundle = create_bundle_from_txn_data();
 
     let event = create_test_event(

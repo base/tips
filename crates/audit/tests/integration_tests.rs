@@ -24,7 +24,7 @@ async fn test_kafka_publisher_s3_archiver_integration()
     let s3_writer =
         S3EventReaderWriter::new(harness.s3_client.clone(), harness.bucket_name.clone());
 
-    let test_bundle_id = Uuid::new_v4();
+    let test_bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
     let test_events = [
         BundleEvent::Received {
             bundle_id: test_bundle_id,
