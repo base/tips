@@ -1,6 +1,6 @@
 use alloy_primitives::{Address, B256, TxHash, U256};
 use std::time::Duration;
-use tips_audit::{
+use tips_audit_lib::{
     KafkaAuditArchiver, KafkaAuditLogReader, KafkaUserOpAuditArchiver, KafkaUserOpAuditLogReader,
     UserOpEventReader,
     publisher::{
@@ -271,7 +271,7 @@ async fn test_userop_end_to_end_multiple_events_same_userop()
 #[tokio::test]
 async fn test_userop_end_to_end_kafka_redelivery_deduplication()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use tips_audit::storage::UserOpEventWrapper;
+    use tips_audit_lib::storage::UserOpEventWrapper;
 
     let harness = TestHarness::new().await?;
 

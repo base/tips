@@ -2,11 +2,10 @@ use alloy_consensus::private::alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{Provider, RootProvider};
 use async_trait::async_trait;
+use base_reth_rpc_types::{EthApiError, SignError, extract_l1_info_from_tx};
 use jsonrpsee::core::RpcResult;
 use op_alloy_network::Optimism;
 use op_revm::l1block::L1BlockInfo;
-use reth_optimism_evm::extract_l1_info_from_tx;
-use reth_rpc_eth_types::{EthApiError, SignError};
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tips_core::Bundle;
@@ -352,5 +351,23 @@ mod tests {
             let error_message = format!("{e:?}");
             assert!(error_message.contains("Bundle can only contain 3 transactions"));
         }
+    }
+
+    #[tokio::test]
+    async fn test_decode_tx_rejects_empty_bytes() {
+        // Test that empty bytes fail to decode
+        use op_alloy_network::eip2718::Decodable2718;
+        let empty_bytes = Bytes::new();
+        let result = OpTxEnvelope::decode_2718(&mut empty_bytes.as_ref());
+        assert!(result.is_err(), "Empty bytes should fail decoding");
+    }
+
+    #[tokio::test]
+    async fn test_decode_tx_rejects_invalid_bytes() {
+        // Test that malformed bytes fail to decode
+        use op_alloy_network::eip2718::Decodable2718;
+        let invalid_bytes = Bytes::from(vec![0x01, 0x02, 0x03]);
+        let result = OpTxEnvelope::decode_2718(&mut invalid_bytes.as_ref());
+        assert!(result.is_err(), "Invalid bytes should fail decoding");
     }
 }

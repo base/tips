@@ -24,3 +24,6 @@ Thumbs.db
 # Claude
 /.claude
 /ui/.claude
+
+# e2e / load tests
+wallets.json

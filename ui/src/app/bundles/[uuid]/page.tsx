@@ -19,7 +19,8 @@ function formatBigInt(value: bigint, decimals: number, scale: bigint): string {
   return `${whole}.${frac.toString().padStart(decimals, "0")}`;
 }
 
-function formatHexValue(hex: string): string {
+function formatHexValue(hex: string | undefined): string {
+  if (!hex) return "—";
   const value = BigInt(hex);
   if (value >= WEI_PER_ETH / 10000n) {
     return `${formatBigInt(value, 6, WEI_PER_ETH)} ETH`;
@@ -30,7 +31,8 @@ function formatHexValue(hex: string): string {
   return `${value.toString()} Wei`;
 }
 
-function formatGasPrice(hex: string): string {
+function formatGasPrice(hex: string | undefined): string {
+  if (!hex) return "—";
   const value = BigInt(hex);
   return `${formatBigInt(value, 2, WEI_PER_GWEI)} Gwei`;
 }
@@ -156,11 +158,9 @@ function Card({
 function TransactionDetails({
   tx,
   index,
-  isReverting,
 }: {
   tx: BundleTransaction;
   index: number;
-  isReverting: boolean;
 }) {
   const [expanded, setExpanded] = useState(index === 0);
 
@@ -180,7 +180,6 @@ function TransactionDetails({
               <span className="font-mono text-sm text-gray-900">
                 {tx.hash.slice(0, 10)}...{tx.hash.slice(-8)}
               </span>
-              {isReverting && <Badge variant="warning">Reverting</Badge>}
             </div>
             <div className="text-xs text-gray-500 mt-0.5">
               {tx.signer.slice(0, 6)}...{tx.signer.slice(-4)} →{" "}
@@ -480,7 +479,6 @@ export default function BundlePage({ params }: PageProps) {
     .filter((e) => e.data?.bundle)
     .map((e) => e.data.bundle)
     .pop();
-  const revertingHashes = new Set(latestBundle?.reverting_tx_hashes || []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -558,12 +556,7 @@ export default function BundlePage({ params }: PageProps) {
               <SectionTitle>Transactions</SectionTitle>
               <div className="space-y-3">
                 {latestBundle.txs.map((tx, index) => (
-                  <TransactionDetails
-                    key={tx.hash}
-                    tx={tx}
-                    index={index}
-                    isReverting={revertingHashes.has(tx.hash)}
-                  />
+                  <TransactionDetails key={tx.hash} tx={tx} index={index} />
                 ))}
               </div>
             </section>

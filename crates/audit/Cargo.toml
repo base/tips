@@ -1,5 +1,5 @@
 [package]
-name = "tips-audit"
+name = "tips-audit-lib"
 version.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -7,34 +7,26 @@ homepage.workspace = true
 repository.workspace = true
 edition.workspace = true
 
-[[bin]]
-name = "tips-audit"
-path = "src/bin/main.rs"
+[lints]
+workspace = true
 
 [dependencies]
+bytes.workspace = true
+metrics.workspace = true
+async-trait.workspace = true
+metrics-derive.workspace = true
 tips-core = { workspace = true, features = ["test-utils"] }
-tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
-anyhow = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-uuid = { workspace = true }
-async-trait = { workspace = true }
-alloy-primitives = { workspace = true }
-alloy-consensus = { workspace = true }
-alloy-provider = { workspace = true }
-op-alloy-consensus = { workspace = true }
-clap = { workspace = true }
-dotenvy = { workspace = true }
-rdkafka = { workspace = true }
-aws-config = { workspace = true }
-aws-sdk-s3 = { workspace = true }
-aws-credential-types = { workspace = true }
-bytes = { workspace = true }
-metrics = { workspace = true }
-metrics-derive = { workspace = true }
+serde = { workspace = true, features = ["std", "derive"] }
+tokio = { workspace = true, features = ["full"] }
+uuid = { workspace = true, features = ["v4", "serde"] }
+tracing = { workspace = true, features = ["std"] }
+anyhow = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+rdkafka = { workspace = true, features = ["tokio", "libz", "zstd", "ssl-vendored"] }
+alloy-consensus = { workspace = true, features = ["std"] }
+alloy-primitives = { workspace = true, features = ["map-foldhash", "serde"] }
+aws-sdk-s3 = { workspace = true, features = ["rustls", "default-https-client", "rt-tokio"] }
 
 [dev-dependencies]
-testcontainers = { workspace = true }
-testcontainers-modules = { workspace = true }
+testcontainers = { workspace = true, features = ["blocking"] }
+testcontainers-modules = { workspace = true, features = ["postgres", "kafka", "minio"] }

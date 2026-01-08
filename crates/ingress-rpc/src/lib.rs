@@ -90,7 +90,7 @@ pub struct Config {
         long,
         env = "TIPS_INGRESS_KAFKA_USER_OPERATION_CONSUMER_PROPERTIES_FILE"
     )]
-    pub user_operation_consumer_properties: String,
+    pub user_operation_consumer_properties: Option<String>,
 
     /// Consumer group id for user operation topic (set uniquely per deployment)
     #[arg(
@@ -192,6 +192,14 @@ pub struct Config {
     /// Enable backrun bundle submission to op-rbuilder
     #[arg(long, env = "TIPS_INGRESS_BACKRUN_ENABLED", default_value = "false")]
     pub backrun_enabled: bool,
+
+    /// Maximum number of transactions allowed in a backrun bundle (including target tx)
+    #[arg(long, env = "MAX_BACKRUN_TXS", default_value = "5")]
+    pub max_backrun_txs: usize,
+
+    /// Maximum total gas limit for all transactions in a backrun bundle
+    #[arg(long, env = "MAX_BACKRUN_GAS_LIMIT", default_value = "5000000")]
+    pub max_backrun_gas_limit: u64,
 
     /// URL of third-party RPC endpoint to forward raw transactions to (enables forwarding if set)
     #[arg(long, env = "TIPS_INGRESS_RAW_TX_FORWARD_RPC")]
