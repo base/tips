@@ -310,7 +310,20 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
 
         self.metrics.bundles_parsed.increment(1);
 
-        let meter_bundle_response = self.meter_bundle(&bundle, bundle_hash).await.ok();
+        let meter_bundle_response = match self.meter_bundle(&bundle, bundle_hash).await {
+            Ok(response) => {
+                info!(message = "Metering succeeded for raw transaction", bundle_hash = %bundle_hash, response = ?response);
+                Some(response)
+            }
+            Err(e) => {
+                warn!(
+                    bundle_hash = %bundle_hash,
+                    error = %e,
+                    "Metering failed for raw transaction"
+                );
+                None
+            }
+        };
 
         if let Some(meter_info) = meter_bundle_response.as_ref() {
             self.metrics.successful_simulations.increment(1);
