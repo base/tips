@@ -74,6 +74,7 @@ where
 
                     match event {
                         Some(event) => {
+                            metrics.in_flight_archive_tasks.increment(1.0);
                             let archive_start = Instant::now();
                             if let Err(e) = writer.archive_event(event).await {
                                 error!(worker_id, error = %e, "Failed to write event");
@@ -112,10 +113,8 @@ where
                     let event_age_ms = now_ms.saturating_sub(event.timestamp);
                     self.metrics.event_age.record(event_age_ms as f64);
 
-                    self.metrics.in_flight_archive_tasks.increment(1.0);
                     if let Err(e) = self.event_tx.send(event).await {
                         error!(error = %e, "Failed to send event to worker pool");
-                        self.metrics.in_flight_archive_tasks.decrement(1.0);
                     }
 
                     let commit_start = Instant::now();
