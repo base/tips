@@ -59,6 +59,9 @@ struct Args {
 
     #[arg(long, env = "TIPS_AUDIT_CHANNEL_BUFFER_SIZE", default_value = "500")]
     channel_buffer_size: usize,
+
+    #[arg(long, env = "TIPS_AUDIT_NOOP_ARCHIVE", default_value = "false")]
+    noop_archive: bool,
 }
 
 #[tokio::main]
@@ -93,6 +96,7 @@ async fn main() -> Result<()> {
         writer,
         args.worker_pool_size,
         args.channel_buffer_size,
+        args.noop_archive,
     );
 
     info!("Audit archiver initialized, starting main loop");
