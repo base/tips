@@ -97,3 +97,5 @@ testcontainers = { version = "0.23.1", default-features = false }
 tracing-subscriber = { version = "0.3.20", default-features = false }
 testcontainers-modules = { version = "0.11.2", default-features = false }
 metrics-exporter-prometheus = { version = "0.17.0", default-features = false }
+futures = { version = "0.3.31", default-features = false }
+moka = { version = "0.12.12", default-features = false }
