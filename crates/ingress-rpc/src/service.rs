@@ -114,7 +114,7 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
 
         // A TTL cache to deduplicate bundles with the same Bundle ID
         let bundle_cache = Cache::builder()
-            .time_to_live(Duration::from_secs(20))
+            .time_to_live(Duration::from_secs(config.bundle_cache_ttl))
             .build();
         Self {
             mempool_provider,
@@ -649,6 +649,7 @@ mod tests {
             user_operation_topic: String::new(),
             max_backrun_txs: 5,
             max_backrun_gas_limit: 5000000,
+            bundle_cache_ttl: 20,
         }
     }
 
