@@ -601,7 +601,7 @@ mod tests {
     use crate::reader::Event;
     use crate::types::{BundleEvent, DropReason, UserOpDropReason, UserOpEvent};
     use alloy_primitives::{Address, B256, TxHash, U256};
-    use tips_core::test_utils::create_bundle_from_txn_data;
+    use tips_core::{BundleExtensions, test_utils::create_bundle_from_txn_data};
     use uuid::Uuid;
 
     fn create_test_event(key: &str, timestamp: i64, bundle_event: BundleEvent) -> Event {
@@ -616,7 +616,7 @@ mod tests {
     fn test_update_bundle_history_transform_adds_new_event() {
         let bundle_history = BundleHistory { history: vec![] };
         let bundle = create_bundle_from_txn_data();
-        let bundle_id = Uuid::new_v4();
+        let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle.clone()),
@@ -655,7 +655,7 @@ mod tests {
         };
 
         let bundle = create_bundle_from_txn_data();
-        let bundle_id = Uuid::new_v4();
+        let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle),
@@ -670,9 +670,9 @@ mod tests {
     #[test]
     fn test_update_bundle_history_transform_handles_all_event_types() {
         let bundle_history = BundleHistory { history: vec![] };
-        let bundle_id = Uuid::new_v4();
-
         let bundle = create_bundle_from_txn_data();
+        let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
+
         let bundle_event = BundleEvent::Received {
             bundle_id,
             bundle: Box::new(bundle),
@@ -717,7 +717,8 @@ mod tests {
     #[test]
     fn test_update_transaction_metadata_transform_adds_new_bundle() {
         let metadata = TransactionMetadata { bundle_ids: vec![] };
-        let bundle_id = Uuid::new_v4();
+        let bundle = create_bundle_from_txn_data();
+        let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
 
         let result = update_transaction_metadata_transform(metadata, bundle_id);
 
@@ -729,7 +730,8 @@ mod tests {
 
     #[test]
     fn test_update_transaction_metadata_transform_skips_existing_bundle() {
-        let bundle_id = Uuid::new_v4();
+        let bundle = create_bundle_from_txn_data();
+        let bundle_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice());
         let metadata = TransactionMetadata {
             bundle_ids: vec![bundle_id],
         };
@@ -741,8 +743,12 @@ mod tests {
 
     #[test]
     fn test_update_transaction_metadata_transform_adds_to_existing_bundles() {
-        let existing_bundle_id = Uuid::new_v4();
-        let new_bundle_id = Uuid::new_v4();
+        // Some different, dummy bundle IDs since create_bundle_from_txn_data() returns the same bundle ID
+        // Even if the same txn is contained across multiple bundles, the bundle ID will be different since the
+        // UUID is based on the bundle hash.
+        let existing_bundle_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let new_bundle_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+
         let metadata = TransactionMetadata {
             bundle_ids: vec![existing_bundle_id],
         };
