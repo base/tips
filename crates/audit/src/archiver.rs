@@ -194,7 +194,7 @@ where
     W: UserOpEventWriter + Clone + Send + 'static,
 {
     /// Creates a new UserOp archiver with the given reader and writer.
-    pub fn new(reader: R, writer: W) -> Self {
+    pub const fn new(reader: R, writer: W) -> Self {
         Self { reader, writer }
     }
 

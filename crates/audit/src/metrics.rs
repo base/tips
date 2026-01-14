@@ -4,16 +4,17 @@ use std::time::Duration;
 
 /// Event type tag for metrics differentiation
 #[derive(Clone, Copy)]
+#[allow(dead_code)] // Bundle variant kept for future use when Bundle archiver uses tagged metrics
 pub(crate) enum EventType {
     Bundle,
     UserOp,
 }
 
 impl EventType {
-    fn as_str(&self) -> &'static str {
+    const fn as_str(&self) -> &'static str {
         match self {
-            EventType::Bundle => "bundle",
-            EventType::UserOp => "userop",
+            Self::Bundle => "bundle",
+            Self::UserOp => "userop",
         }
     }
 }
