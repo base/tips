@@ -183,7 +183,8 @@ where
     W: UserOpEventWriter + Clone + Send + 'static,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("KafkaUserOpAuditArchiver").finish_non_exhaustive()
+        f.debug_struct("KafkaUserOpAuditArchiver")
+            .finish_non_exhaustive()
     }
 }
 
@@ -222,7 +223,10 @@ where
                             error!(error = %e, "Failed to write UserOp event");
                             increment_failed_archive_tasks(EventType::UserOp);
                         } else {
-                            record_archive_event_duration(archive_start.elapsed(), EventType::UserOp);
+                            record_archive_event_duration(
+                                archive_start.elapsed(),
+                                EventType::UserOp,
+                            );
                             increment_events_processed(EventType::UserOp);
                         }
                         decrement_in_flight_archive_tasks(EventType::UserOp);
