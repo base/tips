@@ -8,7 +8,7 @@
 #![cfg_attr(not(test), warn(unused_crate_dependencies))]
 
 mod archiver;
-pub use archiver::KafkaAuditArchiver;
+pub use archiver::{KafkaAuditArchiver, KafkaUserOpAuditArchiver};
 
 mod metrics;
 pub use metrics::Metrics;
