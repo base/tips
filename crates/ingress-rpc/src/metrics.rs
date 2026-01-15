@@ -48,4 +48,16 @@ pub struct Metrics {
 
     #[metric(describe = "Total raw transactions forwarded to additional endpoint")]
     pub raw_tx_forwards_total: Counter,
+
+    #[metric(describe = "Total bulk bundle requests received")]
+    pub bulk_bundle_requests_received: Counter,
+
+    #[metric(describe = "Total bulk bundles processed successfully")]
+    pub bulk_bundles_processed_successfully: Counter,
+
+    #[metric(describe = "Total bulk bundles failed to process")]
+    pub bulk_bundles_failed: Counter,
+
+    #[metric(describe = "Duration of bulk bundle processing")]
+    pub send_bulk_bundles_duration: Histogram,
 }
