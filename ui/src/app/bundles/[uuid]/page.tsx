@@ -240,7 +240,7 @@ function TransactionDetails({
                       <ExplorerLink
                         type="address"
                         value={tx.signer}
-                        className="font-mono"
+                        className="font-mono text-gray-900"
                       >
                         {tx.signer}
                       </ExplorerLink>
@@ -255,7 +255,7 @@ function TransactionDetails({
                       <ExplorerLink
                         type="address"
                         value={tx.to}
-                        className="font-mono"
+                        className="font-mono text-gray-900"
                       >
                         {tx.to}
                       </ExplorerLink>
@@ -269,23 +269,25 @@ function TransactionDetails({
           <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50 grid grid-cols-4 gap-4 text-xs">
             <div>
               <span className="text-gray-500">Nonce</span>
-              <span className="ml-2 font-medium">{parseInt(tx.nonce, 16)}</span>
+              <span className="ml-2 font-medium text-gray-900">
+                {parseInt(tx.nonce, 16)}
+              </span>
             </div>
             <div>
               <span className="text-gray-500">Max Fee</span>
-              <span className="ml-2 font-medium">
+              <span className="ml-2 font-medium text-gray-900">
                 {formatGasPrice(tx.maxFeePerGas)}
               </span>
             </div>
             <div>
               <span className="text-gray-500">Priority Fee</span>
-              <span className="ml-2 font-medium">
+              <span className="ml-2 font-medium text-gray-900">
                 {formatGasPrice(tx.maxPriorityFeePerGas)}
               </span>
             </div>
             <div>
               <span className="text-gray-500">Type</span>
-              <span className="ml-2 font-medium">
+              <span className="ml-2 font-medium text-gray-900">
                 {tx.type === "0x2" ? "EIP-1559" : tx.type}
               </span>
             </div>
@@ -330,17 +332,19 @@ function SimulationCard({ meter }: { meter: MeterBundleResponse }) {
       <div className="border-t border-gray-100 px-5 py-3 bg-gray-50/50 grid grid-cols-3 gap-4 text-xs">
         <div>
           <span className="text-gray-500">State Block</span>
-          <span className="ml-2 font-medium">#{meter.stateBlockNumber}</span>
+          <span className="ml-2 font-medium text-gray-900">
+            #{meter.stateBlockNumber}
+          </span>
         </div>
         <div>
           <span className="text-gray-500">Gas Fees</span>
-          <span className="ml-2 font-medium">
+          <span className="ml-2 font-medium text-gray-900">
             {formatHexValue(meter.gasFees)}
           </span>
         </div>
         <div>
           <span className="text-gray-500">ETH to Coinbase</span>
-          <span className="ml-2 font-medium">
+          <span className="ml-2 font-medium text-gray-900">
             {formatHexValue(meter.ethSentToCoinbase)}
           </span>
         </div>
