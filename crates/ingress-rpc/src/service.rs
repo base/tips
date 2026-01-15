@@ -531,6 +531,7 @@ impl<Q: MessageQueue, M: Mempool> IngressService<Q, M> {
         // that we know will take longer than the block time to execute
         let total_execution_time = (res.total_execution_time_us / 1_000) as u64;
         if total_execution_time > self.block_time_milliseconds {
+            self.metrics.bundles_exceeded_metering_time.increment(1);
             return Err(
                 EthApiError::InvalidParams("Bundle simulation took too long".into()).into_rpc_err(),
             );
