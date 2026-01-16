@@ -1,6 +1,11 @@
-use crate::metrics::Metrics;
-use crate::reader::{Event, EventReader};
-use crate::storage::EventWriter;
+use crate::metrics::{
+    EventType, Metrics, decrement_in_flight_archive_tasks, increment_events_processed,
+    increment_failed_archive_tasks, increment_in_flight_archive_tasks,
+    record_archive_event_duration, record_event_age, record_kafka_commit_duration,
+    record_kafka_read_duration,
+};
+use crate::reader::{Event, EventReader, UserOpEventReader};
+use crate::storage::{EventWriter, UserOpEventWriter};
 use anyhow::Result;
 use std::fmt;
 use std::marker::PhantomData;
@@ -155,6 +160,86 @@ where
                 }
                 Err(e) => {
                     error!(error = %e, "Error reading events");
+                    sleep(Duration::from_secs(1)).await;
+                }
+            }
+        }
+    }
+}
+
+/// Archives UserOp audit events from Kafka to S3 storage.
+pub struct KafkaUserOpAuditArchiver<R, W>
+where
+    R: UserOpEventReader,
+    W: UserOpEventWriter + Clone + Send + 'static,
+{
+    reader: R,
+    writer: W,
+}
+
+impl<R, W> std::fmt::Debug for KafkaUserOpAuditArchiver<R, W>
+where
+    R: UserOpEventReader,
+    W: UserOpEventWriter + Clone + Send + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("KafkaUserOpAuditArchiver")
+            .finish_non_exhaustive()
+    }
+}
+
+impl<R, W> KafkaUserOpAuditArchiver<R, W>
+where
+    R: UserOpEventReader,
+    W: UserOpEventWriter + Clone + Send + 'static,
+{
+    /// Creates a new UserOp archiver with the given reader and writer.
+    pub const fn new(reader: R, writer: W) -> Self {
+        Self { reader, writer }
+    }
+
+    /// Runs the archiver loop, reading UserOp events and writing them to storage.
+    pub async fn run(&mut self) -> Result<()> {
+        info!("Starting Kafka UserOp archiver");
+
+        loop {
+            let read_start = Instant::now();
+            match self.reader.read_event().await {
+                Ok(event) => {
+                    record_kafka_read_duration(read_start.elapsed(), EventType::UserOp);
+
+                    let now_ms = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as i64;
+                    let event_age_ms = now_ms.saturating_sub(event.timestamp);
+                    record_event_age(event_age_ms as f64, EventType::UserOp);
+
+                    let writer = self.writer.clone();
+                    increment_in_flight_archive_tasks(EventType::UserOp);
+                    tokio::spawn(async move {
+                        let archive_start = Instant::now();
+                        if let Err(e) = writer.archive_userop_event(event).await {
+                            error!(error = %e, "Failed to write UserOp event");
+                            increment_failed_archive_tasks(EventType::UserOp);
+                        } else {
+                            record_archive_event_duration(
+                                archive_start.elapsed(),
+                                EventType::UserOp,
+                            );
+                            increment_events_processed(EventType::UserOp);
+                        }
+                        decrement_in_flight_archive_tasks(EventType::UserOp);
+                    });
+
+                    let commit_start = Instant::now();
+                    if let Err(e) = self.reader.commit().await {
+                        error!(error = %e, "Failed to commit message");
+                    }
+                    record_kafka_commit_duration(commit_start.elapsed(), EventType::UserOp);
+                }
+                Err(e) => {
+                    error!(error = %e, "Error reading UserOp events");
                     sleep(Duration::from_secs(1)).await;
                 }
             }
