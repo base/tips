@@ -193,8 +193,15 @@ mod tests {
     use alloy_rpc_types::erc4337;
 
     fn create_test_user_operation(max_priority_fee_per_gas: u128) -> VersionedUserOperation {
+        create_test_user_operation_with_sender(max_priority_fee_per_gas, Address::ZERO)
+    }
+
+    fn create_test_user_operation_with_sender(
+        max_priority_fee_per_gas: u128,
+        sender: Address,
+    ) -> VersionedUserOperation {
         VersionedUserOperation::UserOperation(erc4337::UserOperation {
-            sender: Address::random(),
+            sender,
             nonce: Uint::from(0),
             init_code: Default::default(),
             call_data: Default::default(),
@@ -212,8 +219,16 @@ mod tests {
         max_priority_fee_per_gas: u128,
         hash: UserOpHash,
     ) -> WrappedUserOperation {
+        create_wrapped_operation_with_sender(max_priority_fee_per_gas, hash, Address::ZERO)
+    }
+
+    fn create_wrapped_operation_with_sender(
+        max_priority_fee_per_gas: u128,
+        hash: UserOpHash,
+        sender: Address,
+    ) -> WrappedUserOperation {
         WrappedUserOperation {
-            operation: create_test_user_operation(max_priority_fee_per_gas),
+            operation: create_test_user_operation_with_sender(max_priority_fee_per_gas, sender),
             hash,
         }
     }
@@ -327,15 +342,18 @@ mod tests {
         let mut mempool = create_test_mempool(1000);
 
         let hash1 = FixedBytes::from([1u8; 32]);
-        let operation1 = create_wrapped_operation(2000, hash1);
+        let sender1 = Address::with_last_byte(1);
+        let operation1 = create_wrapped_operation_with_sender(2000, hash1, sender1);
         mempool.add_operation(&operation1).unwrap();
 
         let hash2 = FixedBytes::from([2u8; 32]);
-        let operation2 = create_wrapped_operation(3000, hash2);
+        let sender2 = Address::with_last_byte(2);
+        let operation2 = create_wrapped_operation_with_sender(3000, hash2, sender2);
         mempool.add_operation(&operation2).unwrap();
 
         let hash3 = FixedBytes::from([3u8; 32]);
-        let operation3 = create_wrapped_operation(1500, hash3);
+        let sender3 = Address::with_last_byte(3);
+        let operation3 = create_wrapped_operation_with_sender(1500, hash3, sender3);
         mempool.add_operation(&operation3).unwrap();
 
         let best: Vec<_> = mempool.get_top_operations(10).collect();
@@ -350,15 +368,18 @@ mod tests {
         let mut mempool = create_test_mempool(1000);
 
         let hash1 = FixedBytes::from([1u8; 32]);
-        let operation1 = create_wrapped_operation(2000, hash1);
+        let sender1 = Address::with_last_byte(1);
+        let operation1 = create_wrapped_operation_with_sender(2000, hash1, sender1);
         mempool.add_operation(&operation1).unwrap();
 
         let hash2 = FixedBytes::from([2u8; 32]);
-        let operation2 = create_wrapped_operation(3000, hash2);
+        let sender2 = Address::with_last_byte(2);
+        let operation2 = create_wrapped_operation_with_sender(3000, hash2, sender2);
         mempool.add_operation(&operation2).unwrap();
 
         let hash3 = FixedBytes::from([3u8; 32]);
-        let operation3 = create_wrapped_operation(1500, hash3);
+        let sender3 = Address::with_last_byte(3);
+        let operation3 = create_wrapped_operation_with_sender(1500, hash3, sender3);
         mempool.add_operation(&operation3).unwrap();
 
         let best: Vec<_> = mempool.get_top_operations(2).collect();
@@ -372,11 +393,13 @@ mod tests {
         let mut mempool = create_test_mempool(1000);
 
         let hash1 = FixedBytes::from([1u8; 32]);
-        let operation1 = create_wrapped_operation(2000, hash1);
+        let sender1 = Address::with_last_byte(1);
+        let operation1 = create_wrapped_operation_with_sender(2000, hash1, sender1);
         mempool.add_operation(&operation1).unwrap();
 
         let hash2 = FixedBytes::from([2u8; 32]);
-        let operation2 = create_wrapped_operation(2000, hash2);
+        let sender2 = Address::with_last_byte(2);
+        let operation2 = create_wrapped_operation_with_sender(2000, hash2, sender2);
         mempool.add_operation(&operation2).unwrap();
 
         let best: Vec<_> = mempool.get_top_operations(2).collect();

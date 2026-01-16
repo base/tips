@@ -1,0 +1,190 @@
+<mxfile host="app.diagrams.net" modified="2024-01-14T12:00:00.000Z" agent="draw.io" version="22.1.0" type="device">
+  <diagram name="UserOp Audit Pipeline" id="userop-audit-flow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        
+        <!-- Title -->
+        <mxCell id="title" value="UserOp Audit Pipeline Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="600" y="20" width="400" height="40" as="geometry" />
+        </mxCell>
+        
+        <!-- User -->
+        <mxCell id="user" value="👤 User" style="shape=actor;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="60" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- tips-ingress RPC -->
+        <mxCell id="ingress" value="tips-ingress-rpc&#xa;&#xa;IngressService&#xa;.send_user_operation()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="200" y="140" width="140" height="100" as="geometry" />
+        </mxCell>
+        
+        <!-- UserOpQueuePublisher -->
+        <mxCell id="queue-publisher" value="UserOpQueuePublisher&#xa;.publish()&#xa;&#xa;Creates MempoolEvent::&#xa;UserOpAdded" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="200" y="280" width="140" height="90" as="geometry" />
+        </mxCell>
+        
+        <!-- Kafka mempool topic -->
+        <mxCell id="kafka-mempool" value="Kafka&#xa;tips-user-operation" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="410" y="270" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- MempoolEngine -->
+        <mxCell id="mempool-engine" value="MempoolEngine&#xa;&#xa;.handle_event()&#xa;&#xa;1. Updates mempool&#xa;2. Emits UserOpEvent" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="250" width="150" height="120" as="geometry" />
+        </mxCell>
+        
+        <!-- In-Memory Mempool -->
+        <mxCell id="mempool" value="InMemoryMempool&#xa;&#xa;• add_operation()&#xa;• remove_operation()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="600" y="420" width="150" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- mpsc channel -->
+        <mxCell id="channel" value="mpsc::channel&#xa;(audit_sender)" style="shape=parallelogram;perimeter=parallelogramPerimeter;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="820" y="280" width="120" height="60" as="geometry" />
+        </mxCell>
+        
+        <!-- connect_userop_audit_to_publisher -->
+        <mxCell id="connector" value="connect_userop_&#xa;audit_to_publisher&#xa;&#xa;(background task)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="265" width="130" height="90" as="geometry" />
+        </mxCell>
+        
+        <!-- KafkaUserOpEventPublisher -->
+        <mxCell id="kafka-publisher" value="KafkaUserOp&#xa;EventPublisher&#xa;&#xa;.publish()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1190" y="265" width="110" height="90" as="geometry" />
+        </mxCell>
+        
+        <!-- Kafka audit topic -->
+        <mxCell id="kafka-audit" value="Kafka&#xa;tips-userop-audit" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="270" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Archiver -->
+        <mxCell id="archiver" value="KafkaUserOp&#xa;AuditArchiver&#xa;&#xa;.run()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="420" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- S3 -->
+        <mxCell id="s3" value="S3&#xa;&#xa;userops/{hash}/&#xa;history.json" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="1360" y="550" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Builder (for Included/Dropped) -->
+        <mxCell id="builder" value="Builder&#xa;&#xa;Emits UserOpIncluded&#xa;or UserOpDropped" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="410" y="420" width="120" height="80" as="geometry" />
+        </mxCell>
+        
+        <!-- Arrows -->
+        <!-- User to Ingress -->
+        <mxCell id="arrow1" value="eth_send&#xa;UserOperation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="user" target="ingress">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Ingress to QueuePublisher -->
+        <mxCell id="arrow2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="ingress" target="queue-publisher">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- QueuePublisher to Kafka -->
+        <mxCell id="arrow3" value="MempoolEvent::&#xa;UserOpAdded" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="queue-publisher" target="kafka-mempool">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Builder to Kafka -->
+        <mxCell id="arrow3b" value="MempoolEvent::&#xa;Included/Dropped" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;dashed=1;" edge="1" parent="1" source="builder" target="kafka-mempool">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="470" y="400" />
+              <mxPoint x="470" y="360" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        
+        <!-- Kafka to MempoolEngine -->
+        <mxCell id="arrow4" value="event_source&#xa;.receive()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="kafka-mempool" target="mempool-engine">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- MempoolEngine to Mempool -->
+        <mxCell id="arrow5" value="add/remove&#xa;operation" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="mempool-engine" target="mempool">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- MempoolEngine to Channel -->
+        <mxCell id="arrow6" value="UserOpEvent" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="mempool-engine" target="channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Channel to Connector -->
+        <mxCell id="arrow7" value="recv()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="channel" target="connector">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Connector to Publisher -->
+        <mxCell id="arrow8" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="connector" target="kafka-publisher">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Publisher to Kafka Audit -->
+        <mxCell id="arrow9" value="UserOpEvent&#xa;JSON" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;strokeColor=#d79b00;strokeWidth=2;" edge="1" parent="1" source="kafka-publisher" target="kafka-audit">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Kafka Audit to Archiver -->
+        <mxCell id="arrow10" value="read_event()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="kafka-audit" target="archiver">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Archiver to S3 -->
+        <mxCell id="arrow11" value="archive_&#xa;userop_event()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;fontSize=9;" edge="1" parent="1" source="archiver" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        
+        <!-- Legend -->
+        <mxCell id="legend-box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="550" width="300" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="90" y="555" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1" value="MempoolEvent (input to MempoolEngine)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="90" y="580" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2" value="UserOpEvent (audit output) — orange arrows" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="90" y="600" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3" value="Dashed line = Builder events (future work)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="90" y="620" width="250" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend4" value="Cylinders = Kafka topics / S3 storage" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10" vertex="1" parent="1">
+          <mxGeometry x="90" y="640" width="250" height="20" as="geometry" />
+        </mxCell>
+        
+        <!-- Event Types Box -->
+        <mxCell id="events-box" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="420" y="550" width="350" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="events-title" value="Event Types" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="430" y="555" width="100" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="event1" value="MempoolEvent::UserOpAdded { user_op, entry_point }" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="430" y="580" width="330" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="event2" value="MempoolEvent::UserOpIncluded { user_op, block_number, tx_hash }" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="430" y="600" width="330" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="event3" value="MempoolEvent::UserOpDropped { user_op, reason }" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="430" y="620" width="330" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-event" value="→" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14" vertex="1" parent="1">
+          <mxGeometry x="430" y="640" width="20" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="event4" value="UserOpEvent::AddedToMempool / Dropped / Included" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="450" y="640" width="310" height="20" as="geometry" />
+        </mxCell>
+        
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -38,6 +38,7 @@ services:
     command: |
       sh -c "
         kafka-topics --create --if-not-exists --topic tips-audit --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1
+        kafka-topics --create --if-not-exists --topic tips-userop-audit --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1
         kafka-topics --create --if-not-exists --topic tips-ingress --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1
         kafka-topics --create --if-not-exists --topic tips-user-operation --bootstrap-server kafka:29092 --partitions 3 --replication-factor 1
         kafka-topics --list --bootstrap-server kafka:29092

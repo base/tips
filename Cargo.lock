@@ -18,6 +18,7 @@ dependencies = [
  "rdkafka",
  "serde",
  "serde_json",
+ "tips-audit-lib",
  "tips-core",
  "tokio",
  "tracing",
@@ -7182,6 +7183,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "async-trait",
+ "aws-config",
  "aws-sdk-s3",
  "bytes",
  "futures",
@@ -7277,6 +7279,7 @@ dependencies = [
 name = "tips-system-tests"
 version = "0.1.0"
 dependencies = [
+ "account-abstraction-core",
  "alloy-consensus",
  "alloy-network",
  "alloy-primitives",

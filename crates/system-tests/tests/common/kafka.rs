@@ -8,12 +8,13 @@ use rdkafka::{
     consumer::{Consumer, StreamConsumer},
     message::BorrowedMessage,
 };
-use tips_audit_lib::types::BundleEvent;
-use tips_core::{BundleExtensions, kafka::load_kafka_config_from_file};
+use tips_audit_lib::{BundleEvent, UserOpEvent};
+use tips_core::kafka::load_kafka_config_from_file;
 use tokio::time::{Instant, timeout};
 use uuid::Uuid;
 
 const DEFAULT_AUDIT_TOPIC: &str = "tips-audit";
+const DEFAULT_USEROP_AUDIT_TOPIC: &str = "tips-userop-audit";
 const DEFAULT_AUDIT_PROPERTIES: &str = "../../docker/host-ingress-audit-kafka-properties";
 const KAFKA_WAIT_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -39,13 +40,7 @@ fn build_kafka_consumer(properties_env: &str, default_path: &str) -> Result<Stre
     let mut client_config = ClientConfig::from_iter(load_kafka_config_from_file(&props_file)?);
 
     client_config
-        .set(
-            "group.id",
-            format!(
-                "tips-system-tests-{}",
-                Uuid::new_v5(&Uuid::NAMESPACE_OID, bundle.bundle_hash().as_slice())
-            ),
-        )
+        .set("group.id", format!("tips-system-tests-{}", Uuid::new_v4()))
         .set("enable.auto.commit", "false")
         .set("auto.offset.reset", "earliest");
 
@@ -113,6 +108,29 @@ pub async fn wait_for_audit_event_by_hash(
                 if bundle.bundle_hash() == expected_hash && matcher(&event) {
                     return Some(event);
                 }
+            }
+            None
+        },
+    )
+    .await
+}
+
+pub async fn wait_for_userop_audit_event_by_hash(
+    expected_user_op_hash: &B256,
+    mut matcher: impl FnMut(&UserOpEvent) -> bool,
+) -> Result<UserOpEvent> {
+    let expected_hash = *expected_user_op_hash;
+    wait_for_kafka_message(
+        "TIPS_INGRESS_KAFKA_AUDIT_PROPERTIES_FILE",
+        DEFAULT_AUDIT_PROPERTIES,
+        "TIPS_INGRESS_KAFKA_USEROP_AUDIT_TOPIC",
+        DEFAULT_USEROP_AUDIT_TOPIC,
+        KAFKA_WAIT_TIMEOUT,
+        |message| {
+            let payload = message.payload()?;
+            let event: UserOpEvent = serde_json::from_slice(payload).ok()?;
+            if event.user_op_hash() == expected_hash && matcher(&event) {
+                return Some(event);
             }
             None
         },

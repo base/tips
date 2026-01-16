@@ -1,5 +1,6 @@
+use account_abstraction_core::domain::types::VersionedUserOperation;
 use alloy_network::Network;
-use alloy_primitives::{Bytes, TxHash};
+use alloy_primitives::{Address, Bytes, FixedBytes, TxHash};
 use alloy_provider::{Provider, RootProvider};
 use anyhow::Result;
 use tips_core::{Bundle, BundleHash, CancelBundle};
@@ -43,6 +44,20 @@ impl<N: Network> TipsRpcClient<N> {
     pub async fn cancel_bundle(&self, request: CancelBundle) -> Result<bool> {
         self.provider
             .raw_request("eth_cancelBundle".into(), [request])
+            .await
+            .map_err(Into::into)
+    }
+
+    pub async fn send_user_operation(
+        &self,
+        user_operation: VersionedUserOperation,
+        entry_point: Address,
+    ) -> Result<FixedBytes<32>> {
+        self.provider
+            .raw_request(
+                "eth_sendUserOperation".into(),
+                (user_operation, entry_point),
+            )
             .await
             .map_err(Into::into)
     }

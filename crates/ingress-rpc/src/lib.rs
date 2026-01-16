@@ -77,13 +77,21 @@ pub struct Config {
     #[arg(long, env = "TIPS_INGRESS_KAFKA_AUDIT_PROPERTIES_FILE")]
     pub audit_kafka_properties: String,
 
-    /// Kafka topic for audit events
+    /// Kafka topic for bundle audit events
     #[arg(
         long,
         env = "TIPS_INGRESS_KAFKA_AUDIT_TOPIC",
         default_value = "tips-audit"
     )]
     pub audit_topic: String,
+
+    /// Kafka topic for user operation audit events
+    #[arg(
+        long,
+        env = "TIPS_INGRESS_KAFKA_USEROP_AUDIT_TOPIC",
+        default_value = "tips-userop-audit"
+    )]
+    pub userop_audit_topic: String,
 
     /// Kafka properties file for the user operation consumer
     #[arg(

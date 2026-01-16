@@ -443,7 +443,7 @@ impl<Q: MessageQueue + 'static, M: Mempool + 'static> IngressApiServer for Ingre
 
         if let Err(e) = self
             .user_op_queue_publisher
-            .publish(&request.user_operation, &user_op_hash)
+            .publish(&request.user_operation, &user_op_hash, &request.entry_point)
             .await
         {
             warn!(

@@ -1,11 +1,14 @@
-use account_abstraction_core::create_mempool_engine;
+use account_abstraction_core::create_mempool_engine_with_audit;
 use alloy_provider::ProviderBuilder;
 use clap::Parser;
 use jsonrpsee::server::Server;
 use op_alloy_network::Optimism;
 use rdkafka::ClientConfig;
 use rdkafka::producer::FutureProducer;
-use tips_audit_lib::{BundleEvent, KafkaBundleEventPublisher, connect_audit_to_publisher};
+use tips_audit_lib::{
+    BundleEvent, KafkaBundleEventPublisher, KafkaUserOpEventPublisher, UserOpEvent,
+    connect_audit_to_publisher, connect_userop_audit_to_publisher,
+};
 use tips_core::kafka::load_kafka_config_from_file;
 use tips_core::logger::init_logger_with_format;
 use tips_core::metrics::init_prometheus_exporter;
@@ -69,18 +72,25 @@ async fn main() -> anyhow::Result<()> {
 
     let audit_producer: FutureProducer = audit_client_config.create()?;
 
-    let audit_publisher = KafkaBundleEventPublisher::new(audit_producer, config.audit_topic);
+    let audit_publisher =
+        KafkaBundleEventPublisher::new(audit_producer.clone(), config.audit_topic);
     let (audit_tx, audit_rx) = mpsc::unbounded_channel::<BundleEvent>();
     connect_audit_to_publisher(audit_rx, audit_publisher);
+
+    let userop_audit_publisher =
+        KafkaUserOpEventPublisher::new(audit_producer, config.userop_audit_topic);
+    let (userop_audit_tx, userop_audit_rx) = mpsc::unbounded_channel::<UserOpEvent>();
+    connect_userop_audit_to_publisher(userop_audit_rx, userop_audit_publisher);
 
     let (mempool_engine, mempool_engine_handle) = if let Some(user_op_properties_file) =
         &config.user_operation_consumer_properties
     {
-        let engine = create_mempool_engine(
+        let engine = create_mempool_engine_with_audit(
             user_op_properties_file,
             &config.user_operation_topic,
             &config.user_operation_consumer_group_id,
             None,
+            userop_audit_tx,
         )?;
 
         let handle = {

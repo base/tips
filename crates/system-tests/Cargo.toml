@@ -16,6 +16,7 @@ indicatif = "0.17"
 rand_chacha = "0.3"
 url = { workspace = true }
 tips-core = { workspace = true }
+account-abstraction-core = { workspace = true }
 bytes = { workspace = true }
 async-trait = { workspace = true }
 tips-audit-lib = { workspace = true }

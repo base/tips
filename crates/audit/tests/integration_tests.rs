@@ -1,14 +1,12 @@
+#![allow(missing_docs)]
+
 use alloy_primitives::{Address, B256, TxHash, U256};
 use std::time::Duration;
 use tips_audit_lib::{
-    KafkaAuditArchiver, KafkaAuditLogReader, KafkaUserOpAuditArchiver, KafkaUserOpAuditLogReader,
-    UserOpEventReader,
-    publisher::{
-        BundleEventPublisher, KafkaBundleEventPublisher, KafkaUserOpEventPublisher,
-        UserOpEventPublisher,
-    },
-    storage::{BundleEventS3Reader, S3EventReaderWriter, UserOpEventS3Reader, UserOpEventWriter},
-    types::{BundleEvent, DropReason, UserOpDropReason, UserOpEvent},
+    BundleEvent, BundleEventPublisher, BundleEventS3Reader, DropReason, KafkaAuditArchiver,
+    KafkaAuditLogReader, KafkaBundleEventPublisher, KafkaUserOpAuditArchiver,
+    KafkaUserOpAuditLogReader, KafkaUserOpEventPublisher, S3EventReaderWriter, UserOpDropReason,
+    UserOpEvent, UserOpEventPublisher, UserOpEventReader, UserOpEventS3Reader, UserOpEventWriter,
 };
 use tips_core::{BundleExtensions, test_utils::create_bundle_from_txn_data};
 use uuid::Uuid;
@@ -49,6 +47,7 @@ async fn test_kafka_publisher_s3_archiver_integration()
         s3_writer.clone(),
         1,
         100,
+        false, // noop_archive
     );
 
     tokio::spawn(async move {
@@ -274,7 +273,7 @@ async fn test_userop_end_to_end_multiple_events_same_userop()
 #[tokio::test]
 async fn test_userop_end_to_end_kafka_redelivery_deduplication()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use tips_audit_lib::storage::UserOpEventWrapper;
+    use tips_audit_lib::UserOpEventWrapper;
 
     let harness = TestHarness::new().await?;
 

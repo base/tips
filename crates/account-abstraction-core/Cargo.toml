@@ -9,6 +9,7 @@ edition.workspace = true
 
 [dependencies]
 tips-core.workspace = true
+tips-audit-lib.workspace = true
 alloy-serde.workspace = true
 async-trait.workspace = true
 alloy-sol-types.workspace = true

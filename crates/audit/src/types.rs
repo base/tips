@@ -151,34 +151,23 @@ impl BundleEvent {
 }
 
 /// User operation lifecycle event.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", content = "data")]
 pub enum UserOpEvent {
-    /// User operation was added to the mempool.
     AddedToMempool {
-        /// Hash of the user operation.
         user_op_hash: UserOpHash,
-        /// Sender address.
         sender: Address,
-        /// Entry point address.
         entry_point: Address,
-        /// Nonce.
         nonce: U256,
     },
-    /// User operation was dropped.
     Dropped {
-        /// Hash of the user operation.
         user_op_hash: UserOpHash,
-        /// Reason for dropping.
         reason: UserOpDropReason,
     },
-    /// User operation was included in a block.
     Included {
-        /// Hash of the user operation.
         user_op_hash: UserOpHash,
-        /// Block number.
         block_number: u64,
-        /// Transaction hash.
         tx_hash: TxHash,
     },
 }
@@ -196,19 +185,18 @@ impl UserOpEvent {
     /// Generates a unique event key for this event.
     pub fn generate_event_key(&self) -> String {
         match self {
+            Self::AddedToMempool { user_op_hash, .. } => {
+                format!("{user_op_hash}-added")
+            }
+            Self::Dropped { user_op_hash, .. } => {
+                format!("{user_op_hash}-dropped")
+            }
             Self::Included {
                 user_op_hash,
                 tx_hash,
                 ..
             } => {
                 format!("{user_op_hash}-{tx_hash}")
-            }
-            _ => {
-                format!(
-                    "{}-{}",
-                    self.user_op_hash(),
-                    Uuid::new_v5(&Uuid::NAMESPACE_OID, self.user_op_hash().as_slice())
-                )
             }
         }
     }
