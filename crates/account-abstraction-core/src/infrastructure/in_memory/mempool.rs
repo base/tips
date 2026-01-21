@@ -4,7 +4,7 @@ use alloy_primitives::Address;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use tracing::warn;
 
 #[derive(Eq, PartialEq, Clone, Debug)]
@@ -171,7 +171,8 @@ impl InMemoryMempool {
 
     fn get_next_order_id(&self) -> u64 {
         self.submission_id_counter
-            .fetch_add(1, AtomicOrdering::SeqCst)
+            .fetch_update(Relaxed, Relaxed,
+            |id| id.checked_add(1)).expect("too many UserOp")
     }
 
     pub fn new(config: PoolConfig) -> Self {
