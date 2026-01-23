@@ -44,7 +44,7 @@ impl<T: Mempool> MempoolEngine<T> {
                 self.mempool.write().await.add_operation(&user_op)?;
             }
             MempoolEvent::UserOpIncluded { user_op } => {
-                self.mempool.write().await.remove_operation(&user_op.hash)?;
+                self.mempool.write().await.add_operation(&user_op)?;
             }
             MempoolEvent::UserOpDropped { user_op, reason: _ } => {
                 self.mempool.write().await.remove_operation(&user_op.hash)?;
@@ -155,5 +155,29 @@ mod tests {
         engine.process_next().await.unwrap();
         let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
         assert_eq!(items.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn already_included_operation_should_be_noop() {
+        let mempool = Arc::new(RwLock::new(InMemoryMempool::new(PoolConfig::default())));
+        let op_hash = [1u8; 32];
+        let wrapped = make_wrapped_op(1_000, op_hash);
+        let add_event = MempoolEvent::UserOpAdded {
+            user_op: wrapped.clone(),
+        };
+        let include_event = MempoolEvent::UserOpIncluded {
+            user_op: wrapped.clone(),
+        };
+        let mock_source = Arc::new(MockEventSource::new(vec![add_event, include_event]));
+
+        let engine = MempoolEngine::new(mempool.clone(), mock_source);
+        engine.process_next().await.unwrap();
+        let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].hash, FixedBytes::from(op_hash));
+        let result = engine.process_next().await;
+        assert!(result.is_ok());
+        let items: Vec<_> = mempool.read().await.get_top_operations(10).collect();
+        assert_eq!(items.len(), 1);
     }
 }
