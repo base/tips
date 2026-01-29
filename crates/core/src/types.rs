@@ -31,18 +31,10 @@ pub struct Bundle {
     )]
     pub flashblock_number_max: Option<u64>,
 
-    #[serde(
-        default,
-        deserialize_with = "alloy_serde::quantity::opt::deserialize",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_timestamp: Option<u64>,
 
-    #[serde(
-        default,
-        deserialize_with = "alloy_serde::quantity::opt::deserialize",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_timestamp: Option<u64>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -158,18 +150,10 @@ pub struct AcceptedBundle {
     )]
     pub flashblock_number_max: Option<u64>,
 
-    #[serde(
-        default,
-        deserialize_with = "alloy_serde::quantity::opt::deserialize",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub min_timestamp: Option<u64>,
 
-    #[serde(
-        default,
-        deserialize_with = "alloy_serde::quantity::opt::deserialize",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_timestamp: Option<u64>,
 
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
